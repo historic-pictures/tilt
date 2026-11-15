@@ -371,7 +371,7 @@ function pickLine(key, pool = HERALD[key]) {
 }
 /** The herald speaks. o: extra placeholder values in o.vars; any voice.line option (tier, free, ttl, ...) overrides HMETA. */
 function herald(key, delay = 0, o = {}) {
-  if (!M || !M.circuit || profile.herald === false || !HERALD || !(HERALD[key] || o.pool || o.text)) return false;
+  if (!M || (!M.circuit && !(M.mode.own && (o.text || key === 'win' || key === 'loss' || key === 'draw'))) || profile.herald === false || !HERALD || !(HERALD[key] || o.pool || o.text)) return false;      // (the rules-only modes are exhibition: they speak their own result calls)
   const pk = o.text ? { raw: o.text, done() {} } : pickLine(key, o.pool || HERALD[key]); if (!pk) return false;      // o.text: a line already assembled (the combined result); o.pool: a pool picked by the caller (his remark)
   const vars = Object.assign({ you: profile.name, him: M.od.short, himFull: M.od.name.replace(/, ".*"/, ''), venue: M.V.name, city: M.V.city, year: M.V.year, yourScore: M.score[0], hisScore: M.score[1],
     course: ORD[Math.max(0, M.course - 1)] || 'next', land: M.od.land, horse: HORSES[profile.horse].name.toLowerCase(), arms: `${tinct(profile.arms.c1)} and ${tinct(profile.arms.c2)}` }, o.vars);
@@ -594,11 +594,29 @@ function finishIntro(skipped = false) {
   beginCourse(true);
 }
 
-function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, courses = 0) {
+/** Keep the Bridge: three challengers from KNIGHTS, one from each third of the roll by skill (so they grow stronger and never repeat); the knight you picked takes his own place in the queue. */
+function newBridge(chosenId) {
+  const by = [...KNIGHTS].sort((a, b) => a.skill - b.skill), per = Math.ceil(by.length / 3), ch = KNIGHTS.find(k => k.id === chosenId);
+  const queue = [0, 1, 2].map(i => { const g = by.slice(i * per, (i + 1) * per); return (ch && g.includes(ch) ? ch : pick(g)).id; });
+  return { n: 3, bout: 1, wins: 0, losses: 0, draws: 0, queue, log: [], tot: { broken: 0, helm: 0, courses: 0 }, keep: null };
+}
+/** The state a knight takes from one bout of the bridge into the next: wind, horse, harness (with its dents), nerve and the gallery's mood. */
+function bridgeKeep() {
+  return { stamina: M.stamina, horse: M.hp.horse, body: M.hp.body, agit: M.agit, focus: M.focus, fav: Object.assign({}, M.fav), favour: M.favour,
+    dmg: Object.assign({}, player.dmg), dlog: player.dlog.map(e => Object.assign({}, e, { key: -1 })), askew: player.askew, plumeGone: !!player._plumeGone };
+}
+/** Put the carried harness damage back on the fresh rider (rebuildPlayer made him new); the marks come first in the replay order (key -1). */
+function bridgeRestoreHarness(k) {
+  Object.assign(player.dmg, k.dmg); player.dlog = k.dlog.map(e => Object.assign({}, e)); player.askew = k.askew; if (k.plumeGone) player._plumeGone = true; player._rebuild(Infinity);
+}
+
+function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, courses = 0, bridge = null) {
   initAudio(); G.physLog = [];
   setVenue(vIdx, practice);
+  if (!practice && MODES[modeId || VENUES[vIdx].mode || 'planken'].bridge && !bridge) { bridge = newBridge(oppId); oppId = bridge.queue[0]; }      // a fresh pas d'armes: the queue is drawn once
   const V = VENUES[vIdx], od = practice ? QUINTAIN_DEF : KNIGHTS.find(k => k.id === oppId);
   rebuildPlayer(); disposeRider(opp); player.visorUp = false; player.helmOff = false;
+  if (bridge && bridge.keep) bridgeRestoreHarness(bridge.keep);
   if (practice) { opp = new Quintain(scene, LANE_X, 0); opp.setSide(1); } else { opp = makeRider(od, -1, false); opp.setPose(START_Z, -1); }
   world.setLivery([profile.arms.c1, profile.arms.c2], [od.arms.c1, od.arms.c2], profile.arms, od.arms);
   const mode = MODES[practice ? 'planken' : modeId || V.mode || 'planken'], PT = Object.assign({}, POINTS, mode.points);
@@ -606,17 +624,18 @@ function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, cours
   player.foe = practice ? null : opp; if (!practice) opp.foe = player;
   TILT_TOP = mode.tilt ? 1.3 : 0; fx.tiltTop = TILT_TOP;
   lateMen = {}; lateRolled = false; const welcome = (man('pursuivant') ? man('pursuivant').welcome : 0) + crew('welcome');
-  M = { V, vIdx, od, circuit, practice, mode, PT, courses: mode.noExtra ? 4 : (!practice && courses) || COURSES_PER_MATCH, course: 0, score: [0, 0], marks: [[], []], favour: V.home * 0.8, fav: { commons: V.home + welcome, court: V.home * 0.6 + welcome }, stamina: 1,
+  M = { V, vIdx, od, circuit, practice, mode, PT, courses: mode.fixedCourses ?? (mode.noExtra && !mode.pickCourses ? 4 : (!practice && courses) || COURSES_PER_MATCH), bridge: bridge || null, course: 0, score: [0, 0], marks: [[], []], favour: V.home * 0.8, fav: { commons: V.home + welcome, court: V.home * 0.6 + welcome }, stamina: 1,
     agit: 0.15 + (1 - player.horseDef.nerve) * 0.3, focus: 1, fouls: 0, breaks: [0, 0], result: null, hp: { horse: 1, body: 1 }, taught: {}, lesson: practice ? Math.min(profile.lesson || 0, LESSONS.length - 1) : -1,
     sights: [0, 0], maxDef: 0, tilts: 0, usedFacts: new Set(), ladyPending: false, teachPick: null,
     stats: [0, 1].map(() => ({ broken: 0, attaint: 0, helm: 0, miss: 0, top: 0, best: 0 })), tech: { sight: 0, lance: 0, horse: 0, will: 0, n: 0 } };
+  if (bridge && bridge.keep) { const k = bridge.keep; M.stamina = k.stamina; M.hp.horse = k.horse; M.hp.body = k.body; M.agit = k.agit; M.focus = Math.min(k.focus, k.body); M.fav = Object.assign({}, k.fav); M.favour = k.favour; }      // the bridge: nothing is mended between bouts
   M.retUsed = new Set(); field.setup(profile.retinue, profile.arms, practice, practice ? null : { name: od.short, arms: od.arms });
   $('nameP').textContent = profile.name; $('nameO').textContent = od.name.replace(/, ".*"/, '');
   drawCrest($('crestP'), profile.arms); drawCrest($('crestO'), od.arms);
-  $('venueInfo').textContent = `${V.name.toUpperCase()} · ${V.city.toUpperCase()} · ${V.year} · ${mode.name.toUpperCase()}`;
+  $('venueInfo').textContent = `${V.name.toUpperCase()} · ${V.city.toUpperCase()} · ${V.year} · ${mode.name.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`;
   $('screen').classList.remove('on'); $('card').classList.add('hidden'); $('verdict').classList.add('hidden'); $('lesson').classList.toggle('hidden', !practice);
   S.mode = 'intro'; S.introT = 0; S.skipHold = 0; S.skipWanted = { me: false, them: false }; introFired.clear(); skipKey = false;
-  $('bannerTop').textContent = `${V.city.toUpperCase()} · ANNO ${V.year} · ${mode.name.toUpperCase()}, ${mode.sub.toUpperCase()}`; $('bannerMain').textContent = V.name;
+  $('bannerTop').textContent = `${V.city.toUpperCase()} · ANNO ${V.year} · ${mode.name.toUpperCase()}, ${mode.sub.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`; $('bannerMain').textContent = V.name;
   $('bannerSub').innerHTML = `${profile.name} &nbsp;against&nbsp; ${od.name}<div id="tape"><div><b>${ovr({ skill: 0.42 + 0.07 * bondLevel(profile.bond[profile.horse]), seat: ARMOURS[profile.armour].protection * 0.85, drive: (HORSES[profile.horse].top - 7.2) / 2 })}</b>${HORSES[profile.horse].name} · bond ${BOND_NAMES[bondLevel(profile.bond[profile.horse])]}<small>${HELMS[profile.helm].name.toUpperCase()} · ${ARMOURS[profile.armour].name.toUpperCase()}</small></div><div><b>${ovr(od)}</b>${HORSES[od.horse].name} · ${od.land}<small>${ARMOURS[od.armour].name.toUpperCase()}</small></div></div>`;
   if (practice) { $('bannerTop').textContent = 'THE TILTYARD'; $('bannerMain').textContent = 'At the Quintain'; $('bannerSub').innerHTML = 'The master of horse will teach you the joust, one thing at a time.'; }
   $('banner').classList.remove('hidden'); $('hud').classList.add('hidden');
@@ -625,6 +644,11 @@ function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, cours
   else { ceremony.setup(V); life.setup(); player.visorUp = false; introLines(); }
   flagmen.setup(V, practice); judges.setup(V, practice); judges.setVisible(false);      // (the judges' stand shows from the first course: the intro cameras run through its place)
   updateHud(true);
+  if (bridge && bridge.bout > 1) {      // the next challenger: the short form of the intro (the herald names him, then straight to the marks)
+    skipIntro();
+    if (profile.herald !== false) voice.later(0.8, () => say(`Bout ${bridge.bout} of ${bridge.n}. The next challenger is ${hailName(od)}, of ${od.land}.`, ANNOUNCER.label, 3, { phases: 'ready', ttl: 6, speak: true, speaker: speakerOf.hugh, voice: 'hugh' }));
+    updateHud(true);
+  }
 }
 
 function beginCourse(first = false) {
@@ -1142,6 +1166,7 @@ function updateRide(dt, dtReal) {
 /** What happens once both lances are spent: replay, the verdict, the royal gallery, then wheel about for the next course. */
 function aftermath(dtReal) {
   C.afterT += dtReal;
+  if (C.countDue) { if (C.raised || C.afterT > 2.5) { C.countDue = false; settleCount(); } else return; }      // Judged Tilt: the card waits a moment for the lance to come up
   const anyHit = (C.pL.res && C.pL.res.zone !== 'miss' && C.pL.res.zone !== 'none') || (C.oL.res && C.oL.res.zone !== 'miss' && C.oL.res.zone !== 'none');
   const wait = C.cine ? 2.6 : M.practice ? 2.3 : 1.25;      // at the quintain, wait for the bag to come about before the replay
   if (!C.replayed && C.afterT > wait) {
@@ -1602,7 +1627,7 @@ function strokeCat(r) {
   return r.glanced || r.turned ? 'glance' : 'attaint';
 }
 function resultCall(p, o) {
-  if (!M || !M.circuit || profile.herald === false || !HERALD || !HERALD.RES_YOU) return;
+  if (!M || (!M.circuit && !M.mode.own) || profile.herald === false || !HERALD || !HERALD.RES_YOU) return;
   const picks = [], P = (name, pool) => { const k = pickLine(name, pool); if (!k) return ''; picks.push(k); return k.raw; };
   const cy = strokeCat(p), ch = strokeCat(o), yo = M.score[0], hi = M.score[1], now = Math.sign(yo - hi), was = C.prevLead ?? 0;
   const parts = [];
@@ -1613,11 +1638,33 @@ function resultCall(p, o) {
     else if (cy === 'foul') parts.push(P('RES_YOU.foul', HERALD.RES_YOU.foul)); else if (ch === 'foul') parts.push(P('RES_HIM.foul', HERALD.RES_HIM.foul));      // a foul stands alone
     else parts.push(P('RES_YOU.' + cy, HERALD.RES_YOU[cy]), P('RES_HIM.' + ch, HERALD.RES_HIM[ch]));
     if (C.tiltStruck) parts.push(P('RES_TILT', HERALD.RES_TILT));
-    const S_ = HERALD.SCORE, k = yo === 0 && hi === 0 ? 'none' : now === 0 ? 'level' : now !== was ? (now > 0 ? 'youTakes' : 'himTakes') : now > 0 ? 'youAhead' : 'himAhead';
-    parts.push(P('SCORE.' + k, S_[k]));
+    if (M.mode.firstBreak) { if (C.mutual && !M.result) parts.push('both broke together, so neither is first. Ride again.'); }      // sudden death keeps no score
+    else { const S_ = HERALD.SCORE, k = yo === 0 && hi === 0 ? 'none' : now === 0 ? 'level' : now !== was ? (now > 0 ? 'youTakes' : 'himTakes') : now > 0 ? 'youAhead' : 'himAhead';
+      parts.push(P('SCORE.' + k, S_[k])); }
   }
   const text = parts.filter(Boolean).map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' '); if (!text) return;      // each part starts a sentence
   herald('result', 0, { text, vars: { yourW: numW(yo), hisW: numW(hi), n: numW(yo), pts: cap(numW(Math.abs(p.pts))) }, onShown() { picks.forEach(k => k.done()); C.resultSaid = true; } });
+}
+
+const brk = (r) => !!r && !r.foul && (r.code === 'b' || r.code === 'h');      // a lance broken on the man (a touch, a miss or a foul is not)
+/** Judged Tilt, once the player's lance is up (or the grace has run out): the judges' style marks for both knights, then the count if it is the last course.
+ *  Marks: +1 a steady lance (your LANCE TIMING reading is good; his: his skill on the day), +1 raised in good time (yours: within LANCE_UP.quick of the stroke;
+ *  his: he always raises it), and -1 for a lance left low (already applied to you at the moment it happened, see the raise in update). */
+function settleCount() {
+  const t = C.tech, you = [], him = [];
+  if (t && t.lance >= 0.75) you.push('a steady lance');
+  if (C.flags.recover) you.push('the lance raised in good time');
+  if (C.o.q >= 0.7) him.push('a steady lance');
+  him.push('the lance raised in good time');
+  M.score[0] += you.length; M.score[1] += him.length; C.pts[0] += you.length; C.pts[1] += him.length; M.maxDef = Math.max(M.maxDef, M.score[1] - M.score[0]);
+  C.style = { you, him };      // (shown in the verdict; not read out: Hugh's call is already at its word cap)
+  if (M.course >= M.courses) {
+    const yo = M.score[0], hi = M.score[1], fa = M.tilts + M.fouls, fb = M.oFouls || 0;
+    if (yo !== hi) M.result = yo > hi ? 'win' : 'loss';
+    else if (fa !== fb) { M.result = fa < fb ? 'win' : 'loss'; if (M.result === 'win') M.how = 'the fewer faults'; M.note = `Level at ${yo}: the heralds give it to ${fa < fb ? 'you' : M.od.short} for the fewer faults (${fa} against ${fb})`; }
+    else { M.result = 'draw'; M.note = `Level at ${yo} with the same faults: the card is drawn`; }
+  }
+  updateHud(true);
 }
 
 function finishCourse() {
@@ -1641,10 +1688,20 @@ function finishCourse() {
   else if (M.fouls >= (M.mode.horseOut || 2) || M.tilts >= (M.mode.tiltOut || 99)) M.result = 'loss-dq';
   else if ((M.oFouls || 0) >= (M.mode.horseOut || 2)) { M.result = 'win-dq'; M.how = 'his striking your horse'; }
   else if (M.mode.sightWin && (M.sights[0] >= M.mode.sightWin) !== (M.sights[1] >= M.mode.sightWin)) { M.result = M.sights[0] >= M.mode.sightWin ? 'win' : 'loss'; M.how = 'three strokes in the sight of the helm'; }
+  else if (M.mode.firstBreak && brk(p) !== brk(o)) M.result = brk(p) ? 'win' : 'loss';      // sudden death: the first lance broken decides it; both in one course settles nothing
   else if (M.hp.body <= 0.02) M.result = 'loss-yield';
+  else if (M.mode.firstBreak && M.course >= M.courses) { M.result = 'draw'; M.void = true; }      // no first blood in the courses allowed: the joust is void
+  else if (M.mode.style) C.countDue = true;      // the judges' card: the style marks wait for your lance to come up (settleCount, from aftermath)
   else if (M.course >= M.courses) {
     if (M.score[0] !== M.score[1]) M.result = M.score[0] > M.score[1] ? 'win' : 'loss';
     else if (M.mode.noExtra || M.course >= M.courses + 2) M.result = 'draw';
+  }
+  if (M.mode.firstBreak && !M.practice) {
+    C.mutual = brk(p) && brk(o);
+    const n = ORD[M.course - 1] || 'last', him = M.od.short;
+    M.note = ({ 'win': `Sudden death: you broke the first lance, in the ${n} course`, 'loss': `Sudden death: ${him} broke the first lance, in the ${n} course`,
+      'win-unhorse': `Sudden death: you bore ${him} down in the ${n} course`, 'loss-unhorse': `Sudden death: ${him} bore you down in the ${n} course`,
+      'draw': C.mutual ? `Sudden death: both lances broke together in the last course, and none is left to ride` : `Sudden death: no lance was broken in ${M.courses} courses, so the joust is void` })[M.result] || '';
   }
   if (!M.practice) {      // feats of the course (the toasts wait for the verdict)
     const real = p.broke && p.zone !== 'horse' && !p.foul;
@@ -1657,6 +1714,7 @@ function finishCourse() {
 // ------------------------------------------------------------------ the verdict: what happened, drawn and in plain words
 function plain(res, st, mine) {
   const him = M.practice ? 'the quintain' : M.od.short;
+  const own = !M.practice && M.mode.own, ptw = (n) => n === 0 ? 'no points' : n === 1 ? 'one point' : `${numW(n)} points`;      // the rules-only modes state their own cheque
   if (!res || res.zone === 'none') return [M.practice ? '—' : 'UNHORSED FIRST', ''];
   if (res.zone === 'miss' && res.across) return [mine ? 'BROKE ACROSS HIM' : 'BROKE ACROSS YOU', 'the shaft broke crosswise, not on its point: it counts for nothing'];
   if (res.zone === 'miss') return [res.up ? 'LANCE NEVER LOWERED' : res.early ? 'LANCE RAISED TOO SOON' : 'MISSED', res.up ? 'the lance stayed upright' : res.early ? 'it was down, but you let it up a moment before the lances met' : (st.near ? `passed ${Math.max(0.05, st.near.d).toFixed(1)} m wide of the ${st.near.zone}` : 'no touch')];
@@ -1664,12 +1722,12 @@ function plain(res, st, mine) {
   const Z = res.zone.toUpperCase();
   if (res.unhorse) return [mine ? 'UNHORSED HIM' : 'UNHORSED YOU', `struck the ${res.zone} and bore the rider from the saddle`];
   if (res.turned) return [`${Z} — TURNED ASIDE`, 'the shield came up and the point glanced off'];
-  if (res.glanced) return [`${Z} — GLANCED OFF`, 'the point met it at too flat an angle and skidded away: one point. Hit nearer the middle'];
+  if (res.glanced) return [`${Z} — GLANCED OFF`, 'the point met it at too flat an angle and skidded away: ' + (own ? ptw(M.PT.attaint) : 'one point') + '. Hit nearer the middle'];
   const skidded = res.skid ? `the point skidded off the ${res.skid} first · ` : '';
   const phys = res.E ? ` · met at ${Math.round(res.v * 3.6)} km/h, ${Math.round(res.E)} joules through the point` : '';
   const spoilt = res.spoiled > 0.3 ? (mine ? ' · he struck you first and it spoiled your stroke' : ' · you struck him first and spoiled his stroke') : '';
-  if (res.broke) return [`${Z} — LANCE BROKEN`, skidded + (res.zone === 'helm' ? 'the hardest mark: three points' : 'a broken lance: two points') + phys + spoilt];
-  return [`${Z} — A TOUCH`, `${skidded}the lance did not break: one point${res.E ? ` · only ${Math.round(res.E)} joules — ${res.spoiled > 0.3 ? (mine ? 'he struck you first and spoiled your stroke' : 'you struck him first and spoiled his stroke') : 'too glancing or too slow'}` : ''}`];
+  if (res.broke) return [`${Z} — LANCE BROKEN`, skidded + (own && M.mode.firstBreak ? (C && C.mutual ? 'a lance broken, but so was his' : 'a lance broken: that decides the joust') : res.zone === 'helm' ? `the hardest mark: ${own ? ptw(M.PT.helm) : 'three points'}` : `a broken lance: ${own ? ptw(M.PT.broken) : 'two points'}`) + phys + spoilt];
+  return [`${Z} — A TOUCH`, `${skidded}the lance did not break: ${own ? (M.mode.firstBreak ? 'a touch counts for nothing' : ptw(M.PT.attaint)) : 'one point'}${res.E ? ` · only ${Math.round(res.E)} joules — ${res.spoiled > 0.3 ? (mine ? 'he struck you first and spoiled your stroke' : 'you struck him first and spoiled his stroke') : 'too glancing or too slow'}` : ''}`];
 }
 /** "Your shield is split. His helm is badly dented." for each region marked this course that is now badly hit. */
 function harnessNotes() {
@@ -1686,11 +1744,11 @@ function harnessNotes() {
 function showVerdict() {
   const p = C.pL.res, o = C.oL.res, t = C.tech, fmt = (n) => (n > 0 ? '+' : '') + n;
   const [pw, ps] = plain(p, C.pL, true), [ow, os] = plain(o, C.oL, false);
-  $('vwhoYou').textContent = 'YOUR LANCE'; $('vwhatYou').innerHTML = `${pw}<small>${ps}${C.tiltStruck ? ` · you also hit the barrier −${-(C.tiltPts ?? 2)}` : ''}${C.coronel && M.PT.coronel ? ` · the lances met point to point +${M.PT.coronel}` : ''}${C.slow ? (C.checked ? ' · you checked your horse before the shock −1' : ' · you came on too slowly −1') : ''}</small>`;
+  $('vwhoYou').textContent = 'YOUR LANCE'; $('vwhatYou').innerHTML = `${pw}<small>${ps}${C.tiltStruck ? ` · you also hit the barrier −${-(C.tiltPts ?? 2)}` : ''}${C.coronel && M.PT.coronel ? ` · the lances met point to point +${M.PT.coronel}` : ''}${C.style && C.style.you.length ? ` · the judges mark ${C.style.you.join(' and ')} +${C.style.you.length}` : ''}${C.mutual && !M.result ? ' · both lances broke together: no first blood, ride again' : ''}${C.slow ? (C.checked ? ' · you checked your horse before the shock −1' : ' · you came on too slowly −1') : ''}</small>`;
   $('vptsYou').textContent = fmt(C.pts[0]); $('vptsYou').classList.toggle('neg', C.pts[0] < 0);
   $('vwhoHim').textContent = M.practice ? 'THE LESSON' : 'HIS LANCE';
   if (M.practice) { $('vwhatHim').innerHTML = C.lessonOk ? 'LESSON LEARNED<small>on to the next</small>' : 'TRY AGAIN<small>see the list on the left</small>'; $('vptsHim').textContent = C.lessonOk ? '✓' : '↻'; }
-  else { $('vwhatHim').innerHTML = `${ow}<small>${os}</small>`; $('vptsHim').textContent = fmt(C.pts[1]); }
+  else { $('vwhatHim').innerHTML = `${ow}<small>${os}${C.style ? ` · the judges mark ${C.style.him.join(' and ')} +${C.style.him.length}` : ''}</small>`; $('vptsHim').textContent = fmt(C.pts[1]); }
   $('vptsHim').classList.toggle('neg', !M.practice && C.pts[1] < 0);
   drawHitMap($('hitYou'), p, C.pL.near, { quintain: M.practice, arms: M.od.arms });
   if (M.practice) drawHitMap($('hitHim'), null, null, { blank: true, ok: C.lessonOk }); else drawHitMap($('hitHim'), o, C.oL.near, { arms: profile.arms });
@@ -1727,12 +1785,35 @@ function royalReaction() {
   return mood === 'rise' ? 'royalRise' : mood === 'displeased' ? 'royalDispleased' : 'royalPleased';
 }
 
+/** Keep the Bridge: the bout that has just ended goes on the record, and the knight's state is kept for the next. Decided once two bouts are won, or when two can no longer be. */
+function bridgeRecord() {
+  const B = M.bridge, r = M.result;
+  if (r.startsWith('win')) B.wins++; else if (r === 'draw') B.draws++; else B.losses++;
+  B.log.push({ short: M.od.short, res: r, score: [...M.score] });
+  B.tot.broken += M.breaks[0]; B.tot.helm += M.stats[0].helm; B.tot.courses += M.course;
+  B.held = B.wins >= 2; B.final = B.held || B.wins + (B.n - B.bout) < 2;
+  if (!B.final) B.keep = bridgeKeep();
+}
+/** "You lead 1–0", "Level 1–1", "They lead 0–1": the running record of the bridge (bouts won against bouts lost; a drawn bout counts for neither). */
+function bridgeRecordText(B) {
+  const w = B.wins, l = B.losses, d = B.draws ? `, ${B.draws} drawn` : '';
+  return (w > l ? `You lead ${w}–${l}` : w < l ? `They lead ${l}–${w}` : `Level ${w}–${l}`) + d;
+}
+function bridgeRecordSpoken(B) { const w = B.wins, l = B.losses; return w > l ? `${profile.name} leads, ${numW(w)} to ${numW(l)}` : w < l ? `The challengers lead, ${numW(l)} to ${numW(w)}` : `The bouts stand level at ${numW(w)} each`; }
 function showCard() {
   const p = C.pL.res, o = C.oL.res, t = C.tech;
   $('verdict').classList.add('hidden'); $('flashTxt').className = '';
-  $('cardTitle').textContent = { 'win': 'VICTORY', 'win-unhorse': 'VICTORY BY UNHORSING', 'loss': 'DEFEAT', 'loss-unhorse': 'UNHORSED', 'loss-dq': 'DISQUALIFIED', 'win-dq': 'VICTORY — HE IS DISQUALIFIED', 'loss-yield': 'YOU YIELD — TOO BATTERED TO RIDE', 'draw': 'HONOURS EVEN', 'practice': 'YOU ARE READY FOR THE LISTS' }[M.result];
+  const B = M.bridge; if (B) bridgeRecord();
+  const final = !B || B.final, res = B && final ? (B.held ? 'win' : 'loss') : M.result;      // what the title, the purse and the herald answer to: the bridge's end, or this bout
+  const nextOd = B && !final ? KNIGHTS.find(k => k.id === B.queue[B.bout]) : null;
+  $('cardTitle').textContent = B ? (final ? (B.held ? 'THE BRIDGE IS HELD' : 'THE BRIDGE IS LOST') : M.result.startsWith('win') ? 'BOUT WON' : M.result === 'draw' ? 'BOUT DRAWN' : 'BOUT LOST')
+    : M.void ? 'THE JOUST IS VOID' : { 'win': 'VICTORY', 'win-unhorse': 'VICTORY BY UNHORSING', 'loss': 'DEFEAT', 'loss-unhorse': 'UNHORSED', 'loss-dq': 'DISQUALIFIED', 'win-dq': 'VICTORY — HE IS DISQUALIFIED', 'loss-yield': 'YOU YIELD — TOO BATTERED TO RIDE', 'draw': 'HONOURS EVEN', 'practice': 'YOU ARE READY FOR THE LISTS' }[M.result];
+  $('cardHint').textContent = nextOd ? `The next challenger is ${nextOd.short} · SPACE / CLICK to meet him` : 'SPACE / CLICK to continue';
   if (M.how) voice.later(0.4, () => say(`The prize is given for ${M.how}.`, 'THE JUDGES', 1, { ttl: 8 }));
-  $('cardSub').textContent = M.result === 'practice' ? 'The master of horse has nothing more to teach you here. Ride the circuit.' : `${profile.name} ${M.score[0]} — ${M.score[1]} ${M.od.short}`;
+  const base = `${profile.name} ${M.score[0]} — ${M.score[1]} ${M.od.short}`;
+  $('cardSub').textContent = M.result === 'practice' ? 'The master of horse has nothing more to teach you here. Ride the circuit.'
+    : B ? (final ? `${B.held ? 'The bridge is held' : 'The bridge is lost'}: ${B.wins} of ${B.n} bouts won · ` : `Bout ${B.bout} of ${B.n} · ${bridgeRecordText(B)} · `) + base
+    : M.mode.firstBreak ? (M.note || base) : M.note ? `${base} · ${M.note}` : base;
   const fmt = (n) => (n > 0 ? '+' : '') + n;
   const [pw] = plain(p, C.pL, true), [ow] = plain(o, C.oL, false);
   $('cardCols').innerHTML = `<div class="who"><span class="pts">${fmt(C.pts[0])}</span><h4>${profile.name.toUpperCase()}</h4><div class="res">${pw}</div></div>
@@ -1745,19 +1826,30 @@ function showCard() {
     + f('TOP SPEED', `${Math.round(a.top * 3.6)} km/h`, `${Math.round(b.top * 3.6)} km/h`) + f('HARDEST STROKE', `${Math.round(a.best * PHYS.refJ)} J`, `${Math.round(b.best * PHYS.refJ)} J`);
   $('cardTimeline').style.display = 'none';
   $('card').classList.remove('hidden');
-  const win = M.result.startsWith('win') || M.result === 'practice';
-  fanfare(win ? 'victory' : M.result === 'draw' ? 'short' : 'defeat');
+  const win = res.startsWith('win') || res === 'practice';
+  fanfare(win ? 'victory' : res === 'draw' ? 'short' : 'defeat');
   react(win ? 'win' : 'loss', 1, false);      // the card and the herald speak; no crowd line on top
   if (world.setRoyalMood && M.circuit) world.setRoyalMood(win ? 'rise' : 'applaud');
-  retinueSpeak(win ? 'won' : M.result === 'draw' ? null : 'lost', 0.85, 5.5);
-  voice.later(0.8, () => herald(win ? 'win' : M.result === 'draw' ? 'draw' : 'loss')); if (win && M.circuit) voice.later(12, () => herald('prize'));
-  if (!M.practice) {
+  retinueSpeak(win ? 'won' : res === 'draw' ? null : 'lost', 0.85, 5.5);
+  { // Hugh's call: the rules-only modes word their own (the pools speak of "the cheque"); the rest use the pools
+    let text = null; const him = M.od.short, wl = (a, b) => win ? a : b;
+    if (B) {
+      text = final ? (B.held ? `The bridge is held. ${profile.name} has won ${numW(B.wins)} of the ${numW(B.n)} bouts.` : `The bridge is lost. ${profile.name} has won only ${numW(B.wins)} of the ${numW(B.n)} bouts.`)
+        : `${M.result.startsWith('win') ? `A bout to ${profile.name}.` : M.result === 'draw' ? `The bout with ${him} is drawn.` : `${him} takes the bout.`} ${bridgeRecordSpoken(B)}. The next challenger is ${hailName(nextOd)}, of ${nextOd.land}.`;
+    } else if (M.mode.firstBreak && M.note) text = M.void ? (C.mutual ? 'Both lances broke together in the last course, and none is left to ride. The joust is void, and no purse is paid.' : `Neither knight broke a lance in ${numW(M.courses)} courses. The joust is void, and no purse is paid.`)
+      : `${M.note}. ${wl('The joust is yours.', `The joust goes to ${him}.`)}`;
+    else if (M.mode.style && M.note) text = `${M.note}. ${wl('The joust is yours.', `The joust goes to ${him}.`)}`;
+    const hk = win ? 'win' : res === 'draw' ? 'draw' : 'loss';
+    voice.later(0.8, () => text ? herald(hk, 0, { text }) : herald(hk));
+  }
+  if (win && M.circuit) voice.later(12, () => herald('prize'));
+  if (!M.practice && final) {
     // the reckoning: what the day brought in, what it cost, and what it added to your name
-    const rk = reckon({ vIdx: M.vIdx, result: M.result, circuit: M.circuit, courses: M.courses, practice: false, lance: profile.lance || 'standard', broken: M.breaks[0], helms: M.stats[0].helm, body: M.hp.body, horseHp: M.hp.horse,
+    const rk = reckon({ vIdx: M.vIdx, result: res, circuit: M.circuit, courses: B ? B.tot.courses : M.courses, practice: false, void: !!M.void, bouts: B ? B.wins : 0, lance: profile.lance || 'standard', broken: B ? B.tot.broken : M.breaks[0], helms: B ? B.tot.helm : M.stats[0].helm, body: M.hp.body, horseHp: M.hp.horse,
       court: M.fav.court, horse: profile.horse, armour: profile.armour, helm: profile.helm, retinue: profile.retinue, oppHorse: M.od.horse, oppArmour: M.od.armour, skills: profile.skills });
     const rb = rankOf(profile.renown);
     settle(profile, rk); M.reckoning = rk;
-    const won = M.result.startsWith('win');      // the feats of the match (their renown is paid before the rank is read)
+    const won = res.startsWith('win');      // the feats of the match (their renown is paid before the rank is read)
     showFeats(matchFeats(profile, { won, venue: M.V.id, mode: M.mode.id, opp: M.od.id, cleanSheet: M.score[0] > 0 && M.score[1] <= 0, comeback: M.maxDef >= 3, ironSeat: M.stats[1].best < 0.75,
       sightWin: !!M.mode.sightWin && M.result === 'win' && !!M.how }));
     saveProfile();
@@ -1769,6 +1861,7 @@ function showCard() {
       + rankBar(profile.renown);
     if (rankUp) announceRank(true); else if (M.rankPending) rankSay(rankOf(profile.renown));      // the card is up: the notice may show
   }
+  if (B) $('cardFacts').innerHTML += `<h6>THE BRIDGE</h6>` + B.log.map((b, i) => f(`BOUT ${i + 1} · ${b.short.toUpperCase()}`, b.res.startsWith('win') ? 'won' : b.res === 'draw' ? 'drawn' : 'lost', `${b.score[0]} — ${b.score[1]}`)).join('');
   if (M.circuit) recordCircuit();
 }
 
@@ -1853,7 +1946,13 @@ function advance() {
   if (S.paused) return;
   if (S.mode === 'replay') { endReplay(); return; }
   if (S.mode === 'intro') return;      // a tap no longer skips the intro: hold Space / Enter (see skipVote)
+  if (S.mode === 'after' && C.carded && M.result && M.bridge && !M.bridge.final) { audio.ui('select'); nextBout(); return; }      // the bridge goes on: the next challenger
   if (S.mode === 'after' && C.carded && M.result) { audio.ui('select'); const wasCircuit = M.circuit; endMatch(); menus.show(wasCircuit ? 'circuit' : 'main'); }
+}
+/** Keep the Bridge: the next bout is a fresh match for the same lists with the knight's carried state (M.bridge.keep, kept by bridgeRecord) and the next challenger. */
+function nextBout() {
+  const B = M.bridge, vIdx = M.vIdx; B.bout++;
+  endMatch(); startMatch(vIdx, B.queue[B.bout - 1], false, false, 'bridge', 0, B);
 }
 function endMatch() {
   if (world && world.setTilt) world.setTilt(true);
@@ -1959,7 +2058,7 @@ function updateHud(force) {
   { const a = player.dmg, b = opp.dmg || {}, sig = [a.shield, a.helm, a.breast, a.pauldronL, b.shield, b.helm, b.breast, b.pauldronL].map(v => Math.round((v || 0) * 40)).join(',');
     if (sig !== dollSig) { dollSig = sig; drawDoll($('dollP'), a); drawDoll($('dollO'), Object.assign({ shield: 0, helm: 0, breast: 0, pauldronL: 0 }, b)); } }
   $('scoreP').textContent = M.score[0]; $('scoreO').textContent = M.score[1];
-  $('courseInfo').textContent = M.practice ? `LESSON ${M.lesson + 1}/${LESSONS.length}` : M.course > M.courses ? 'EXTRA COURSE' : `COURSE ${Math.max(1, M.course)}/${M.courses}`;
+  $('courseInfo').textContent = (M.bridge ? `BOUT ${M.bridge.bout}/${M.bridge.n} · ` : '') + (M.practice ? `LESSON ${M.lesson + 1}/${LESSONS.length}` : M.course > M.courses ? 'EXTRA COURSE' : `COURSE ${Math.max(1, M.course)}/${M.courses}`);
   if (force) {
     const mk = (a) => a.map(c => `<div class="mark ${c}">${{ m: '–', a: '1', b: '2', h: '3', u: 'U', f: '✕' }[c]}</div>`).join('');
     $('marksP').innerHTML = mk(M.marks[0].slice(-6)); $('marksO').innerHTML = mk(M.marks[1].slice(-6));

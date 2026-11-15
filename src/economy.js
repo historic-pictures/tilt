@@ -12,7 +12,8 @@ export function reckon(m) {
   const lines = [], add = (label, n) => { n = Math.round(n); if (n) lines.push([label, n]); };
   if (m.practice) return { lines, total: 0, renown: 0 };
   const sk = m.skills || {}, won = m.result.startsWith('win'), men = m.retinue || {}, fx = (id) => menFx(id, men[id]);
-  add('Prize purse', purse(m.vIdx, m.result, m.circuit));
+  if (m.bouts) add(`Purse for ${m.bouts} bout${m.bouts > 1 ? 's' : ''} won at the bridge`, m.bouts * purse(m.vIdx, 'win', m.circuit) * (won ? 1 : 0.5));      // Keep the Bridge: a purse for every bout you won (half if the bridge was lost)
+  else if (!m.void) add('Prize purse', purse(m.vIdx, m.result, m.circuit));      // a void joust (Sudden Death with no lance broken) pays no purse
   if (m.court > 0.2) add('Gift of the gallery', ECON.giftPerFavour * m.court * (sk.largesse ? SKILLS.largesse.gift : 1));
   if (m.circuit) {
     if (m.result === 'win-unhorse') add('Ransom of his horse and harness', ECON.ransom * worthOf(m.oppHorse, m.oppArmour));

@@ -21,6 +21,8 @@ export function initMenus(api) {
   const root = el('screen');
   let exVenue = 0, exOpp = KNIGHTS[0].id, exMode = 'planken', exCourses = 5, dismissArm = null;
   const EX_COURSES = [3, 5, 7, 10, 15, 20], CIRC_COURSES = [3, 5, 7, 10, 15];
+  /** The number of courses a rule set fixes (0 = you choose): Castile four by its statutes, Judged Tilt six, the Bridge three a bout. */
+  const fixedCourses = (id) => { const m = MODES[id]; return m.fixedCourses || (m.noExtra && !m.pickCourses ? 4 : 0); };
   let stableCap = null;      // the caparison shown on the Stable's horse (previewed; yours is profile.caparison)
   const crests = () => root.querySelectorAll('canvas[data-arms]').forEach(c => drawCrest(c, JSON.parse(c.dataset.arms)));
   const crest = (arms, w = 40, h = 48) => `<canvas width="${w}" height="${h}" data-arms='${JSON.stringify(arms)}'></canvas>`;
@@ -91,9 +93,9 @@ export function initMenus(api) {
     root.innerHTML = scroll('sheet', `<div class="top"><div><h3>Exhibition Joust</h3><p>Choose the lists and the knight you will run against. No entry fee and no ransom; the purse is ${marks(purse(0, 'win', false))}.</p></div>
       <div class="actions"><button class="btn" data-go="main">Back</button><button class="btn primary" data-act="exride">Ride</button></div></div>
       <h5>The Joust</h5><div class="grid">${Object.values(MODES).map(m => `<div class="pick ${m.id === exMode ? 'sel' : ''}" data-exm="${m.id}"><b>${m.name}</b><em>${m.sub}</em><p>${m.blurb}</p></div>`).join('')}</div>
-      <h5>Courses <small>${MODES[exMode].noExtra ? 'Fixed at four by the statutes' : 'level scores run up to two extra courses'}</small></h5><div class="swatches">${MODES[exMode].noExtra ? `<div class="chip sel">4</div>` : EX_COURSES.map(n => `<div class="chip ${n === exCourses ? 'sel' : ''}" data-exc="${n}">${n}</div>`).join('')}</div>
+      <h5>Courses <small>${fixedCourses(exMode) ? (MODES[exMode].bridge ? 'Three against each challenger' : MODES[exMode].fixedCourses ? 'Fixed by the rules of the joust' : 'Fixed at four by the statutes') : MODES[exMode].firstBreak ? 'the joust is void if no lance breaks in this many' : 'level scores run up to two extra courses'}</small></h5><div class="swatches">${fixedCourses(exMode) ? `<div class="chip sel">${fixedCourses(exMode)}</div>` : EX_COURSES.map(n => `<div class="chip ${n === exCourses ? 'sel' : ''}" data-exc="${n}">${n}</div>`).join('')}</div>
       <h5>The Lists</h5><div class="grid">${VENUES.map((v, i) => `<div class="pick ${i === exVenue ? 'sel' : ''}" data-exv="${i}"><b>${v.name}</b><em>${v.year}</em><p>${v.city}. ${v.blurb}</p></div>`).join('')}</div>
-      <h5>Your Opponent</h5><div class="grid">${KNIGHTS.map(k => `<div class="pick ${k.id === exOpp ? 'sel' : ''}" data-exo="${k.id}">${crest(k.arms, 30, 36)} <span class="ovr">${ovr(k)}</span><b>${k.short}</b><em>${k.land}</em><p>${k.name} — ${HORSES[k.horse].name}, ${HELMS[ARMOURS[k.armour].helm].name}, ${ARMOURS[k.armour].name}</p>${stat('Aim', k.skill)}${stat('Seat', k.seat)}${stat('Drive', k.drive)}</div>`).join('')}</div>`);
+      <h5>Your Opponent${MODES[exMode].bridge ? ' <small>one of the three challengers, in order of skill; the rest are drawn</small>' : ''}</h5><div class="grid">${KNIGHTS.map(k => `<div class="pick ${k.id === exOpp ? 'sel' : ''}" data-exo="${k.id}">${crest(k.arms, 30, 36)} <span class="ovr">${ovr(k)}</span><b>${k.short}</b><em>${k.land}</em><p>${k.name} — ${HORSES[k.horse].name}, ${HELMS[ARMOURS[k.armour].helm].name}, ${ARMOURS[k.armour].name}</p>${stat('Aim', k.skill)}${stat('Seat', k.seat)}${stat('Drive', k.drive)}</div>`).join('')}</div>`);
     crests(); api.setVenue(exVenue);
   }
 
@@ -255,7 +257,7 @@ export function initMenus(api) {
     if (root.dataset.name === 'welcome' && (d.col || d.pat)) { if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; } else p.arms.pattern = d.pat; api.saveProfile(); api.rebuildPlayer(); return show('welcome'); }
     if (d.act === 'ride') { const T = p.table; return api.startMatch(T.round, VENUES[T.round].host, true, false, null, p.courses || 5); }
     if (d.act === 'reset') { api.resetCircuit(); return show('circuit'); }
-    if (d.act === 'exride') return api.startMatch(exVenue, exOpp, false, false, exMode, MODES[exMode].noExtra ? 4 : exCourses);
+    if (d.act === 'exride') return api.startMatch(exVenue, exOpp, false, false, exMode, fixedCourses(exMode) || exCourses);
     if (d.act === 'practice') return api.startPractice((p.lesson || 0) >= LESSONS.length);
     if (d.act === 'herald') { p.herald = p.herald === false; api.saveProfile(); return show('main'); }
     if (d.act === 'voices') { api.setVoices(!(api.voicesOn ? api.voicesOn() : true)); return show('main'); }
