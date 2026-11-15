@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TILT — The Jousting Circuit</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<!-- the torn edge of the parchment: a large one for scrolls, a finer one for slips -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="deckle" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" seed="4"/><feDisplacementMap in="SourceGraphic" scale="8" xChannelSelector="R" yChannelSelector="G"/></filter>
+  <filter id="deckleS" x="-6%" y="-10%" width="112%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="9"/><feDisplacementMap in="SourceGraphic" scale="5" xChannelSelector="R" yChannelSelector="G"/></filter>
+</svg>
+
+<div id="helmMask"></div>
+<div id="vignette"></div>
+<div id="flash"></div>
+
+<div id="ticker"></div>
+<div id="hud" class="hidden">
+  <div id="scorebar">
+    <div class="side left"><canvas id="crestP" width="64" height="76"></canvas><span id="nameP"></span></div>
+    <div class="score"><b id="scoreP">0</b><i id="courseInfo">COURSE 1/4</i><b id="scoreO">0</b></div>
+    <div class="side right"><span id="nameO"></span><canvas id="crestO" width="64" height="76"></canvas></div>
+  </div>
+  <div id="venueInfo"></div>
+  <div id="marks"><div id="marksP"></div><div id="marksO"></div></div>
+
+  <div id="crowdPanel" class="panel">
+    <label>THE COMMONS</label>
+    <div class="favbar"><div id="favFill"></div><div class="mid"></div></div>
+    <label>THE GALLERY</label>
+    <div class="favbar"><div id="favFill2" class="fill"></div><div class="mid"></div></div>
+    <div id="crowdTxt">The stands are watching</div>
+  </div>
+
+  <div id="horsePanel" class="panel">
+    <div class="row"><div id="rhythm"><div id="rhythmDot"></div></div>
+      <div class="col"><div id="gaitPips"><span>HALT</span><span>WALK</span><span>TROT</span><span>CANTER</span><span>GALLOP</span></div>
+      <div id="speedTxt">0 km/h</div><div id="bondTxt"></div><div id="burstTxt"></div></div></div>
+    <label>STAMINA</label><div class="bar"><div id="stamBar"></div></div>
+    <label>TEMPER</label><div class="bar"><div id="calmBar"></div></div>
+    <label>HORSE HEALTH</label><div class="bar"><div id="horseBar"></div></div>
+  </div>
+
+  <div id="lancePanel" class="panel">
+    <div id="couchTxt">LANCE UPRIGHT</div><div id="strideTxt"></div>
+    <label>ARM</label><div class="bar"><div id="armBar"></div></div>
+    <label>NERVE</label><div class="bar"><div id="focusBar"></div></div>
+    <div id="braceTxt">SEAT: LOOSE</div>
+    <div id="shieldTxt">SHIELD: LOW</div>
+    <label>BODY</label><div class="bar"><div id="bodyBar"></div></div>
+    <div id="dolls" title="Armour damage: shield, helm, breastplate, shield-side shoulder"><div><canvas id="dollP" width="56" height="72"></canvas><span>YOUR HARNESS</span></div><div><canvas id="dollO" width="56" height="72"></canvas><span>HIS HARNESS</span></div></div>
+  </div>
+
+  <div id="reticle"><div class="ring"></div><div id="zoneTxt"></div></div>
+  <div id="cursorDot"></div>
+  <div id="prompt"></div>
+</div>
+
+<div id="verdict" class="hidden">
+  <div class="vcol you"><canvas class="hitmap" id="hitYou" width="170" height="190"></canvas><div class="vwho" id="vwhoYou"></div><div class="vwhat" id="vwhatYou"></div><div class="vpts" id="vptsYou"></div></div>
+  <div class="vcol him"><canvas class="hitmap" id="hitHim" width="170" height="190"></canvas><div class="vwho" id="vwhoHim"></div><div class="vwhat" id="vwhatHim"></div><div class="vpts" id="vptsHim"></div></div>
+  <div id="vtech"></div>
+  <div id="vtip"></div>
+  <div id="vhint"></div>
+</div>
+<div id="flashTxt"></div>
+<div id="replayTag" class="hidden">INSTANT REPLAY</div>
+<div id="replayYou" class="panel rmap hidden"><label>YOUR LANCE</label><canvas class="hitmap" id="rhitYou" width="170" height="190"></canvas><div id="rwhatYou"></div></div>
+<div id="replayHim" class="panel rmap hidden"><label>HIS LANCE</label><canvas class="hitmap" id="rhitHim" width="170" height="190"></canvas><div id="rwhatHim"></div></div>
+<div id="replayKeys" class="hidden"><kbd>V</kbd> change view &nbsp;&nbsp; <kbd>SPACE</kbd> skip</div>
+<div id="lesson" class="hidden"><div id="lessonTitle"></div><div id="lessonGoal"></div><ul id="lessonList"></ul><div id="lessonNote"></div></div>
+<div id="toast"><i class="paper"></i><b></b><span></span></div>
+<div id="royalCap" class="hidden"></div>
+
+<div id="banner" class="hidden"><div id="bannerTop"></div><div id="bannerMain"></div><div id="bannerSub"></div></div>
+
+<div id="card" class="scroll hidden"><i class="paper"></i><div class="page">
+  <div id="cardTitle"></div>
+  <div id="cardSub"></div>
+  <div id="cardCols"></div>
+  <canvas id="cardTimeline" width="700" height="66"></canvas>
+  <div id="cardRows"></div>
+  <div id="cardFacts"></div>
+  <div id="cardHint">SPACE / CLICK to continue</div>
+</div></div>
+
+<div id="screen"></div>
+<button id="soundBtn" aria-label="Sound off (M)" title="Sound off (M)"></button>
+<div id="loading">Raising the lists…</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+{
+ "evening_road_01_puresky": {
+  "u": 0.60196,
+  "el": 0.2137,
+  "peak": 22.5,
+  "mean": 1.2441,
+  "horizon": [
+   1.0735,
+   1.1616,
+   1.1052
+  ]
+ },
+ "kloofendal_48d_partly_cloudy_puresky": {
+  "u": 0.59504,
+  "el": 0.8357,
+  "peak": 74608.8,
+  "mean": 0.4582,
+  "horizon": [
+   0.447,
+   0.4845,
+   0.5948
+  ]
+ },
+ "kloofendal_overcast_puresky": {
+  "u": 0.59219,
+  "el": 0.3993,
+  "peak": 6.0,
+  "mean": 1.2233,
+  "horizon": [
+   0.7154,
+   0.7665,
+   0.8649
+  ]
+ },
+ "kloppenheim_03_puresky": {
+  "u": 0.60004,
+  "el": 1.0234,
+  "peak": 40176.9,
+  "mean": 0.5577,
+  "horizon": [
+   0.4108,
+   0.4337,
+   0.4608
+  ]
+ },
+ "qwantani_afternoon_puresky": {
+  "u": 0.60019,
+  "el": 0.7124,
+  "peak": 156520.0,
+  "mean": 0.2297,
+  "horizon": [
+   0.3685,
+   0.4402,
+   0.5195
+  ]
+ },
+ "sunflowers_puresky": {
+  "u": 0.60031,
+  "el": 0.7506,
+  "peak": 72147.8,
+  "mean": 0.4948,
+  "horizon": [
+   0.4895,
+   0.5215,
+   0.4674
+  ]
+ }
+}

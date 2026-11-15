@@ -1,0 +1,5 @@
+/* Lettering for TILT. All three families (Almendra, Almendra SC, Fondamento) are under the SIL Open Font License 1.1 (see assets/CREDITS.md). Latin subset. */
+@font-face { font-family: 'Almendra'; font-style: normal; font-weight: 500 900; font-display: swap; src: url('Almendra-700.woff2') format('woff2'); }
+@font-face { font-family: 'Almendra SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('AlmendraSC-400.woff2') format('woff2'); }
+@font-face { font-family: 'Fondamento'; font-style: normal; font-weight: 400; font-display: swap; src: url('Fondamento-400.woff2') format('woff2'); }
+@font-face { font-family: 'Fondamento'; font-style: italic; font-weight: 400; font-display: swap; src: url('Fondamento-400i.woff2') format('woff2'); }

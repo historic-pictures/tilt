@@ -1,0 +1,812 @@
+// crowd.js - a living, reactive, class-structured stadium crowd (Three.js r160, ES module).
+//
+// 11 InstancedMeshes (= 11 draw calls), all under `group`:
+//   body, head, cap (domes: coif/hood/straw/veil/noble cap), brim, tall (hennins+veils, lord hats, mitres),
+//   armL, armR, flagA/flagB (two-colour pennants), kerchief (ladies' waving cloths),
+//   toss (pooled ballistic items: thrown hats and flowers/favours).
+//
+// SPOTS: [x, y, z, side, cls = 1, yaw?]. cls: 0 COMMONS (stand, rowdy, fast), 1 BURGHERS (seated, cheerful),
+//   2 NOBLES & LADIES (seated, restrained, rich dress), 3 CLERGY (calm). yaw = facing (sin yaw, 0, cos yaw);
+//   when undefined it is derived from side (+1 faces -X, -1 faces +X).
+//
+// UPDATE state s: excitement, anticipation, favour, favourCommons, favourCourt, scorer, waveStart, focusZ,
+//   event {id, kind, by}. Event ids are edge-detected; kinds: break helm unhorse attaint miss foul salute win loss start.
+//
+// PER-PERSON LAYOUT (typed arrays indexed by spectator i; built once, nothing allocated per frame)
+//   constants: px,py,pz, side, cls, thr (allegiance threshold in (-1,1): supports A when thr < favour of its class),
+//              keen, ph (phase), hg (height), bw (width), kind (0 man,1 woman,2 child), special (0,1 always stands,
+//              2 hat waver, 3 air-puncher), hw (headwear code), dv (dismay variant), jz (focus jitter),
+//              dly (event reaction delay by class), yb/hasYaw (explicit facing)
+//   slots:     capIdx, brimIdx, tallIdx, veilIdx, flagIdx, kerchIdx (instance index in respective mesh or -1)
+//   smoothed:  sCheer, sDis, sClap, sStand, sLean (continuous excitement layer, eased every frame)
+//   event layer: not stored; an envelope is evaluated from (t - eventTime - dly) and a precomputed
+//              class x supporter reaction table (NCH channels) so reactions are smooth and allocation free.
+//   cached:    al (current allegiance) so livery colours are rewritten only when someone switches sides.
+//   capGone/capBack: time window in which a person's hat is in the air (their own cap instance is hidden).
+
+import * as THREE from 'three';
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const sstep = (a, b, x) => { x = (x - a) / (b - a); x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const PI = Math.PI, HALF_PI = Math.PI / 2, TWO_PI = Math.PI * 2;
+
+// ---- palettes ----
+const MUTED = ['#8a4b2d', '#9b3a2e', '#3f5f8a', '#c9a23c', '#d8ceb4', '#3e5b3a', '#5b4332', '#77736b',
+  '#a0613a', '#6d7a4a', '#4a4f66', '#b58b52', '#8c6a5a', '#cdbf9a'];
+const JEWEL = ['#7a1f3d', '#1c3f94', '#0f6b4a', '#b8860b', '#5a2a82', '#a3161c', '#0e6e7a'];
+const EARTH = ['#8a4b2d', '#6b4a32', '#777268', '#5c6b3f', '#b08a3a', '#9a8a6a', '#4e4a40', '#a0613a'];
+const RICH = ['#b01616', '#1a3fa0', '#5a2a82', '#0f7a4f', '#c9a227', '#8a1a46', '#0e6e8a', '#d63a1e'];
+const HABIT = ['#1c1a18', '#3a2a1c', '#4a3a2a', '#e0d8c4', '#2b2622'];
+const SKIN = ['#f0c8a4', '#e0ac84', '#c68e63', '#a8704a', '#7c4f33', '#f4d6bb'];
+const LINEN = ['#e6dfcb', '#d9d0b6', '#cfc6aa'];
+const STRAW = ['#cfa95c', '#c19a4e', '#d8b86e'];
+const FLOWERS = ['#d8222a', '#f2efe6', '#e87aa0', '#f0c040'];
+
+// ---- event reaction channels ----
+const NCH = 14;
+const CH_CHEER = 0, CH_DIS = 1, CH_FIST = 2, CH_JEER = 3, CH_ANGRY = 4, CH_POLITE = 5, CH_KERCH = 6,
+  CH_BOW = 7, CH_BLESS = 8, CH_CROSS = 9, CH_RECOIL = 10, CH_STAND = 11, CH_WILD = 12, CH_SHAKE = 13;
+
+// module-level scratch (no per-frame allocation)
+let r0 = 1, r1 = 0, r2 = 0, r3 = 0, r4 = 1, r5 = 0, r6 = 0, r7 = 0, r8 = 1; // body rotation, column-major
+let ox = 0, oy = 0, oz = 0;           // xf output
+let ax_ = 0, ay_ = 0, az_ = 0, rem_ = 1; // arm direction accumulator
+const _c = new THREE.Color();
+
+function xf(vx, vy, vz) {
+  ox = r0 * vx + r3 * vy + r6 * vz;
+  oy = r1 * vx + r4 * vy + r7 * vz;
+  oz = r2 * vx + r5 * vy + r8 * vz;
+}
+function addDir(w, x, y, z) {
+  if (w > rem_) w = rem_;
+  if (w <= 0) return;
+  ax_ += x * w; ay_ += y * w; az_ += z * w; rem_ -= w;
+}
+function wm(arr, o, ax, ay, az, bx, by, bz, cx, cy, cz, tx, ty, tz) {
+  arr[o] = ax; arr[o + 1] = ay; arr[o + 2] = az; arr[o + 3] = 0;
+  arr[o + 4] = bx; arr[o + 5] = by; arr[o + 6] = bz; arr[o + 7] = 0;
+  arr[o + 8] = cx; arr[o + 9] = cy; arr[o + 10] = cz; arr[o + 11] = 0;
+  arr[o + 12] = tx; arr[o + 13] = ty; arr[o + 14] = tz; arr[o + 15] = 1;
+}
+function putCol(arr, idx, rgb, o) { arr[idx * 3] = rgb[o]; arr[idx * 3 + 1] = rgb[o + 1]; arr[idx * 3 + 2] = rgb[o + 2]; }
+
+function makeMesh(geo, mat, count, group, name) {
+  const m = new THREE.InstancedMesh(geo, mat, Math.max(1, count));
+  m.count = count;
+  m.name = name;
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled = false;
+  m.castShadow = false;
+  m.receiveShadow = true;
+  m.setColorAt(0, _c.set('#ffffff')); // creates the instanceColor attribute
+  m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  group.add(m);
+  return m;
+}
+
+export function buildCrowd(group, spots, opts = {}) {
+  const rng = mulberry32((opts.seed ?? 1) | 0);
+  const n = spots.length;
+
+  // livery as linear rgb: [A1 r g b, A2 r g b, B1 r g b, B2 r g b]
+  const livery = new Float32Array(12);
+  let al = null;
+  function setColors(cA, cB) {
+    const set = (arr, o) => {
+      _c.set(arr[0]); livery[o] = _c.r; livery[o + 1] = _c.g; livery[o + 2] = _c.b;
+      _c.set(arr[1]); livery[o + 3] = _c.r; livery[o + 4] = _c.g; livery[o + 5] = _c.b;
+    };
+    if (cA) set(cA, 0);
+    if (cB) set(cB, 6);
+    if (al) al.fill(0); // force recolour on next update
+  }
+  setColors(opts.colorsA || ['#1f4690', '#e0b83c'], opts.colorsB || ['#a81e1e', '#ece8dc']);
+
+  // ---- per-person constants ----
+  const px = new Float32Array(n), py = new Float32Array(n), pz = new Float32Array(n);
+  const side = new Int8Array(n), kind = new Uint8Array(n), special = new Uint8Array(n), clsA = new Uint8Array(n);
+  const gown = new Uint8Array(n), bodyIdx = new Int32Array(n);
+  const hw = new Uint8Array(n), dv = new Uint8Array(n), hasYaw = new Uint8Array(n);
+  const thr = new Float32Array(n), keen = new Float32Array(n), ph = new Float32Array(n), yb = new Float32Array(n);
+  const hg = new Float32Array(n), bw = new Float32Array(n), jz = new Float32Array(n), dly = new Float32Array(n);
+  const capIdx = new Int32Array(n).fill(-1), brimIdx = new Int32Array(n).fill(-1), tallIdx = new Int32Array(n).fill(-1);
+  const veilIdx = new Int32Array(n).fill(-1), flagIdx = new Int32Array(n).fill(-1), kerchIdx = new Int32Array(n).fill(-1);
+  const capLiv = new Uint8Array(n); // 0 none, 1 follows colour1, 2 colour2
+  const capGone = new Float32Array(n), capBack = new Float32Array(n);
+  const sCheer = new Float32Array(n), sDis = new Float32Array(n), sClap = new Float32Array(n);
+  const sStand = new Float32Array(n), sLean = new Float32Array(n);
+  al = new Int8Array(n);
+
+  const bodyCol = new Float32Array(n * 3), armCol = new Float32Array(n * 3), headCol = new Float32Array(n * 3);
+  const capCol = new Float32Array(n * 3), veilCol = new Float32Array(n * 3);
+  const pick = (a) => a[(rng() * a.length) | 0];
+  const lin = (hex, jit, out, o) => {
+    _c.set(hex); const k = 1 + (rng() - 0.5) * jit;
+    out[o] = _c.r * k; out[o + 1] = _c.g * k; out[o + 2] = _c.b * k;
+  };
+
+  // reaction delay ranges by class (seconds)
+  const DLY0 = [0, 0.15, 0.3, 0.4], DLY1 = [0.15, 0.5, 0.8, 0.9];
+
+  let nM = 0, nG = 0, nCap = 0, nBrim = 0, nTall = 0, nFlag = 0, nKerch = 0;
+  for (let i = 0; i < n; i++) {
+    const sp = spots[i];
+    px[i] = sp[0]; py[i] = sp[1]; pz[i] = sp[2]; side[i] = sp[3] >= 0 ? 1 : -1;
+    let cls = sp[4] === undefined ? 1 : sp[4] | 0;
+    if (cls < 0 || cls > 3) cls = 1;
+    clsA[i] = cls;
+    if (sp[5] !== undefined && sp[5] !== null) { hasYaw[i] = 1; yb[i] = sp[5]; }
+    thr[i] = (rng() * 2 - 1) * 0.98;
+    keen[i] = Math.pow(rng(), 0.8);
+    ph[i] = rng() * TWO_PI;
+    jz[i] = (rng() - 0.5) * 7;
+    dv[i] = rng() < 0.5 ? 0 : 1;
+    dly[i] = DLY0[cls] + rng() * (DLY1[cls] - DLY0[cls]);
+
+    let kd;
+    if (cls <= 1) kd = rng() < 0.06 ? 2 : (rng() < 0.42 ? 1 : 0);
+    else if (cls === 2) kd = rng() < 0.5 ? 1 : 0;
+    else kd = 0;
+    kind[i] = kd;
+    const adultH = cls === 2 ? 1.0 + rng() * 0.08 : 0.96 + rng() * 0.1;
+    hg[i] = kd === 2 ? 0.62 + rng() * 0.12 : kd === 1 ? 0.92 + rng() * 0.08 + (cls === 2 ? 0.04 : 0) : adultH;
+    let w = 1.0;
+    if (cls === 0) w *= 1.1; else if (cls === 2) w *= kd === 1 ? 0.92 : 0.88; else if (cls === 3) w *= 1.08;
+    bw[i] = w * (0.92 + rng() * 0.16);
+
+    gown[i] = (kd === 1 || cls === 3 || (cls === 2 && rng() < 0.35) || (kd === 2 && rng() < 0.5)) ? 1 : 0;
+    bodyIdx[i] = gown[i] ? nG++ : nM++;
+
+    // headwear
+    const r = rng();
+    let h = 0;
+    if (cls === 0) {
+      if (kd === 0) h = r < 0.15 ? 0 : r < 0.35 ? 1 : r < 0.7 ? 2 : 3;
+      else if (kd === 1) h = r < 0.1 ? 0 : r < 0.45 ? 1 : r < 0.65 ? 2 : r < 0.75 ? 3 : 4;
+      else h = r < 0.6 ? 0 : r < 0.8 ? 2 : 3;
+    } else if (cls === 1) {
+      if (kd === 0) h = r < 0.25 ? 0 : r < 0.4 ? 1 : r < 0.75 ? 2 : 3;
+      else if (kd === 1) h = r < 0.2 ? 0 : r < 0.45 ? 1 : r < 0.55 ? 2 : 4;
+      else h = r < 0.6 ? 0 : r < 0.8 ? 2 : 3;
+    } else if (cls === 2) {
+      if (kd === 1) h = r < 0.55 ? 6 : r < 0.7 ? 4 : r < 0.85 ? 5 : 1;
+      else h = r < 0.45 ? 7 : r < 0.85 ? 5 : 0;
+    } else {
+      h = r < 0.06 ? 8 : r < 0.8 ? 2 : 0; // mitre / hood / tonsure
+    }
+    const sr = rng();
+    if (cls <= 1 && kd !== 2) {
+      if (sr < 0.06) special[i] = 1;
+      else if (sr < 0.09) { special[i] = 2; if (h !== 2 && h !== 3) h = 3; }
+      else if (sr < 0.12) special[i] = 3;
+    } else if (cls === 3 && sr < 0.3) special[i] = 1;
+    hw[i] = h;
+    if (h >= 1 && h <= 5) capIdx[i] = nCap++;
+    if (h === 3 || h === 5) brimIdx[i] = nBrim++;
+    if (h >= 6) { tallIdx[i] = nTall++; if (h === 6) veilIdx[i] = nTall++; }
+    if (cls <= 1 && kd !== 2 && rng() < 0.105) flagIdx[i] = nFlag++;
+    if (cls === 2 && kd === 1) kerchIdx[i] = nKerch++;
+
+    // colours by class
+    const bi = i * 3;
+    if (cls === 0) lin(pick(EARTH), 0.22, bodyCol, bi);
+    else if (cls === 1) lin(rng() < 0.08 ? pick(JEWEL) : pick(MUTED), 0.16, bodyCol, bi);
+    else if (cls === 2) lin(pick(RICH), 0.12, bodyCol, bi);
+    else lin(h === 8 ? '#5a2a82' : pick(HABIT), 0.1, bodyCol, bi);
+    const sl = rng();
+    if (cls >= 2 ? sl < 0.9 : sl < 0.65) { armCol[bi] = bodyCol[bi]; armCol[bi + 1] = bodyCol[bi + 1]; armCol[bi + 2] = bodyCol[bi + 2]; }
+    else if (sl < 0.85) lin(pick(LINEN), 0.1, armCol, bi);
+    else lin(pick(SKIN), 0.1, armCol, bi);
+    lin(pick(SKIN), 0.12, headCol, bi);
+    if (h === 1 || h === 4) lin(pick(LINEN), 0.1, capCol, bi);
+    else if (h === 2) {
+      if (cls === 3) { capCol[bi] = bodyCol[bi]; capCol[bi + 1] = bodyCol[bi + 1]; capCol[bi + 2] = bodyCol[bi + 2]; }
+      else lin(rng() < 0.2 && cls === 1 ? pick(JEWEL) : pick(cls === 0 ? EARTH : MUTED), 0.2, capCol, bi);
+    } else if (h === 3) lin(pick(STRAW), 0.12, capCol, bi);
+    else if (h === 5) lin(pick(JEWEL), 0.15, capCol, bi);
+    else if (h === 6) { lin(pick(RICH), 0.1, capCol, bi); lin(pick(LINEN), 0.08, veilCol, bi); }
+    else if (h === 7) lin(rng() < 0.5 ? '#c9a227' : pick(RICH), 0.1, capCol, bi);
+    else if (h === 8) lin('#e8e0c8', 0.06, capCol, bi);
+    if ((h === 1 || h === 2 || h === 5) && cls !== 3 && rng() < 0.3) capLiv[i] = h === 5 ? 2 : 1;
+    sStand[i] = (cls === 0 || (special[i] === 1 && cls === 1)) ? 1 : 0;
+  }
+
+  // ---- geometry ----
+  // ---- figure geometry (built once; Y of body/arm is normalised so the shoulder line is y = 1) ----
+  const BH = 1.4; // standing shoulder height in metres
+  // merge parts into one non-indexed geometry with a baked per-vertex shade (multiplies the instance colour).
+  // part: { g, f: number | (yMetres) => shade, sz: depth squash }; sy rescales Y (normals corrected).
+  function mergeParts(parts, sy) {
+    const P = [], N = [], C = [];
+    for (const part of parts) {
+      const g = part.g.index ? part.g.toNonIndexed() : part.g;
+      const pa = g.getAttribute('position').array, na = g.getAttribute('normal').array, sz = part.sz || 1;
+      for (let v = 0; v < pa.length; v += 3) {
+        const x = pa[v], y = pa[v + 1], z = pa[v + 2];
+        P.push(x, y * sy, z * sz);
+        let nx = na[v], ny = na[v + 1] / sy, nz = na[v + 2] / sz;
+        const l = Math.hypot(nx, ny, nz) || 1; N.push(nx / l, ny / l, nz / l);
+        const f = typeof part.f === 'function' ? part.f(y) : part.f;
+        C.push(f, f, f);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P), 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(N), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(C), 3));
+    return geo;
+  }
+  const lathe = (pr) => new THREE.LatheGeometry(pr.map((q) => new THREE.Vector2(q[0], q[1])), 8);
+  // tunic to mid-thigh + two legs (men, commons, boys)
+  const tunicShade = (y) => (y > 0.96 && y < 1.04 ? 0.55 : y < 0.68 ? 0.75 : 0.95);
+  const bodyGeo = mergeParts([
+    { g: lathe([[0, 0.62], [0.2, 0.62], [0.19, 0.72], [0.18, 0.85], [0.15, 0.99], [0.17, 1.1], [0.2, 1.25],
+      [0.215, 1.32], [0.17, 1.37], [0.07, 1.4], [0, 1.4]]), f: tunicShade, sz: 0.72 },
+    { g: new THREE.CylinderGeometry(0.07, 0.05, 0.64, 6).translate(-0.085, 0.32, 0), f: 0.62 },
+    { g: new THREE.CylinderGeometry(0.07, 0.05, 0.64, 6).translate(0.085, 0.32, 0), f: 0.62 },
+  ], 1 / BH);
+  // long gown flaring to the ground (women, nobles, clergy habits)
+  const gownGeo = mergeParts([
+    { g: lathe([[0, 0], [0.34, 0], [0.33, 0.1], [0.29, 0.3], [0.23, 0.55], [0.17, 0.85], [0.135, 1.0], [0.17, 1.13],
+      [0.19, 1.27], [0.205, 1.33], [0.16, 1.37], [0.07, 1.4], [0, 1.4]]),
+      f: (y) => (y < 0.14 ? 0.7 : y > 0.97 && y < 1.05 ? 0.6 : 0.95), sz: 0.85 },
+  ], 1 / BH);
+  // head with short neck; darker upper cap reads as hair
+  const headGeo = mergeParts([
+    { g: new THREE.SphereGeometry(1, 8, 6), f: (y) => 1 - 0.68 * sstep(0.0, 0.4, y) },
+    { g: new THREE.CylinderGeometry(0.45, 0.5, 1.3, 6).translate(0, -1.15, 0), f: 0.9 },
+  ], 1);
+  // arm: tapered upper arm + forearm + hand blob, pointing -Y (unit length = shoulder to fingertip)
+  const armGeo = mergeParts([
+    { g: new THREE.CylinderGeometry(0.058, 0.046, 0.5, 6).translate(0, -0.25, 0), f: 1 },
+    { g: new THREE.CylinderGeometry(0.046, 0.034, 0.42, 6).translate(0, -0.71, 0), f: 0.92 },
+    { g: new THREE.SphereGeometry(0.05, 6, 4).scale(1, 1 / 0.66, 1).translate(0, -0.95, 0), f: 1 },
+  ], 1);
+  const capGeo = new THREE.SphereGeometry(1, 8, 4, 0, TWO_PI, 0, HALF_PI);
+  const brimGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false);
+  const tallGeo = new THREE.CylinderGeometry(0.28, 1, 1, 8, 1, false).translate(0, 0.5, 0);
+  const tossGeo = new THREE.SphereGeometry(1, 6, 3, 0, TWO_PI, 0, HALF_PI);
+  const flagAGeo = new THREE.BufferGeometry();
+  flagAGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0.9, 0, 0, 0.75, 0, 0, 0.75, 0.5]), 3));
+  flagAGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([1, 0, 0, 1, 0, 0, 1, 0, 0]), 3));
+  const stick = new THREE.BoxGeometry(0.025, 0.92, 0.025).translate(0, 0.42, 0).toNonIndexed();
+  const sPos = stick.getAttribute('position').array, sNor = stick.getAttribute('normal').array;
+  const bPos = new Float32Array(sPos.length + 9), bNor = new Float32Array(sNor.length + 9);
+  bPos.set(sPos); bPos.set([0, 0.75, 0, 0, 0.6, 0, 0, 0.75, 0.5], sPos.length);
+  bNor.set(sNor); bNor.set([1, 0, 0, 1, 0, 0, 1, 0, 0], sNor.length);
+  const flagBGeo = new THREE.BufferGeometry();
+  flagBGeo.setAttribute('position', new THREE.BufferAttribute(bPos, 3));
+  flagBGeo.setAttribute('normal', new THREE.BufferAttribute(bNor, 3));
+  const kerchGeo = new THREE.BufferGeometry(); // small quad in the YZ plane
+  kerchGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(
+    [0, -0.13, -0.13, 0, 0.13, -0.13, 0, 0.13, 0.13, 0, -0.13, -0.13, 0, 0.13, 0.13, 0, -0.13, 0.13]), 3));
+  kerchGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(
+    [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0]), 3));
+
+  for (const g of [capGeo, brimGeo, tallGeo, tossGeo, flagAGeo, flagBGeo, kerchGeo]) {
+    const cnt = g.getAttribute('position').count;
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cnt * 3).fill(1), 3));
+  }
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.9, envMapIntensity: 0.25, vertexColors: true });
+  const flagMat = new THREE.MeshStandardMaterial({ roughness: 0.9, envMapIntensity: 0.25, side: THREE.DoubleSide, vertexColors: true });
+
+  const POOL = 80, HATS = 40;
+  const mBody = makeMesh(bodyGeo, mat, nM, group, 'crowdBody');
+  const mGown = makeMesh(gownGeo, mat, nG, group, 'crowdGown');
+  const mHead = makeMesh(headGeo, mat, n, group, 'crowdHead');
+  const mCap = makeMesh(capGeo, mat, nCap, group, 'crowdCap');
+  const mBrim = makeMesh(brimGeo, mat, nBrim, group, 'crowdBrim');
+  const mTall = makeMesh(tallGeo, mat, nTall, group, 'crowdTall');
+  const mArmL = makeMesh(armGeo, mat, n, group, 'crowdArmL');
+  const mArmR = makeMesh(armGeo, mat, n, group, 'crowdArmR');
+  const mFlagA = makeMesh(flagAGeo, flagMat, nFlag, group, 'crowdFlagA');
+  const mFlagB = makeMesh(flagBGeo, flagMat, nFlag, group, 'crowdFlagB');
+  const mKerch = makeMesh(kerchGeo, flagMat, nKerch, group, 'crowdKerchief');
+  const mToss = makeMesh(tossGeo, mat, POOL, group, 'crowdToss');
+
+  const cB = mBody.instanceColor.array, cG = mGown.instanceColor.array, cH = mHead.instanceColor.array;
+  const cL = mArmL.instanceColor.array, cR = mArmR.instanceColor.array;
+  const cC = mCap.instanceColor.array, cBr = mBrim.instanceColor.array, cT = mTall.instanceColor.array;
+  const cFA = mFlagA.instanceColor.array, cFB = mFlagB.instanceColor.array;
+  const cK = mKerch.instanceColor.array, cP = mToss.instanceColor.array;
+  for (let i = 0; i < n; i++) {
+    putCol(gown[i] ? cG : cB, bodyIdx[i], bodyCol, i * 3); putCol(cH, i, headCol, i * 3);
+    putCol(cL, i, armCol, i * 3); putCol(cR, i, armCol, i * 3);
+    if (capIdx[i] >= 0) putCol(cC, capIdx[i], capCol, i * 3);
+    if (brimIdx[i] >= 0) putCol(cBr, brimIdx[i], capCol, i * 3);
+    if (tallIdx[i] >= 0) putCol(cT, tallIdx[i], capCol, i * 3);
+    if (veilIdx[i] >= 0) putCol(cT, veilIdx[i], veilCol, i * 3);
+    if (kerchIdx[i] >= 0) { const k = kerchIdx[i] * 3; const v = rng() < 0.7 ? 0.95 : 0.8; cK[k] = v; cK[k + 1] = rng() < 0.7 ? v : 0.55; cK[k + 2] = cK[k + 1]; }
+  }
+
+  // ---- event layer ----
+  const tbl = new Float32Array(4 * 2 * NCH); // [(cls<<1 | supportsDoer) * NCH + channel]
+  const setT = (c, s, ch, v) => { tbl[((c << 1) | s) * NCH + ch] = v; };
+  let lastEvId = null, evOn = false, evT = -1e9, evDur = 3.2, evBy = 0;
+
+  // pooled tossed items: slots [0,HATS) hats, [HATS,POOL) flowers / favours
+  const pX = new Float32Array(POOL), pY = new Float32Array(POOL), pZ = new Float32Array(POOL);
+  const pVX = new Float32Array(POOL), pVY = new Float32Array(POOL), pVZ = new Float32Array(POOL);
+  const pT0 = new Float32Array(POOL), pT1 = new Float32Array(POOL), pRest = new Float32Array(POOL);
+  const pSize = new Float32Array(POOL), pSpin = new Float32Array(POOL);
+  const pState = new Uint8Array(POOL); // 0 idle, 1 pending/flying, 2 resting (flowers)
+  let hatCur = 0, flowCur = 0, poolWas = false, poolColDirty = false;
+  const mP = mToss.instanceMatrix.array;
+  for (let j = 0; j < POOL; j++) wm(mP, j * 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  function buildTable(k) {
+    tbl.fill(0);
+    switch (k) {
+      case 'break':
+        setT(0, 1, CH_CHEER, 0.9); setT(0, 1, CH_FIST, 0.7); setT(0, 1, CH_STAND, 1); setT(0, 0, CH_DIS, 0.35);
+        setT(1, 1, CH_CHEER, 0.7); setT(1, 1, CH_STAND, 0.8); setT(1, 0, CH_DIS, 0.25);
+        setT(2, 1, CH_POLITE, 0.9); setT(2, 0, CH_POLITE, 0.6); setT(3, 1, CH_POLITE, 0.4); break;
+      case 'helm':
+        setT(0, 1, CH_CHEER, 1); setT(0, 1, CH_FIST, 0.8); setT(0, 1, CH_STAND, 1); setT(0, 0, CH_DIS, 0.4);
+        setT(1, 1, CH_CHEER, 0.8); setT(1, 1, CH_STAND, 1); setT(1, 0, CH_DIS, 0.3);
+        setT(2, 1, CH_STAND, 1); setT(2, 0, CH_STAND, 1); setT(2, 1, CH_POLITE, 1); setT(2, 0, CH_POLITE, 0.8);
+        setT(2, 1, CH_KERCH, 0.9); setT(2, 0, CH_KERCH, 0.5); break;
+      case 'unhorse':
+        setT(0, 1, CH_CHEER, 1); setT(0, 1, CH_FIST, 0.6); setT(0, 1, CH_STAND, 1); setT(0, 1, CH_WILD, 1);
+        setT(0, 0, CH_DIS, 0.8); setT(0, 0, CH_WILD, 1);
+        setT(1, 1, CH_CHEER, 0.9); setT(1, 1, CH_STAND, 1); setT(1, 0, CH_DIS, 0.5);
+        setT(2, 1, CH_STAND, 1); setT(2, 0, CH_STAND, 1); setT(2, 1, CH_POLITE, 1); setT(2, 0, CH_POLITE, 0.8);
+        setT(2, 1, CH_KERCH, 0.9); setT(2, 0, CH_KERCH, 0.7);
+        setT(3, 0, CH_CROSS, 1); setT(3, 1, CH_CROSS, 1); break;
+      case 'attaint':
+        setT(0, 1, CH_CHEER, 0.6); setT(0, 1, CH_FIST, 0.4); setT(0, 0, CH_DIS, 0.3); setT(0, 1, CH_STAND, 1);
+        setT(1, 1, CH_CHEER, 0.5); setT(1, 0, CH_DIS, 0.15);
+        setT(2, 0, CH_POLITE, 1); setT(2, 1, CH_POLITE, 1); break;
+      case 'miss':
+        setT(0, 0, CH_JEER, 1); setT(0, 1, CH_DIS, 0.5); setT(1, 0, CH_JEER, 0.4); setT(1, 1, CH_DIS, 0.3); break;
+      case 'foul':
+        setT(0, 0, CH_ANGRY, 1); setT(0, 1, CH_ANGRY, 0.5); setT(0, 0, CH_JEER, 0.4);
+        setT(1, 0, CH_ANGRY, 0.5); setT(1, 1, CH_ANGRY, 0.25);
+        setT(2, 0, CH_RECOIL, 1); setT(2, 1, CH_RECOIL, 1);
+        setT(3, 0, CH_SHAKE, 1); setT(3, 1, CH_SHAKE, 1); break;
+      case 'salute':
+        setT(0, 1, CH_CHEER, 0.5); setT(1, 1, CH_CHEER, 0.3);
+        setT(2, 0, CH_KERCH, 1); setT(2, 1, CH_KERCH, 1); setT(2, 0, CH_BOW, 1); setT(2, 1, CH_BOW, 1); break;
+      case 'win':
+        setT(0, 1, CH_CHEER, 1); setT(0, 1, CH_FIST, 1); setT(0, 1, CH_STAND, 1); setT(0, 0, CH_DIS, 0.8);
+        setT(1, 1, CH_CHEER, 0.9); setT(1, 1, CH_STAND, 1); setT(1, 0, CH_DIS, 0.5);
+        setT(2, 1, CH_STAND, 1); setT(2, 0, CH_STAND, 1); setT(2, 1, CH_POLITE, 1); setT(2, 0, CH_POLITE, 0.8);
+        setT(2, 1, CH_KERCH, 1); setT(2, 0, CH_KERCH, 1);
+        setT(3, 1, CH_POLITE, 0.6); setT(3, 0, CH_POLITE, 0.6); break;
+      default: // 'start'
+        setT(0, 1, CH_CHEER, 0.4); setT(0, 0, CH_CHEER, 0.4); setT(0, 1, CH_STAND, 1); setT(0, 0, CH_STAND, 1);
+        setT(1, 1, CH_POLITE, 0.5); setT(1, 0, CH_POLITE, 0.5); setT(2, 1, CH_POLITE, 0.6); setT(2, 0, CH_POLITE, 0.6);
+        setT(3, 0, CH_BLESS, 1); setT(3, 1, CH_BLESS, 1); break;
+    }
+  }
+
+  function spawnHat(i, launchT) {
+    const j = hatCur; hatCur = (hatCur + 1) % HATS;
+    const vy = 6.5 + rng() * 3;
+    pX[j] = px[i]; pY[j] = py[i] + 1.55 * hg[i]; pZ[j] = pz[i];
+    pVX[j] = (rng() - 0.5) * 2.4; pVY[j] = vy; pVZ[j] = (rng() - 0.5) * 2.4;
+    pT0[j] = launchT; pT1[j] = launchT + 2 * vy / 9.8;
+    pSize[j] = 0.15; pSpin[j] = (rng() - 0.5) * 18; pState[j] = 1;
+    const ci = capIdx[i] * 3; cP[j * 3] = cC[ci]; cP[j * 3 + 1] = cC[ci + 1]; cP[j * 3 + 2] = cC[ci + 2];
+    capGone[i] = launchT; capBack[i] = pT1[j];
+    poolColDirty = true;
+  }
+  function spawnFlower(i, launchT) {
+    const j = HATS + flowCur; flowCur = (flowCur + 1) % (POOL - HATS);
+    const vy = 4.5 + rng() * 2.5, y0 = py[i] + 1.5 * hg[i], rest = 0.07;
+    const T = (vy + Math.sqrt(vy * vy + 19.6 * (y0 - rest))) / 9.8, d = 6 + rng() * 4;
+    pX[j] = px[i]; pY[j] = y0; pZ[j] = pz[i];
+    pVX[j] = -side[i] * d / T; pVY[j] = vy; pVZ[j] = (rng() - 0.5) * 3;
+    pT0[j] = launchT; pT1[j] = launchT + T; pRest[j] = rest;
+    pSize[j] = 0.05 + rng() * 0.02; pSpin[j] = (rng() - 0.5) * 12; pState[j] = 1;
+    _c.set(pick(FLOWERS)); cP[j * 3] = _c.r; cP[j * 3 + 1] = _c.g; cP[j * 3 + 2] = _c.b;
+    poolColDirty = true;
+  }
+
+  function fireEvent(k, by, t) {
+    if (k === 'loss') { k = 'win'; by = -by; } // `by` lost: the other side's supporters celebrate
+    buildTable(k);
+    evBy = by; evT = t; evOn = true;
+    evDur = (k === 'unhorse' || k === 'win') ? 4.0 : k === 'salute' ? 3.0 : 3.2;
+    // hat / flower tossing
+    const hatP = k === 'unhorse' ? 0.5 : k === 'win' ? 0.5 : (k === 'break' || k === 'helm') ? 0.12 : 0;
+    const flow = k === 'win' || k === 'helm' || k === 'unhorse' ? (k === 'win' ? 0.9 : 0.25) : 0;
+    let hats = 0, flowers = 0;
+    for (let i = 0; i < n; i++) {
+      const cls = clsA[i];
+      if (cls === 0 && hatP > 0 && capIdx[i] >= 0 && hats < HATS) {
+        const sup = by === 0 || al[i] === by;
+        if (rng() < (sup ? hatP : hatP * 0.4)) { spawnHat(i, t + dly[i] + 0.2 + rng() * 0.3); hats++; }
+      } else if (cls === 2 && kind[i] === 1 && flow > 0 && flowers < POOL - HATS) {
+        if (rng() < flow) { spawnFlower(i, t + dly[i] + 0.4 + rng() * 0.6); flowers++; }
+      }
+    }
+  }
+
+  // ---- per-frame state ----
+  let focus = 0, focusInit = false, upLvl = 0;
+  const RISE0 = [0, 0.1, 0.5, 0.55], RISEMAX = [1, 1, 0.6, 0.45];   // by class: when the stand begins to rise, and how far
+  const mB = mBody.instanceMatrix.array, mG = mGown.instanceMatrix.array, mH = mHead.instanceMatrix.array;
+  const mL = mArmL.instanceMatrix.array, mR = mArmR.instanceMatrix.array;
+  const mC = mCap.instanceMatrix.array, mBr = mBrim.instanceMatrix.array, mT = mTall.instanceMatrix.array;
+  const mFA = mFlagA.instanceMatrix.array, mFB = mFlagB.instanceMatrix.array, mK = mKerch.instanceMatrix.array;
+  const RATE = [1.4, 1.0, 0.7, 0.5];   // reaction speed by class
+  const JUMP = [1.0, 0.7, 0.12, 0.04]; // jump amplitude by class
+  const SWAY = [1.0, 1.0, 0.4, 0.3];   // idle sway amplitude by class
+
+  // One figure in the spotlight (the "catch a lady's eye" scene in main.js): spot = { i, kin, kind: 'smile' | 'laugh' | 'glare', t0 }.
+  let spot = null;
+  /** Gentry ladies on one side near z, nearest first: [{ i, x, y, z, kin }] where kin is a gentleman seated close by (or -1). */
+  function ladies(sideSign, z, max = 12) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      if (clsA[i] !== 2 || kind[i] !== 1 || side[i] !== sideSign) continue;
+      let kin = -1, kd = 99;
+      for (let j = 0; j < n; j++) { if (j === i || clsA[j] !== 2 || kind[j] !== 0 || side[j] !== sideSign) continue; const d = Math.abs(pz[j] - pz[i]) + Math.abs(py[j] - py[i]) * 2; if (d < kd && d < 2.5) { kd = d; kin = j; } }
+      out.push({ i, x: px[i], y: py[i], z: pz[i], kin, kx: kin >= 0 ? px[kin] : 0, ky: kin >= 0 ? py[kin] : 0, kz: kin >= 0 ? pz[kin] : 0, d: Math.abs(pz[i] - z) });
+    }
+    return out.sort((a, b) => a.d - b.d).slice(0, max);
+  }
+  /** Start (or, with i < 0, end) the scene: her reaction, and her kinsman's if he is given. */
+  function spotlight(i, kin, how) { spot = i < 0 ? null : { i, kin, kind: how, t0: null }; }
+
+  function update(t, dt, s) {
+    const ex = s.excitement, ant = s.anticipation, scorer = s.scorer | 0;
+    const favC = s.favourCommons !== undefined ? s.favourCommons : s.favour;
+    const favK = s.favourCourt !== undefined ? s.favourCourt : s.favour;
+    const dtc = dt > 0.1 ? 0.1 : dt < 0 ? 0 : dt;
+    if (!focusInit) { focus = s.focusZ; focusInit = true; }
+    focus += (s.focusZ - focus) * (1 - Math.exp(-5 * dtc));
+
+    // event edge detection
+    const ev = s.event;
+    if (ev && ev.id !== undefined && ev.id !== null) {
+      if (lastEvId === null) { lastEvId = ev.id; if (ev.id !== 0) fireEvent(ev.kind, ev.by | 0, t); }
+      else if (ev.id !== lastEvId) { lastEvId = ev.id; fireEvent(ev.kind, ev.by | 0, t); }
+    }
+    if (evOn && t - evT > evDur + 1.5) evOn = false;
+
+    const hush = clamp01((ant - 0.5) * 2) * (1 - clamp01((ex - 0.55) * 3));
+    const calm = 1 - hush * 0.85;
+    const kC = 1 - Math.exp(-7 * dtc), kD = 1 - Math.exp(-4.5 * dtc), kK = 1 - Math.exp(-5 * dtc);
+    const kS = 1 - Math.exp(-3.5 * dtc), kL = 1 - Math.exp(-3 * dtc), rSit = 1 - Math.exp(-0.55 * dtc);   // sitting down takes 3-6 s
+    upLvl = ant > upLvl ? ant : Math.max(ant, upLvl - 0.2 * dtc);      // how far the stands have risen: follows the closing riders up, falls 0.2/s after
+    const wt = t - s.waveStart, zf = -36 + wt * 28;
+    const waveOn = wt > -1 && wt < 72 / 28 + 2;
+    const chantOn = Math.abs(favC) > 0.5 ? sstep(0.5, 0.8, Math.abs(favC)) * (1 - hush) : 0;
+    const chantSign = favC > 0 ? 1 : -1;
+    let colDirty = false;
+
+    for (let i = 0; i < n; i++) {
+      const kn = keen[i], phi = ph[i], hgi = hg[i], spc = special[i], cls = clsA[i], kd = kind[i];
+      const lady = cls === 2 && kd === 1;
+      const a = thr[i] < (cls === 2 ? favK : favC) ? 1 : -1;
+
+      // ---- allegiance change -> recolour livery props ----
+      if (a !== al[i]) {
+        al[i] = a;
+        const o1 = a > 0 ? 0 : 6;
+        if (flagIdx[i] >= 0) { putCol(cFA, flagIdx[i], livery, o1); putCol(cFB, flagIdx[i], livery, o1 + 3); colDirty = true; }
+        const cl = capLiv[i];
+        if (cl) {
+          const o = o1 + (cl === 2 ? 3 : 0);
+          putCol(cC, capIdx[i], livery, o);
+          if (brimIdx[i] >= 0) putCol(cBr, brimIdx[i], livery, o);
+          colDirty = true;
+        }
+      }
+
+      // ---- wave (commons and burghers join in) ----
+      let wv = 0;
+      if (waveOn && cls < 2) {
+        const u = (zf - pz[i]) / 28;
+        if (u > 0 && u < 1.5) wv = sstep(0, 0.22, u) * (1 - sstep(0.85, 1.4, u));
+      }
+
+      // ---- event layer: envelope x class/supporter reaction table ----
+      let eCheer = 0, eDis = 0, eFist = 0, eJeer = 0, eAngry = 0, ePol = 0, eKer = 0, eBow = 0, eBless = 0,
+        eCross = 0, eRec = 0, eStand = 0, eShake = 0, eWild = 0;
+      if (evOn) {
+        const tt = t - evT - dly[i];
+        if (tt > 0 && tt < evDur) {
+          const env = sstep(0, 0.3, tt) * (1 - sstep(evDur - 1.3, evDur, tt));
+          const tb = ((cls << 1) | ((evBy === 0 || a === evBy) ? 1 : 0)) * NCH;
+          eCheer = tbl[tb] * env; eDis = tbl[tb + 1] * env; eFist = tbl[tb + 2] * env; eJeer = tbl[tb + 3] * env;
+          eAngry = tbl[tb + 4] * env; ePol = tbl[tb + 5] * env;
+          if (lady) eKer = tbl[tb + 6] * env;
+          if (cls === 2 && !lady) eBow = tbl[tb + 7] * Math.sin(PI * clamp01(tt / 2.4));
+          eBless = tbl[tb + 8] * env; eCross = tbl[tb + 9] * env; eRec = tbl[tb + 10] * env;
+          eStand = tbl[tb + 11] * env; eShake = tbl[tb + 13] * env;
+          const wl = tbl[tb + 12];
+          if (wl > 0) { // commons go wild for the first second regardless of side
+            const wf = 1 - sstep(1.0, 1.7, tt);
+            eWild = wl * wf * env;
+            if (eWild > eCheer) eCheer = eWild;
+            eDis *= (1 - wf);
+          }
+          if (cls === 3 && kn < 0.5) ePol = 0; // only a couple of clergy clap
+        }
+      }
+
+      // ---- the spotlight: the lady smiles (stands, waves her kerchief), laughs (claps behind her hand), or her kinsman rises and glares ----
+      if (spot && (i === spot.i || i === spot.kin)) {
+        if (spot.t0 === null) spot.t0 = t;
+        const tt = t - spot.t0, env = sstep(0, 0.5, tt) * (1 - sstep(3.2, 4.2, tt));
+        if (i === spot.i) {
+          if (spot.kind === 'smile') { eStand = Math.max(eStand, env); eKer = Math.max(eKer, env); eCheer = Math.max(eCheer, 0.5 * env); }
+          else if (spot.kind === 'laugh') { ePol = Math.max(ePol, 0.7 * env); eKer = Math.max(eKer, 0.6 * env); }
+          else if (spot.kind === 'gasp') eRec = Math.max(eRec, env);      // a hand to the mouth (the reaction montage, main.js)
+          else if (spot.kind === 'clap') { ePol = Math.max(ePol, env); eStand = Math.max(eStand, 0.7 * env); eCheer = Math.max(eCheer, 0.3 * env); }      // up on her feet, clapping
+        } else if (spot.kind === 'glare') { eStand = Math.max(eStand, env); eAngry = Math.max(eAngry, env); eFist = Math.max(eFist, env); }
+      }
+
+      // ---- continuous layer targets ----
+      const gate = scorer === 0 || scorer === a;
+      let cheerT = gate ? sstep(0.42, 0.78, ex * RATE[cls] * (0.65 + 0.5 * kn)) * (1 - hush) : 0;
+      let disT = (scorer !== 0 && scorer !== a) ? sstep(0.4, 0.75, ex * (0.6 + 0.5 * kn)) : 0;
+      let clapT = sstep(0.28, 0.42, ex) * (1 - sstep(0.55, 0.75, ex)) * (kn > 0.25 ? 1 : 0.35) * (1 - hush);
+      if (cls === 2) { if (cheerT * 0.8 > clapT) clapT = cheerT * 0.8; cheerT = 0; disT *= 0.4; }
+      else if (cls === 3) { cheerT = 0; clapT = 0; disT = 0; }
+      // commons stomp-clap chant for the favoured knight
+      let chant = 0;
+      if (cls === 0 && chantOn > 0 && a === chantSign) { chant = chantOn; if (chant * 0.8 > clapT) clapT = chant * 0.8; }
+      // the stands sit by default (ground-level commons stand). As the riders close they rise in a ripple, those nearest the action and the keen first;
+      // nobles and clergy rise later and only part-way. They stay up while upLvl falls away after the strike, then sit down slowly (see rSit below).
+      let standT = 1;
+      if (cls > 0) {
+        const riseAt = RISE0[cls] + 0.3 * (1.15 - kn) * (phi / TWO_PI) + 0.12 * clamp01(Math.abs(pz[i] - focus) / 35);
+        standT = sstep(riseAt, riseAt + 0.12, upLvl) * RISEMAX[cls];
+        if (cls < 2) { const sx = sstep(0.45, 0.75, ex * (0.5 + kn)); if (sx > standT) standT = sx; }
+        if (spc === 1 && cls === 1) standT = 1;
+      }
+      if (cheerT > standT) standT = cheerT;
+      if (wv > standT) standT = wv;
+      if (eStand > standT) standT = eStand;
+      if (eCheer > standT) standT = eCheer;
+      const leanT = ant * (0.35 + 0.65 * kn);
+
+      const vv = (0.75 + 0.5 * kn) * RATE[cls];
+      let k;
+      k = kC * vv; if (k > 1) k = 1; sCheer[i] += (cheerT - sCheer[i]) * k;
+      k = kD * vv; if (k > 1) k = 1; sDis[i] += (disT - sDis[i]) * k;
+      k = kK * vv; if (k > 1) k = 1; sClap[i] += (clapT - sClap[i]) * k;
+      k = standT < sStand[i] ? rSit * (0.7 + 0.6 * kn) : kS * vv; if (k > 1) k = 1; sStand[i] += (standT - sStand[i]) * k;
+      k = kL * vv; if (k > 1) k = 1; sLean[i] += (leanT - sLean[i]) * k;
+      const cheer = sCheer[i] > eCheer ? sCheer[i] : eCheer;
+      const dis = sDis[i] > eDis ? sDis[i] : eDis;
+      const clap = sClap[i] > ePol ? sClap[i] : ePol;
+      const standW = sStand[i] > wv ? sStand[i] : wv;
+      const lean = sLean[i];
+      const wCheer = cheer > wv ? cheer : wv;
+      const sway = SWAY[cls];
+
+      // ---- idle chatter / whispers ----
+      const chat = sstep(0.1, 0.5, Math.sin(t * 0.43 + phi * 3.1) * Math.sin(t * 0.17 + phi * 7.3) + 0.25) *
+        calm * (1 - wCheer) * (1 - dis) * (cls === 3 ? 0.3 : 1);
+      let whisp = 0;
+      if (cls === 2) whisp = sstep(0.55, 0.85, Math.sin(t * 0.31 + phi * 2.3) * Math.sin(t * 0.13 + phi * 5) + 0.45) * calm * (1 - eStand) * (1 - eRec);
+      const par = (i & 1) ? 1 : -1;
+
+      // ---- body transform ----
+      const Hfull = 1.4 * hgi;
+      const bodyH = Hfull * (0.62 + 0.38 * standW) * (1 - 0.07 * dis);
+      let yOff = 0;
+      const jc = (sCheer[i] > eCheer ? sCheer[i] : eCheer) * JUMP[cls];
+      if (jc > 0.02) yOff = jc * standW * Math.abs(Math.sin(t * (6.5 + 2.5 * kn) + phi)) * 0.2 * (0.55 + 0.45 * kn) * hgi;
+      if (clap > 0.02 && cls < 2) yOff += clap * 0.012 * Math.sin(t * 15 + phi);
+      if (chant > 0.02) yOff += chant * 0.045 * Math.abs(Math.sin(t * 3.5));
+
+      const upr = cls === 2 ? 0.5 : 1;
+      let pitch = (cls > 0 ? 0.05 * (1 - standW) : 0) + 0.2 * lean * calm * upr + 0.36 * lean * hush * upr - 0.12 * cheer + 0.3 * dis +
+        0.02 * chat * Math.sin(t * 5 + phi) + 0.4 * eAngry + 0.12 * eJeer + 0.5 * eBow - 0.25 * eRec - 0.2 * eCross +
+        0.12 * eBless * 0;
+      let roll = Math.sin(t * 0.9 + phi * 1.3) * 0.035 * calm * (1 - cheer) * sway + Math.sin(t * (3 + kn) + phi) * 0.08 * cheer +
+        Math.sin(t * 14 + phi) * 0.11 * eJeer + Math.sin(t * 8 + phi) * 0.08 * eAngry + Math.sin(t * 3.2 + phi) * 0.09 * eShake +
+        Math.sin(t * 5 + phi * 0.2) * 0.2 * eWild + whisp * 0.1 * par;
+      if (cls === 0) roll += Math.sin(t * 1.9 + phi) * 0.035 * (1 - cheer); // restless shuffling
+      const shiftX = Math.sin(t * 5 + phi * 0.2) * 0.14 * eWild + (cls === 0 ? Math.sin(t * 1.3 + phi * 2) * 0.03 : 0);
+
+      const zAim = focus + jz[i];
+      const base = hasYaw[i] ? yb[i] : -side[i] * HALF_PI;
+      let dth = Math.atan2(-px[i], zAim - pz[i]) - base;
+      if (dth > PI) dth -= TWO_PI; else if (dth < -PI) dth += TWO_PI;
+      let yaw = base + dth * (0.4 + 0.25 * lean) + eRec * 0.9 * par + whisp * 0.7 * par;
+      if (cls === 3) yaw = base + dth * 0.2 + eShake * Math.sin(t * 3.2 + phi) * 0.25;
+
+      const cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const mx0 = cr, mx1 = sr * cp, mx2 = sr * sp;
+      const my0 = -sr, my1 = cr * cp, my2 = cr * sp;
+      const mz1 = -sp, mz2 = cp;
+      r0 = mx0 * cy + mx2 * sy; r1 = mx1; r2 = -mx0 * sy + mx2 * cy;
+      r3 = my0 * cy + my2 * sy; r4 = my1; r5 = -my0 * sy + my2 * cy;
+      r6 = mz2 * sy; r7 = mz1; r8 = mz2 * cy;
+
+      let bx = px[i], by = py[i] + yOff, bz = pz[i];
+      if (shiftX !== 0) { xf(shiftX, 0, 0); bx += ox; bz += oz; }
+      const sw = hgi * bw[i];
+      const o = i * 16;
+      wm(gown[i] ? mG : mB, bodyIdx[i] * 16, r0 * sw, r1 * sw, r2 * sw, r3 * bodyH, r4 * bodyH, r5 * bodyH, r6 * sw, r7 * sw, r8 * sw, bx, by, bz);
+
+      // ---- head ----
+      const hr = 0.105 * hgi * (kd === 2 ? 1.3 : 1);
+      xf(0, bodyH + hr * 1.05 + 0.012 * chat * Math.sin(t * 11 + phi), 0.035 * lean);
+      const hx = bx + ox, hY = by + oy, hZ = bz + oz;
+      wm(mH, o, hr, 0, 0, 0, hr * 1.12, 0, 0, 0, hr, hx, hY, hZ);
+
+      // ---- arms ----
+      const sh = bodyH - 0.07 * hgi;
+      const armL = 0.66 * hgi;
+      const isFlag = flagIdx[i] >= 0;
+      let handX = 0, handY = 0, handZ = 0;
+      const cf = chant > 0.3 ? 7.0 : 12 + kn * 3;
+      const phC = chant > 0.3 ? phi * 0.1 : phi;
+      const cc = 0.5 + 0.5 * Math.sin(t * cf + phC);
+      const cAmp = cls === 2 ? 0.4 : 1;
+      for (let arm = 0; arm < 2; arm++) {
+        const sx = arm === 0 ? -1 : 1;
+        rem_ = 1; ax_ = 0; ay_ = 0; az_ = 0;
+        if (wCheer > 0.001) {
+          const pump = Math.sin(t * (7 + 2 * kn) + phi + arm * 2.1);
+          addDir(wCheer, sx * (0.3 + 0.25 * pump * cheer + 0.1 * Math.sin(t * 4 + phi) * wv), 0.92, 0.12 + 0.12 * pump * cheer);
+        }
+        if (dis > 0.001) {
+          if (dv[i] === 0) addDir(dis, sx * 0.22, 0.6, 0.55);
+          else addDir(dis, sx * 0.65 + sx * 0.04 * Math.sin(t * 9 + phi), -0.75, -0.1);
+        }
+        if (eFist > 0.001) { const pm = 0.5 + 0.5 * Math.sin(t * 9 + phi + arm * PI); addDir(eFist, sx * 0.25, 0.4 + 0.5 * pm, 0.7); }
+        if (eJeer > 0.001) addDir(eJeer, sx * 0.25, 0.1 + 0.3 * Math.sin(t * 10 + phi + arm * 2), 0.95);
+        if (eAngry > 0.001) addDir(eAngry, sx * 0.2, 0.15 + 0.35 * Math.sin(t * 8 + arm * PI + phi), 0.9);
+        if (eKer > 0.001) {
+          if (arm === 1) addDir(eKer, 0.2 + 0.3 * Math.sin(t * 6 + phi), 0.85, 0.2);
+          else addDir(eKer * 0.3, sx * 0.3, 0.1, 0.5);
+        }
+        if (eBless > 0.001) { if (arm === 1) addDir(eBless, 0.35, 0.6, 0.7); else addDir(eBless, -0.15, -0.5, 0.85); }
+        if (eCross > 0.001) addDir(eCross, -sx * 0.15, -0.4 + 0.5 * eCross, 0.85);
+        if (eRec > 0.001) addDir(eRec, sx * 0.1, 0.55, 0.8);
+        if (clap > 0.001) addDir(clap, sx * (0.04 + 0.22 * cc * cAmp), cls === 2 ? -0.3 : -0.4, 0.9);
+        // idle (sway, craning, occasional gesture; flag holders hold the pennant up)
+        let ix = sx * 0.14 + Math.sin(t * 0.8 + phi + arm * 1.7) * 0.05 * calm * sway;
+        let iy = -1, iz = 0.04 + lean * 0.7;
+        if (arm === (phi > 3.14 ? 0 : 1)) {
+          const g = chat * (0.7 + 0.3 * Math.sin(t * 6 + phi));
+          ix += (sx * 0.35 - ix) * g; iy += (-0.15 - iy) * g; iz += (0.85 - iz) * g;
+        }
+        if (isFlag && arm === 1) { ix = 0.12; iy = 0.5 + 0.25 * Math.sin(t * 1.3 + phi); iz = 0.6; }
+        addDir(rem_, ix, iy, iz);
+        let vx = ax_, vy = ay_, vz = az_;
+        if (spc === 3 && arm === 1) { // air-puncher
+          const wP = sstep(0.2, 0.6, ex) * standW * (1 - wCheer);
+          const pm = Math.sin(t * 5 + phi); const up = pm > 0 ? pm : 0;
+          vx += (0.15 - vx) * wP; vy += (0.35 + 0.65 * up - vy) * wP; vz += (0.5 - vz) * wP;
+        }
+        const vl = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1;
+        vx /= vl; vy /= vl; vz /= vl;
+
+        xf(sx * 0.2 * sw, sh, 0);
+        const shx = bx + ox, shy = by + oy, shz = bz + oz;
+        xf(vx, vy, vz);
+        const wdx = ox, wdy = oy, wdz = oz;
+        const y0 = -wdx, y1 = -wdy, y2 = -wdz; // arm geometry points along local -Y
+        let x0, x1, x2;
+        if (y2 > 0.9 || y2 < -0.9) { x0 = 0; x1 = y2; x2 = -y1; } else { x0 = y1; x1 = -y0; x2 = 0; }
+        const xl = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2) || 1;
+        x0 /= xl; x1 /= xl; x2 /= xl;
+        const z0 = x1 * y2 - x2 * y1, z1 = x2 * y0 - x0 * y2, z2 = x0 * y1 - x1 * y0;
+        wm(arm === 0 ? mL : mR, o, x0 * hgi, x1 * hgi, x2 * hgi, y0 * armL, y1 * armL, y2 * armL, z0 * hgi, z1 * hgi, z2 * hgi, shx, shy, shz);
+        handX = shx + wdx * armL * 0.95; handY = shy + wdy * armL * 0.95; handZ = shz + wdz * armL * 0.95;
+      }
+
+      // ---- headwear ----
+      const type = hw[i];
+      const ci = capIdx[i];
+      if (ci >= 0) {
+        if (t >= capGone[i] && t < capBack[i]) { // hat is in the air
+          wm(mC, ci * 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+          if (brimIdx[i] >= 0) wm(mBr, brimIdx[i] * 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        } else {
+          let cx = hx, cyy = hY, cz = hZ;
+          if (spc === 2) { cx += (handX - cx) * wCheer; cyy += (handY + 0.14 - cyy) * wCheer; cz += (handZ - cz) * wCheer; }
+          let sxz, sY, oY;
+          if (type === 1) { sxz = hr * 1.08; sY = hr; oY = hr * 0.05; }
+          else if (type === 2) { sxz = hr * 1.2; sY = hr * 1.25; oY = -hr * 0.1; }
+          else if (type === 3) { sxz = hr * 0.95; sY = hr * 0.7; oY = hr * 0.45; }
+          else if (type === 4) { sxz = hr * 1.15; sY = hr * 1.7; oY = -hr * 0.55; }
+          else { sxz = hr * 1.1; sY = hr * 0.8; oY = hr * 0.4; }
+          wm(mC, ci * 16, sxz, 0, 0, 0, sY, 0, 0, 0, sxz, cx, cyy + oY, cz);
+          const bi = brimIdx[i];
+          if (bi >= 0) {
+            const bs = type === 3 ? hr * 2.1 : hr * 1.5;
+            wm(mBr, bi * 16, bs, 0, 0, 0, hr * 0.05, 0, 0, 0, bs, cx, cyy + (type === 3 ? hr * 0.4 : hr * 0.35), cz);
+          }
+        }
+      }
+      const ti = tallIdx[i];
+      if (ti >= 0) {
+        if (type === 6) { // steeple hennin + trailing veil
+          wm(mT, ti * 16, hr * 0.9, 0, 0, 0, hr * 3.0, 0, 0, 0, hr * 0.9, hx, hY + hr * 0.3, hZ);
+          xf(0, bodyH * 0.98, -hr * 1.0);
+          const vh = hY + hr * 3.3 - (by + oy);
+          wm(mT, veilIdx[i] * 16, hr * 1.1, 0, 0, 0, vh, 0, 0, 0, hr * 1.1, bx + ox, by + oy, bz + oz);
+        } else if (type === 7) wm(mT, ti * 16, hr * 1.0, 0, 0, 0, hr * 1.15, 0, 0, 0, hr * 1.0, hx, hY + hr * 0.35, hZ);
+        else wm(mT, ti * 16, hr * 1.0, 0, 0, 0, hr * 1.7, 0, 0, 0, hr * 1.0, hx, hY + hr * 0.3, hZ); // mitre
+      }
+
+      // ---- pennant flag (right hand) ----
+      const fi = flagIdx[i];
+      if (fi >= 0) {
+        const f = 2.5 + 7 * wCheer;
+        const tilt = 0.12 + (0.08 + 0.25 * wCheer) * Math.sin(t * f + phi) + 1.0 * dis;
+        const fy = yaw + Math.sin(t * f * 1.3 + phi * 2) * (0.35 + 0.5 * wCheer);
+        const ct = Math.cos(tilt), st = Math.sin(tilt), c2 = Math.cos(fy), s2 = Math.sin(fy);
+        const fs = 0.9 + 0.1 * hgi;
+        wm(mFA, fi * 16, ct * c2 * fs, st * fs, -ct * s2 * fs, -st * c2 * fs, ct * fs, st * s2 * fs, s2 * fs, 0, c2 * fs, handX, handY - 0.14, handZ);
+        wm(mFB, fi * 16, ct * c2 * fs, st * fs, -ct * s2 * fs, -st * c2 * fs, ct * fs, st * s2 * fs, s2 * fs, 0, c2 * fs, handX, handY - 0.14, handZ);
+      }
+
+      // ---- ladies' kerchief ----
+      const ki = kerchIdx[i];
+      if (ki >= 0) {
+        if (eKer > 0.03) {
+          const fa = t * 11 + phi, ks = eKer;
+          wm(mK, ki * 16, Math.cos(fa) * ks, 0, -Math.sin(fa) * ks, 0, ks, 0, Math.sin(fa) * ks, 0, Math.cos(fa) * ks, handX, handY + 0.06, handZ);
+        } else wm(mK, ki * 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      }
+    }
+
+    // ---- tossed items (ballistic hats, flowers lying where they land) ----
+    let anyPool = false;
+    for (let j = 0; j < POOL; j++) {
+      const st = pState[j];
+      if (st === 0) continue;
+      anyPool = true;
+      const po = j * 16;
+      let tt = t - pT0[j];
+      if (tt < 0) { wm(mP, po, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); continue; }
+      if (st === 1) {
+        if (t >= pT1[j]) {
+          if (j < HATS) { pState[j] = 0; wm(mP, po, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); continue; }
+          pState[j] = 2;
+        } else {
+          const sz = pSize[j], a2 = pSpin[j] * tt, c = Math.cos(a2) * sz, s2 = Math.sin(a2) * sz;
+          wm(mP, po, sz, 0, 0, 0, c, s2, 0, -s2, c, pX[j] + pVX[j] * tt, pY[j] + pVY[j] * tt - 4.9 * tt * tt, pZ[j] + pVZ[j] * tt);
+          continue;
+        }
+      }
+      const T = pT1[j] - pT0[j], age = t - pT1[j];
+      if (age > 4.6) { pState[j] = 0; wm(mP, po, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); continue; }
+      const sz = pSize[j] * (age > 4 ? 1 - (age - 4) / 0.6 : 1);
+      wm(mP, po, sz, 0, 0, 0, sz, 0, 0, 0, sz, pX[j] + pVX[j] * T, pRest[j], pZ[j] + pVZ[j] * T);
+    }
+
+    mBody.instanceMatrix.needsUpdate = true; mGown.instanceMatrix.needsUpdate = true; mHead.instanceMatrix.needsUpdate = true;
+    mArmL.instanceMatrix.needsUpdate = true; mArmR.instanceMatrix.needsUpdate = true;
+    mCap.instanceMatrix.needsUpdate = true; mBrim.instanceMatrix.needsUpdate = true;
+    mTall.instanceMatrix.needsUpdate = true; mKerch.instanceMatrix.needsUpdate = true;
+    mFlagA.instanceMatrix.needsUpdate = true; mFlagB.instanceMatrix.needsUpdate = true;
+    if (anyPool || poolWas) mToss.instanceMatrix.needsUpdate = true;
+    poolWas = anyPool;
+    if (poolColDirty) { mToss.instanceColor.needsUpdate = true; poolColDirty = false; }
+    if (colDirty) {
+      mFlagA.instanceColor.needsUpdate = true; mFlagB.instanceColor.needsUpdate = true;
+      mCap.instanceColor.needsUpdate = true; mBrim.instanceColor.needsUpdate = true;
+    }
+  }
+
+  const all = [mBody, mGown, mHead, mArmL, mArmR, mCap, mBrim, mTall, mFlagA, mFlagB, mKerch, mToss];
+  for (const m of all) m.instanceColor.needsUpdate = true;
+
+  // initial pose so the first rendered frame is valid
+  update(0, 0, { excitement: 0.12, anticipation: 0, favour: 0, scorer: 0, waveStart: -1e9, focusZ: 0 });
+
+  return { update, setColors, count: n, ladies, spotlight };
+}

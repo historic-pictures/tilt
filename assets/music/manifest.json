@@ -1,0 +1,14 @@
+{
+  "note": "Kevin MacLeod (incompetech.com), CC BY 4.0 — credit required (shown on the How to Play screen and in assets/CREDITS.md). Moods were assigned from the titles and need a listen.",
+  "tracks": [
+    { "id": "master_of_the_feast", "file": "assets/music/master_of_the_feast.mp3", "title": "Master of the Feast", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["menu"], "db": 0 },
+    { "id": "minstrel_guild", "file": "assets/music/minstrel_guild.mp3", "title": "Minstrel Guild", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["menu", "between"], "db": 0 },
+    { "id": "folk_round", "file": "assets/music/folk_round.mp3", "title": "Folk Round", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["between"], "db": 0 },
+    { "id": "village_consort", "file": "assets/music/village_consort.mp3", "title": "Village Consort", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["between"], "db": 0 },
+    { "id": "thatched_villagers", "file": "assets/music/thatched_villagers.mp3", "title": "Thatched Villagers", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["between", "tavern"], "db": 0 },
+    { "id": "suonatore_di_liuto", "file": "assets/music/suonatore_di_liuto.mp3", "title": "Suonatore di Liuto", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["menu", "between"], "db": 0 },
+    { "id": "pippin_the_hunchback", "file": "assets/music/pippin_the_hunchback.mp3", "title": "Pippin the Hunchback", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["tavern", "between"], "db": 0 },
+    { "id": "heroic_age", "file": "assets/music/heroic_age.mp3", "title": "Heroic Age", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["victory"], "db": 0 },
+    { "id": "lord_of_the_land", "file": "assets/music/lord_of_the_land.mp3", "title": "Lord of the Land", "artist": "Kevin MacLeod", "licence": "CC BY 4.0", "url": "https://incompetech.com", "moods": ["defeat"], "db": 0 }
+  ]
+}

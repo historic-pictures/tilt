@@ -1,0 +1,398 @@
+// TILT sound engine — sample-based, mixed on the same rules as the Scene Viewer's sfx.mjs:
+//   * every voice gets its level from a per-category attenuation curve (dB against metres) with a hard cut-off,
+//   * far sounds are duller (low-pass by distance) and wetter (reverb send rises with distance),
+//   * stereo spread narrows with distance,
+//   * each stem has a voice cap and drops its farthest voice first,
+//   * samples are sequenced (never the same one twice running) with random pitch / volume per play,
+//   * stems -> one master gain -> limiter with its ceiling near -1 dBFS.
+// Samples come from sfx/manifest.json (built by tools/build_sfx.py). Anything missing is simply silent.
+
+// Sound pack A/B: localStorage 'tilt.sfx' = 'new' -> sfx_free/manifest.json, anything else -> sfx/manifest.json.
+// tools/build_public.py rewrites the two constants below for the public build (it only ships the new pack).
+const SFX_DEFAULT = 'new';      // the royalty-free pack by default; the old Total War pack only if chosen on the menu
+export const SFX_HAS_OLD = false;
+export function sfxPack() {
+  if (!SFX_HAS_OLD) return 'new';
+  try { const v = localStorage.getItem('tilt.sfx'); return v === null ? SFX_DEFAULT : (v === 'new' ? 'new' : 'old'); } catch (e) { return SFX_DEFAULT; }
+}
+export function setSfxPack(v) { try { localStorage.setItem('tilt.sfx', v === 'new' ? 'new' : 'old'); } catch (e) { /* ignore */ } }
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
+const lin = (db) => (db <= -90 ? 0 : Math.pow(10, db / 20));
+const lpfHz = (v) => (v <= 0.5 ? 20000 : Math.max(260, 20000 * Math.pow(10, -v / 55)));
+function curveAt(pts, x) {
+  if (!pts || !pts.length) return 0;
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const a = pts[i - 1], b = pts[i]; return a[1] + (b[1] - a[1]) * (x - a[0]) / Math.max(1e-6, b[0] - a[0]); }
+  return pts[pts.length - 1][1];
+}
+
+// Stem trims (dB) and voice caps. Tune levels here, not per call.
+const STEMS = {
+  hoof:   { db: 4, cap: 12 },
+  impact: { db: 4.5, cap: 12 },
+  horse:  { db: 8, cap: 4 },
+  crowd:  { db: 5, cap: 56 },
+  air:    { db: 0, cap: 8 },
+  music:  { db: 0, cap: 3 },
+  ui:     { db: -14, cap: 4 },
+};
+const MASTER_DB = -9;
+// Used when a category carries no curve of its own.
+const DEFAULT_ATT = { max: 90, vol: [[0, 0], [2, 0], [5, -4], [10, -9], [20, -15], [40, -22], [70, -30], [90, -42]], lpf: [[0, 0], [8, 6], [25, 24], [60, 44], [90, 58]] };
+// The crowd IS the loud thing in the lists: distance only dulls and widens it, it barely quietens it.
+const CROWD_ATT = { max: 140, vol: [[0, 0], [15, 0], [40, -5], [140, -12]], lpf: [[0, 0], [15, 6], [40, 18], [140, 30]] };
+const HOOF_ATT = { max: 45, vol: [[0, 0], [1.5, 0], [4, -4], [8, -10], [14, -17], [25, -26], [45, -40]], lpf: [[0, 0], [6, 10], [20, 30], [45, 55]] };
+
+// ---------------------------------------------------------------- music
+// Streams assets/music/*.mp3 through HTMLAudioElement -> MediaElementAudioSourceNode -> music gain -> master (so mute and the limiter apply).
+// The manifest is optional: with no manifest or no file for a mood, nothing plays.
+const MUSIC_DB = -14, MUSIC_DEFAULT = 0.6, MUSIC_DUCK_DB = -8, MUSIC_FADE = 2;
+class MusicBus {
+  constructor(ga) {
+    this.ga = ga; this.vol = MUSIC_DEFAULT; this.ducked = false; this.gain = null; this.tracks = null; this._man = null;
+    this.want = null; this.mood = null; this.cur = null; this.last = null;
+  }
+  get playing() { return !!this.cur; }
+  _level() { return lin(MUSIC_DB) * (this.vol / MUSIC_DEFAULT) * (this.ducked ? lin(MUSIC_DUCK_DB) : 1); }
+  _attach() { const ga = this.ga; if (this.gain || !ga.ctx) return; this.gain = ga.ctx.createGain(); this.gain.gain.value = this._level(); this.gain.connect(ga.master); if (this.want) this.play(this.want); }
+  /** The track list (empty if the manifest is missing). */
+  load() {
+    if (!this._man) this._man = fetch('assets/music/manifest.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)).then(j => { this.tracks = (j && Array.isArray(j.tracks) ? j.tracks : []).filter(t => t && t.file); return this.tracks; }).catch(() => (this.tracks = []));
+    return this._man;
+  }
+  setVolume(v) {
+    this.vol = clamp(+v || 0, 0, 1);
+    if (this.vol <= 0) { this._fadeOut(1); this.cur = null; this.mood = null; return; }
+    if (this.gain) this.gain.gain.setTargetAtTime(this._level(), this.ga.ctx.currentTime, 0.1);
+    if (!this.cur && this.want) this.play(this.want);
+  }
+  duck(on) {
+    this.ducked = !!on;
+    if (this.gain) try { this.gain.gain.setTargetAtTime(this._level(), this.ga.ctx.currentTime, 0.5); } catch (e) { /* ignore */ }
+  }
+  /** Play a random track of this mood (never the one just played); a track already playing for that mood is left alone. */
+  async play(mood) {
+    this.want = mood;
+    const ga = this.ga; if (!ga.ctx || !this.gain || ga.muted || this.vol <= 0) return;
+    const tracks = this.tracks || await this.load(); if (this.want !== mood || !tracks.length) return;
+    let pool = tracks.filter(t => (t.moods || []).includes(mood)), eff = mood;
+    if (!pool.length) { pool = tracks.filter(t => (t.moods || []).includes('menu')); eff = 'menu'; }
+    if (!pool.length) return;
+    if (this.cur && this.mood === eff) return;
+    this._start(pool, eff);
+  }
+  _start(pool, eff) {
+    const ctx = this.ga.ctx, others = pool.filter(t => t.id !== this.last), t = (others.length ? others : pool)[(Math.random() * (others.length || pool.length)) | 0];
+    try {
+      const el = new Audio(t.file); el.preload = 'auto'; el.loop = false;
+      const src = ctx.createMediaElementSource(el), g = ctx.createGain(), now = ctx.currentTime;
+      g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(lin(t.db || 0), now + MUSIC_FADE);
+      src.connect(g); g.connect(this.gain);
+      const rec = { el, src, g, t };
+      el.addEventListener('ended', () => { if (this.cur === rec) { this.cur = null; this.mood = null; this.play(this.want); } });
+      el.addEventListener('error', () => { try { src.disconnect(); g.disconnect(); } catch (e) { /* gone */ } if (this.cur === rec) { this.cur = null; this.mood = null; } });
+      const p = el.play(); if (p && p.catch) p.catch(() => { if (this.cur === rec) { this.cur = null; this.mood = null; } });
+      this._fadeOut(MUSIC_FADE);
+      this.cur = rec; this.last = t.id; this.mood = eff;
+    } catch (e) { /* music is optional */ }
+  }
+  _fadeOut(sec) {
+    const rec = this.cur; if (!rec || !this.ga.ctx) return;
+    const ctx = this.ga.ctx, now = ctx.currentTime;
+    try { rec.g.gain.cancelScheduledValues(now); rec.g.gain.setValueAtTime(rec.g.gain.value, now); rec.g.gain.linearRampToValueAtTime(0, now + sec); } catch (e) { /* ignore */ }
+    setTimeout(() => { try { rec.el.pause(); rec.src.disconnect(); rec.g.disconnect(); } catch (e) { /* gone */ } }, sec * 1000 + 100);
+  }
+  stop(fadeSec = 1.5) { this.want = null; this._fadeOut(fadeSec); this.cur = null; this.mood = null; }
+  /** Mute pauses the stream, unmute carries on (or starts what was wanted). */
+  setMuted(m) {
+    if (m) { if (this.cur) try { this.cur.el.pause(); } catch (e) { /* ignore */ } return; }
+    if (this.cur) { try { const p = this.cur.el.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
+    else if (this.want) this.play(this.want);
+  }
+}
+
+export class GameAudio {
+  constructor() {
+    this.music = new MusicBus(this);
+    this.ctx = null; this._ready = false; this.muted = false; this.ts = 1; this.r = 1;
+    this.cat = {}; this.stem = {}; this.voices = {}; this.beds = {}; this.loaded = Promise.resolve(false);
+    this._t = { breath: 1, idle: 5, bird: 6 }; this._hold = 0; this._lone = false; this._duck = { db: 0, hold: 0, now: 0 }; this.venue = null; this.manifestUrl = sfxPack() === 'new' ? 'sfx_free/manifest.json' : 'sfx/manifest.json';
+  }
+  get ready() { return this._ready; }
+
+  init() {
+    if (this._ready) return;
+    try {
+      const AC = (typeof window !== 'undefined') && (window.AudioContext || window.webkitAudioContext);
+      if (!AC) return;
+      const ctx = this.ctx = new AC();
+      if (ctx.state === 'suspended' && ctx.resume) ctx.resume().catch(() => {});
+      // master: stems -> slow-motion low-pass -> master gain -> limiter -> out
+      this.limiter = ctx.createDynamicsCompressor();
+      this.limiter.threshold.value = -3; this.limiter.knee.value = 2; this.limiter.ratio.value = 20; this.limiter.attack.value = 0.002; this.limiter.release.value = 0.15;
+      this.limiter.connect(ctx.destination);
+      this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : lin(MASTER_DB); this.master.connect(this.limiter);
+      this.slowLP = ctx.createBiquadFilter(); this.slowLP.type = 'lowpass'; this.slowLP.frequency.value = 20000; this.slowLP.Q.value = 0.5; this.slowLP.connect(this.master);
+      for (const k in STEMS) { const g = ctx.createGain(); g.gain.value = lin(STEMS[k].db); g.connect(this.slowLP); this.stem[k] = g; this.voices[k] = []; }
+      // open-air reverb: short, dark, mostly for distance
+      this.revIn = ctx.createGain();
+      const conv = ctx.createConvolver(); conv.buffer = this._impulse(1.6);
+      const revLP = ctx.createBiquadFilter(); revLP.type = 'lowpass'; revLP.frequency.value = 3200;
+      const revOut = ctx.createGain(); revOut.gain.value = 0.5;
+      this.revIn.connect(conv); conv.connect(revLP); revLP.connect(revOut); revOut.connect(this.slowLP);
+      this._ready = true;
+      this.music._attach();
+      this.loaded = this._load().then(() => { this._startBeds(); return true; }).catch(() => false);
+    } catch (e) { this.ctx = null; this._ready = false; }
+  }
+
+  _impulse(sec) {
+    const sr = this.ctx.sampleRate, n = Math.floor(sr * sec), b = this.ctx.createBuffer(2, n, sr);
+    for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); let lp = 0; for (let i = 0; i < n; i++) { const w = Math.random() * 2 - 1; lp += (w - lp) * 0.35; d[i] = lp * Math.pow(1 - i / n, 3.2) * (i < 400 ? i / 400 : 1); } }
+    return b;
+  }
+
+  async _load() {
+    const res = await fetch(this.manifestUrl, { cache: 'no-cache' });
+    if (!res.ok) throw new Error('no sound pack');
+    const man = await res.json();
+    const jobs = [];
+    for (const name in man.categories) {
+      const c = man.categories[name];
+      const entry = this.cat[name] = { buffers: [], db: c.db ?? 0, vr: c.vr || [-2, 0], pr: c.pr || [-120, 90], att: c.att || null, loop: !!c.loop, seq: (Math.random() * 8) | 0 };
+      for (const f of c.files) jobs.push(fetch(f.f).then(r => r.arrayBuffer()).then(ab => this.ctx.decodeAudioData(ab)).then(buf => { entry.buffers.push({ buf, db: f.db || 0, s: buf.duration }); }).catch(() => {}));
+    }
+    await Promise.all(jobs);
+    for (const k in this.cat) this.cat[k].buffers.sort((a, b) => a.s - b.s);
+  }
+
+  // ---------------------------------------------------------------- one voice
+  /** Play one sample from a category. o: { stem, dist, pan, db, rate, delay, pick ('short'|'long'|undefined), att, env: [attack s, half-life s] } */
+  _play(name, o = {}) {
+    const c = this.cat[name]; if (!this.ctx || !c || !c.buffers.length) return null;
+    const stemName = o.stem || 'impact', list = this.voices[stemName], cap = STEMS[stemName].cap;
+    const att = o.att || c.att || DEFAULT_ATT, dist = Math.max(0, o.dist || 0);
+    if (dist > att.max) return null;
+    if (list.length >= cap) {
+      let far = list[0]; for (const v of list) if (v.dist > far.dist) far = v;
+      if (far.dist <= dist) return null;
+      try { far.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02); far.src.stop(this.ctx.currentTime + 0.1); } catch (e) { /* already stopped */ }
+      list.splice(list.indexOf(far), 1);
+    }
+    const n = c.buffers.length;
+    let i;
+    if (o.pick === 'short') i = (Math.random() * Math.max(1, n / 3)) | 0;
+    else if (o.pick === 'long') i = n - 1 - ((Math.random() * Math.max(1, n / 3)) | 0);
+    else { c.seq = (c.seq + 1 + ((Math.random() * Math.min(3, n - 1)) | 0)) % n; i = c.seq; }
+    const file = c.buffers[i], ctx = this.ctx, t = ctx.currentTime + (o.delay || 0) / this.r;
+    const db = c.db + file.db + rand(c.vr[0], c.vr[1]) + curveAt(att.vol, dist) + (o.db || 0);
+    const src = ctx.createBufferSource(); src.buffer = file.buf;
+    src.playbackRate.value = (o.rate || 1) * Math.pow(2, rand(c.pr[0], c.pr[1]) / 1200) * this.r;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = lpfHz(curveAt(att.lpf, dist) + (o.dull || 0));
+    const g = ctx.createGain(); g.gain.value = o.env ? 0 : lin(db);
+    src.connect(lp); lp.connect(g);
+    let out = g;
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner(); const spread = 0.8 * Math.max(0, 1 - dist / 12);   // wide when near, a point when far
+      p.pan.value = clamp((o.pan || 0) * (1 - spread * 0.6), -0.9, 0.9); g.connect(p); out = p;
+    }
+    out.connect(this.stem[stemName]);
+    const send = ctx.createGain(); send.gain.value = lin(-30 + 24 * Math.sqrt(Math.min(1, dist / att.max)) + (o.wet || 0)); out.connect(send); send.connect(this.revIn);
+    const v = { src, g, dist };
+    list.push(v);
+    src.onended = () => { const k = list.indexOf(v); if (k >= 0) list.splice(k, 1); };
+    if (o.env) {       // gain envelope [attack s, half-life s]: swell in, then die away exponentially; the voice is stopped once it is inaudible
+      const [at, hl] = o.env; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(lin(db), t + at); g.gain.setTargetAtTime(0, t + at, hl / 0.693);
+      src.start(t); src.stop(t + at + hl * 6);
+    } else src.start(t);
+    return v;
+  }
+
+  // ---------------------------------------------------------------- beds
+  _bed(name, stem = 'air', rate = 1) {
+    const c = this.cat[name]; if (!c || !c.buffers.length) return null;
+    const ctx = this.ctx, g = ctx.createGain(); g.gain.value = 0; g.connect(this.stem[stem]);
+    const srcs = c.buffers.slice(0, 3).map((f, i) => {
+      const s = ctx.createBufferSource(); s.buffer = f.buf; s.loop = true; s._k = rate; s.playbackRate.value = rate;
+      const fg = ctx.createGain(); fg.gain.value = lin(c.db + f.db);
+      const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (p) p.pan.value = [-0.45, 0.45, 0][i];
+      s.connect(fg); if (p) { fg.connect(p); p.connect(g); } else fg.connect(g);
+      s.start(0, rand(0, f.buf.duration * 0.8)); return s;
+    });
+    return { g, srcs };
+  }
+  _startBeds() {
+    this.beds.crowd = this._bed('crowd_bed', 'crowd');
+    this.beds.build = this._bed('crowd_bed', 'crowd', 1.26);      // the anticipation layer: the same murmur a third higher and denser, swelling as the riders close
+    this.beds.air = this._bed('air_bed');
+    this.beds.wind = this._bed('wind_rush');
+    if (this.beds.wind) { this.windLP = this.ctx.createBiquadFilter(); this.windLP.type = 'lowpass'; this.windLP.frequency.value = 400; this.beds.wind.g.disconnect(); this.beds.wind.g.connect(this.windLP); this.windLP.connect(this.stem.air); }
+    if (this.beds.air) this.beds.air.g.gain.value = 1;
+    if (this.venue) this.setVenue(this.venue);
+  }
+  /** Venue colour: sea at Calais, river at the Órbigo, town bustle in Bruges and Nuremberg. */
+  setVenue(id) {
+    this.venue = id; this.training = id === 'training'; if (!this.ctx) return;      // 'training': the camp meadow, no crowd at all
+    this._run(() => {
+      if (this.beds.venue) { const old = this.beds.venue; old.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4); setTimeout(() => old.srcs.forEach(s => { try { s.stop(); } catch (e) { /* stopped */ } }), 2500); this.beds.venue = null; }
+      const name = { inglevert: 'sea_bed', leon: 'river_bed', training: 'river_bed', bruges: 'market_bed', nuremberg: 'market_bed' }[id];
+      if (name) { this.beds.venue = this._bed(name); if (this.beds.venue) this.beds.venue.g.gain.setTargetAtTime(1, this.ctx.currentTime, 1.2); }
+    });
+  }
+
+  // ---------------------------------------------------------------- state
+  setMuted(m) {
+    this.muted = !!m; if (!this.ctx) return;
+    this._run(() => this.music.setMuted(this.muted));
+    this._run(() => {
+      if (this.muted) { this.master.gain.cancelScheduledValues(this.ctx.currentTime); this.master.gain.value = 0; this.ctx.suspend(); }
+      else { this.ctx.resume(); this.master.gain.setTargetAtTime(lin(MASTER_DB), this.ctx.currentTime, 0.15); }
+    });
+  }
+  setTimeScale(s) {
+    this.ts = clamp(+s || 1, 0.1, 1); this.r = lerp(0.88, 1, this.ts);   // slow motion muffles; it barely detunes
+    if (!this.ctx) return;
+    this._run(() => {
+      const t = this.ctx.currentTime;
+      this.slowLP.frequency.setTargetAtTime(2600 + 17400 * Math.pow(this.ts, 1.4), t, 0.12);
+      for (const k in this.beds) if (this.beds[k]) this.beds[k].srcs.forEach(src => src.playbackRate.setTargetAtTime(this.r * (src._k || 1), t, 0.15));
+    });
+  }
+  /** state = { excitement, anticipation, speed (m/s of your horse), favour } */
+  update(dt, st = {}) {
+    if (!this.ctx) return;
+    this._run(() => {
+      const e = clamp(st.excitement || 0, 0, 1), a = clamp(st.anticipation || 0, 0, 1), sp = clamp((st.speed || 0) / 9.5, 0, 1), t = this.ctx.currentTime;
+      // Crowd, per docs/crowd-audio.md: idle murmur swelling with the mood (-8..+8 dB); an anticipation layer rising with S.antic (the closing riders, ~8-12 s);
+      // a held breath in the last ~1.2 s (bed -9 dB over ~0.6 s, build layer out, one lone shout); released by the strike; the bed ducks under big reactions.
+      const hold = clamp((a - 0.86) / 0.06, 0, 1), d = Math.min(dt, 0.1);
+      this._hold += (hold - this._hold) * (1 - Math.exp(-d / (hold > this._hold ? 0.25 : 0.12)));
+      this._duck.hold -= d; const dk = this._duck.hold > 0 ? -this._duck.db : 0; this._duck.now += (dk - this._duck.now) * (1 - Math.exp(-d / (dk < this._duck.now ? 0.1 : 0.5)));     // release over ~1.5 s
+      if (this._duck.hold <= 0 && this._duck.now > -0.1) this._duck.db = 0;
+      if (this.training) { if (this.beds.crowd) this.beds.crowd.g.gain.setTargetAtTime(0, t, 0.3); if (this.beds.build) this.beds.build.g.gain.setTargetAtTime(0, t, 0.3); }
+      else if (this.beds.crowd) this.beds.crowd.g.gain.setTargetAtTime(lin(lerp(-8, 8, Math.pow(e, 0.8)) - 9 * this._hold + this._duck.now), t, 0.35);
+      if (!this.training && this.beds.build) { const u = clamp((a - 0.1) / 0.8, 0, 1); this.beds.build.g.gain.setTargetAtTime(a < 0.1 ? 0 : lin(lerp(-30, 1, u * u * (3 - 2 * u)) - 14 * this._hold + this._duck.now), t, 0.5); }
+      if (this.training) this._lone = true;
+      else if (hold > 0.5 && !this._lone) { this._lone = true; this._play('cheer_single', { stem: 'crowd', att: CROWD_ATT, dist: rand(22, 34), pan: rand(-1, 1), db: -12, delay: rand(0.2, 0.5), rate: rand(0.9, 1) }); }      // one lone shout in the hush
+      else if (a < 0.5) this._lone = false;
+      if (this.beds.wind) { this.beds.wind.g.gain.setTargetAtTime(lin(lerp(-40, 0, Math.pow(sp, 1.3))) * (sp > 0.05 ? 1 : 0), t, 0.25); this.windLP.frequency.setTargetAtTime(300 + 2600 * sp, t, 0.25); }
+      // your own horse: working breaths at speed, the odd blow or nicker at rest
+      this._t.breath -= dt; this._t.idle -= dt;
+      if (sp > 0.55 && this._t.breath <= 0) { this._t.breath = rand(0.7, 1.4); this._play('horse_moving', { stem: 'horse', dist: 2, db: -6 }); }
+      if (sp < 0.08 && this._t.idle <= 0) { this._t.idle = rand(6, 15); this._play(Math.random() < 0.6 ? 'horse_idle' : 'horse_snort', { stem: 'horse', dist: 2.5, db: -6 }); }
+    });
+  }
+
+  _run(fn) { try { fn(); } catch (e) { /* sound must never break the game */ } }
+
+  // ---------------------------------------------------------------- game sounds
+  /** One hoof fall. speed 0..1 of a gallop, pan -1..1, dist metres from the listener. */
+  hoof(speed, pan, dist = 4) { this._run(() => this._play(speed > 0.45 ? 'hoof_run' : 'hoof_walk', { stem: 'hoof', dist, pan, db: lerp(-9, 0, clamp(speed, 0, 1)), att: HOOF_ATT })); }
+
+  impact(power, kind, dist = 3) {
+    this._run(() => {
+      const p = clamp(power, 0.15, 1.2), db = lerp(-10, 2, p / 1.2), o = (x) => Object.assign({ stem: 'impact', dist }, x);
+      if (kind === 'shield') { this._play('impact_shield', o({ db })); this._play('impact_metal', o({ db: db - 10, delay: 0.015 })); }
+      else if (kind === 'helm') { this._play('impact_metal', o({ db: db + 1, rate: 1.12 })); this._play('impact_metal', o({ db: db - 5, rate: 0.8, delay: 0.03 })); this._play('impact_shield', o({ db: db - 8 })); }
+      else if (kind === 'body') { this._play('impact_metal', o({ db: db - 1, rate: 0.9 })); this._play('impact_shield', o({ db: db - 3, rate: 0.85 })); }
+      else if (kind === 'glance') { this._play('impact_metal', o({ db: db - 7, rate: 1.35 })); }
+      else { this._play('impact_shield', o({ db: db - 4, rate: 0.7 })); }
+      this._play('kit_rattle', o({ db: -4, delay: 0.06 }));
+    });
+  }
+  lanceBreak(power, dist = 3) {
+    this._run(() => {
+      const p = clamp(power, 0.3, 1.2), o = (x) => Object.assign({ stem: 'impact', dist }, x);
+      this._play('wood_crack', o({ db: lerp(-2, 4, p / 1.2) }));
+      this._play('wood_crack', o({ db: -5, rate: 0.78, delay: 0.035 }));
+      this._play('wood_crack', o({ db: -9, rate: 1.3, delay: 0.09 }));
+      for (let i = 0; i < 7; i++) this._play('wood_debris', o({ db: -3 - i, delay: 0.18 + i * rand(0.09, 0.2), pan: rand(-0.6, 0.6), dist: dist + rand(0, 3) }));
+    });
+  }
+  bodyFall(power, dist = 6) {
+    this._run(() => {
+      const o = (x) => Object.assign({ stem: 'impact', dist }, x), db = lerp(-1, 6, clamp(power, 0, 1));
+      this._play('bodyfall', o({ db })); this._play('impact_metal', o({ db: db - 7, rate: 0.75, delay: 0.02 }));
+      this._play('kit_rattle', o({ db: 0, delay: 0.05 })); this._play('kit_rattle', o({ db: -4, delay: 0.3 }));
+    });
+  }
+  whinny(pan = 0, dist = 3) { this._run(() => this._play('horse_whinny', { stem: 'horse', dist, pan })); }
+  snort(pan = 0, dist = 2.5) { this._run(() => this._play('horse_snort', { stem: 'horse', dist, pan })); }
+  /** Heels to the horse: a creak of harness and a grunt of effort. */
+  spur() { this._run(() => { this._play('kit_rattle', { stem: 'hoof', dist: 1.5, db: -4 }); if (Math.random() < 0.6) this._play('horse_moving', { stem: 'horse', dist: 2, db: -4, delay: 0.08 }); }); }
+  armourClank(intensity) { this._run(() => this._play('kit_rattle', { stem: 'hoof', dist: 1.5, db: lerp(-10, -2, clamp(intensity, 0, 1)) })); }
+
+  /** Crowd reactions (docs/crowd-audio.md): layers of single voices and group beds, each with a gain envelope [attack, half-life], pitch/time scatter, and a duck of the bed under big ones.
+   *  kind: roar (eruption on a break, +9..12 dB, half-life ~3 s; stronger = helm/unhorse +12..15, half-life 3.5 s) | cheer | gasp | ooh (near miss / glance, short) | groan (a miss, "aww" then a few jeers) |
+   *  boo (a foul, long) | applause (rides the decay tail) | chant. strength 0.1..1. lead: seconds to hold the whole reaction (the gasp goes 0.2 s ahead of the roar).
+   *  STILL MISSING as samples (made from the nearest single voices for now): gasp_group, ooh_group, boo swell, hush texture (coughs, a baby), chant voices, polite/sparse applause for the gallery. */
+  crowd(kind, strength = 1, lead = 0) {
+    if (this.training) return;      // nobody at the training ground
+    this._run(() => {
+      const s = clamp(strength, 0.1, 1), RT = () => rand(0.94, 1.06);
+      const many = (cat, n, span, db, o = {}) => { for (let i = 0; i < n; i++) this._play(cat, Object.assign({ stem: 'crowd', att: CROWD_ATT, dist: rand(13, 34), pan: rand(-1, 1), db: db + rand(-4, 0), rate: RT(), delay: lead + Math.pow(Math.random(), 1.6) * span }, o)); };
+      // group beds: near (never culled), several files at once, each swelling in and dying away
+      const group = (n, db, at, hl, span = 0.3) => { for (let i = 0; i < n; i++) this._play('cheer_group', { stem: 'crowd', att: CROWD_ATT, dist: rand(11, 15), pan: rand(-0.8, 0.8), db: db - i * 1.5 + rand(-1, 0), rate: rand(0.95, 1.05), delay: lead + i * span * 0.5 + rand(0, span), env: [at * rand(0.85, 1.2), hl] }); };
+      // singles with a decaying density: delays follow an exponential so the crowd thins out with the half-life
+      const tail = (cat, n, hl, db, o = {}) => { for (let i = 0; i < n; i++) this._play(cat, Object.assign({ stem: 'crowd', att: CROWD_ATT, dist: rand(13, 34), pan: rand(-1, 1), db: db + rand(-4, 0), rate: RT(), delay: lead + Math.min(hl * 4, -Math.log(1 - Math.random() * 0.98) * hl / 0.693) }, o)); };
+      const duck = (db, hold) => { this._duck.db = Math.max(this._duck.db, db); this._duck.hold = Math.max(this._duck.hold, lead + hold); };
+      if (kind === 'roar') {       // onset 0.3-0.6 s, half-life 3 s (3.5 s above strength 0.85), gone by ~8 s; claps take over on the tail
+        const big = s > 0.85;
+        group(Math.round(2 + 2 * s), -12 + 5 * s, 0.4, big ? 3.5 : 3);
+        tail('cheer_single', Math.round(14 + 16 * s), big ? 3.5 : 3, -9);
+        for (let i = 0; i < Math.round(30 * s); i++) { const u = Math.random(), d = 0.9 + u * 5.5; this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 26), pan: rand(-1, 1), db: 0 + rand(-4, 0) - 7 * Math.abs(u - 0.4), rate: RT(), delay: lead + d }); }
+        duck(3 + 3 * s, 1.2);
+      }
+      else if (kind === 'cheer') { group(Math.round(1 + 2 * s), -12 + 5 * s, 0.3, 1.6, 0.2); many('cheer_single', Math.round(8 + 10 * s), 1.6, -9); duck(2, 0.6); }
+      else if (kind === 'gasp') { many('groan_single', Math.round(6 + 6 * s), 0.18, -4, { rate: 1.12, env: [0.05, 0.25] }); }
+      else if (kind === 'ooh') { many('groan_single', Math.round(7 + 8 * s), 0.35, -4, { rate: 0.86, env: [0.12, 0.5] }); many('jeer_single', Math.round(2 * s), 1.0, -9, { rate: 0.9, env: [0.1, 0.6] }); }       // +5..7 dB, ~1.5 s
+      else if (kind === 'groan') { many('groan_single', Math.round(8 + 8 * s), 0.9, -5, { rate: 0.8, env: [0.4, 1.2] }); tail('jeer_single', Math.round(2 + 3 * s), 1.3, -8, { rate: 0.95 }); }      // "aww" for ~2.5 s fading to a few jeers
+      else if (kind === 'boo') { many('jeer_single', Math.round(12 + 14 * s), 2.4, -6, { rate: 0.9, env: [0.4, 2.4] }); tail('jeer_single', Math.round(6 + 6 * s), 2.5, -9, { rate: 0.85 }); many('groan_single', Math.round(4 * s), 0.8, -6, { rate: 0.85 }); duck(3, 2.5); }     // +6..8 dB, 5-6 s
+      else if (kind === 'applause') {
+        for (let i = 0; i < Math.round(50 + 110 * s); i++) { const u = Math.random(); this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 26), pan: rand(-1, 1), db: 1 + rand(-4, 0) - 14 * Math.pow(Math.abs(u - 0.35) / 0.65, 1.5), rate: RT(), delay: lead + u * 4.5 }); }      // swells in over ~1.5 s, fades by ~4.5 s
+        many('cheer_single', Math.round(3 * s), 2, -8);
+      }
+      else if (kind === 'chant') {
+        for (let bar = 0; bar < 4; bar++) for (const [beat, rate, db] of [[0, 0.62, 5], [0.36, 0.62, 5], [0.72, 1, 7]])
+          for (let k = 0; k < 7; k++) this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 26), pan: rand(-1, 1), db: db + rand(-4, 0), rate: rate * rand(0.94, 1.06), delay: lead + bar * 1.25 + beat + rand(0, 0.035) });
+        many('cheer_single', Math.round(4 * s), 4.5, -7);
+      }
+    });
+  }
+
+  fanfare(kind) {
+    this._run(() => {
+      const o = (x) => Object.assign({ stem: 'music', dist: 22, pan: -0.5, wet: 6 }, x);
+      if (kind === 'short') this._play('horn', o({ pick: 'short' }));
+      else if (kind === 'start') { this._play('horn', o({ pick: 'long' })); this._play('horn', o({ pick: 'short', delay: 0.5, pan: -0.3, db: -3 })); }
+      else if (kind === 'victory') { this._play('horn', o({ pick: 'long' })); this._play('horn', o({ pick: 'long', delay: 0.35, pan: -0.2, db: -2, rate: 1.06 })); }
+      else this._play('horn', o({ pick: 'long', rate: 0.84, db: -3 }));
+    });
+  }
+
+  // the only synthesized sounds left: a low heartbeat for Nerve, and soft interface plucks
+  heartbeat(intensity = 1) {
+    this._run(() => {
+      const ctx = this.ctx, t = ctx.currentTime;
+      for (const [dt, f, g] of [[0, 58, 0.5], [0.24, 48, 0.36]]) {
+        const osc = ctx.createOscillator(), gn = ctx.createGain(); osc.frequency.setValueAtTime(f, t + dt); osc.frequency.exponentialRampToValueAtTime(f * 0.6, t + dt + 0.16);
+        gn.gain.setValueAtTime(0.0001, t + dt); gn.gain.linearRampToValueAtTime(g * intensity, t + dt + 0.012); gn.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.2);
+        osc.connect(gn); gn.connect(this.stem.ui); osc.start(t + dt); osc.stop(t + dt + 0.25);
+      }
+    });
+  }
+  ui(kind) {
+    this._run(() => {
+      const ctx = this.ctx, t = ctx.currentTime;
+      const notes = { click: [[523, 0]], hover: [[392, 0]], select: [[523, 0], [784, 0.07]], error: [[196, 0], [165, 0.1]] }[kind] || [[523, 0]];
+      for (const [f, dt] of notes) {
+        const osc = ctx.createOscillator(), gn = ctx.createGain(), lp = ctx.createBiquadFilter(); osc.type = 'triangle'; osc.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 2200;
+        gn.gain.setValueAtTime(0.0001, t + dt); gn.gain.linearRampToValueAtTime(kind === 'hover' ? 0.25 : 0.6, t + dt + 0.004); gn.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.16);
+        osc.connect(lp); lp.connect(gn); gn.connect(this.stem.ui); osc.start(t + dt); osc.stop(t + dt + 0.2);
+      }
+    });
+  }
+}
