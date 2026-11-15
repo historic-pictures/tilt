@@ -431,3 +431,66 @@ body.touch.small #card, body.touch.small #verdict, body.touch.small #lesson, bod
 body.touch #screen.on ~ #soundBtn { top: auto; bottom: 10px; right: 10px; width: 36px; height: 36px; }
 body.touch #lancePanel, body.touch #crowdPanel { display: none; }      /* the right edge belongs to the thumbs */
 body.touch #skipHold kbd { display: none; }
+/* phones in landscape (body.compact, height < 520): the menus are laid out to fit the screen with no scrolling; src/touch.js then zooms each screen just enough */
+body.touch.compact .menu { left: 50%; transform: translate(-50%, -50%); width: 780px; max-width: none; }
+body.touch.compact .menu .page { padding: 12px 24px 10px; }
+body.touch.compact .menu h1 { font-size: 46px; }
+body.touch.compact .menu h2 { font-size: 13px; margin: 0 0 6px; padding-bottom: 6px; }
+body.touch.compact .menu:not(.welcome) .page { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 16px; }
+body.touch.compact .menu:not(.welcome) .page > :not(button) { grid-column: 1 / -1; }
+body.touch.compact .menu button { font-size: 19px; padding: 7px 4px 8px 22px; }
+body.touch.compact .menu button::before { top: 14px; left: 5px; }
+body.touch.compact .menu:not(.welcome) button small, body.touch.compact .menu .foot { display: none; }
+body.touch.compact .standing { margin-top: 8px; font-size: 14px; }
+body.touch.compact .rankline { margin-top: 4px; font-size: 13px; }
+body.touch.compact .toggles { gap: 2px 14px; margin-top: 6px; }
+body.touch.compact .toggles .chip { font-size: 13px; }
+body.touch.compact .menu.welcome { width: 620px; }
+body.touch.compact .welcome .wlead { margin: 0 0 4px; font-size: 15px; }
+body.touch.compact .sheet .page { padding: 14px 24px 12px; }
+body.touch.compact .sheet h3 { font-size: 30px; }
+body.touch.compact .sheet h5 { margin: 8px 0 5px; font-size: 13px; }
+body.touch.compact .sheet .top { gap: 14px; padding-bottom: 6px; }
+body.touch.compact .sheet .top p { font-size: 14px; line-height: 1.25; }
+body.touch.compact #screen[data-name="exhibition"] .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+body.touch.compact #screen[data-name="exhibition"] .pick { padding: 5px 11px 6px; }
+body.touch.compact #screen[data-name="exhibition"] .pick b { font-size: 16px; }
+body.touch.compact #screen[data-name="exhibition"] .pick em { float: none; margin-left: 8px; font-size: 14px; }
+body.touch.compact #screen[data-name="exhibition"] .pick .ovr { font-size: 17px; margin-right: 5px; }
+body.touch.compact #screen[data-name="exhibition"] .pick p, body.touch.compact #screen[data-name="exhibition"] .pick .stat, body.touch.compact #screen[data-name="exhibition"] .pick canvas { display: none; }
+body.touch.compact #screen[data-name="exhibition"] .pick[data-exm] em, body.touch.compact #screen[data-name="exhibition"] .pick[data-exo] em, body.touch.compact #screen[data-name="exhibition"] .top p { display: none; }
+body.touch.compact .venues { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+body.touch.compact .venue { padding: 4px 8px; font-size: 13px; line-height: 1.2; }
+body.touch.compact .venue b { font-size: 15px; } body.touch.compact .venue .r { font-size: 12px; margin-top: 1px; } body.touch.compact .venue .fee { font-size: 12px; }
+body.touch.compact table.tbl { font-size: 14px; } body.touch.compact table.tbl td, body.touch.compact table.tbl th { padding: 1px 6px; }
+body.touch.compact table.tbl canvas { width: 14px; height: 17px; margin-right: 5px; }
+/* the circuit screen on a phone: the road on the left, the standings on the right */
+body.touch.compact #screen[data-name="circuit"] .page { display: grid; grid-template-columns: 0.85fr 1.15fr; column-gap: 18px; align-content: start; }
+body.touch.compact #screen[data-name="circuit"] .page > .top, body.touch.compact #screen[data-name="circuit"] .page > h5:nth-of-type(1), body.touch.compact #screen[data-name="circuit"] .page > .swatches { grid-column: 1 / -1; }
+body.touch.compact #screen[data-name="circuit"] .page > h5:nth-of-type(2) { grid-column: 1; grid-row: 4; }
+body.touch.compact #screen[data-name="circuit"] .page > .venues { grid-column: 1; grid-row: 5; grid-template-columns: 1fr; gap: 4px; align-content: start; }
+body.touch.compact #screen[data-name="circuit"] .page > h5:nth-of-type(3) { grid-column: 2; grid-row: 4; }
+body.touch.compact #screen[data-name="circuit"] .page > table { grid-column: 2; grid-row: 5; align-self: start; }
+body.touch.compact #screen[data-name="circuit"] .venue { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; padding: 3px 8px; }
+body.touch.compact #screen[data-name="circuit"] .venue b, body.touch.compact #screen[data-name="circuit"] .venue i { display: inline; }
+body.touch.compact #screen[data-name="circuit"] .venue .r, body.touch.compact #screen[data-name="circuit"] .venue .fee { margin: 0; }
+body.touch.compact #screen[data-name="circuit"] table.tbl th:nth-child(3), body.touch.compact #screen[data-name="circuit"] table.tbl td:nth-child(3), body.touch.compact #screen[data-name="circuit"] table.tbl th:nth-child(7), body.touch.compact #screen[data-name="circuit"] table.tbl td:nth-child(7) { display: none; }
+body.touch.compact #screen[data-name="circuit"] .hugh p { font-size: 14px; line-height: 1.25; }
+body.touch.compact #screen[data-name="circuit"] .hugh canvas.face { width: 40px; height: 47px; }
+body.touch.compact #screen[data-name="circuit"] .page > h5:nth-of-type(1) { grid-column: 1; grid-row: 6; margin-top: 10px; }
+body.touch.compact #screen[data-name="circuit"] .page > .swatches { grid-column: 1; grid-row: 7; }
+body.touch.compact #screen[data-name="circuit"] .page > h5:nth-of-type(1) small, body.touch.compact #screen[data-name="circuit"] .hugh h6 { display: none; }
+body.touch.compact #screen[data-name="circuit"] .page > table { grid-row: 5 / span 3; }
+body.touch.compact #screen[data-name="circuit"] table.tbl td { padding: 0 6px; line-height: 1.25; }
+body.touch.compact #screen[data-name="circuit"] .top { padding-bottom: 4px; }
+body.touch.compact #screen[data-name="circuit"] .page > h5 { margin: 6px 0 4px; }
+/* the end-of-match card on a phone: match facts on the left, the reckoning on the right */
+body.touch.compact #cardFacts { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: row dense; column-gap: 22px; }
+body.touch.compact #cardFacts > h6:first-of-type, body.touch.compact #cardFacts > .fact { grid-column: 1; }
+body.touch.compact #cardFacts > :not(.fact):not(h6:first-of-type) { grid-column: 2; }
+body.touch.compact #cardFacts > .fact, body.touch.compact #cardFacts > .led { padding-top: 1px; padding-bottom: 1px; min-height: 0; }
+body.touch.compact #card:has(#cardFacts > *) { width: 1120px; }
+body.touch.compact #card:has(#cardFacts > *) .page { display: grid; grid-template-columns: 0.8fr 1.2fr; grid-auto-flow: row dense; column-gap: 30px; align-items: start; padding: 18px 28px 14px; }
+body.touch.compact #card:has(#cardFacts > *) .page > :not(#cardFacts) { grid-column: 1; }
+body.touch.compact #card:has(#cardFacts > *) #cardFacts { grid-column: 2; grid-row: 1 / span 7; }
+body.touch.compact #card #cardTitle { font-size: 36px; } body.touch.compact #card #cardSub { font-size: 17px; margin-bottom: 8px; padding-bottom: 6px; }

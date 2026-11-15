@@ -90,7 +90,29 @@ export function initTouch(h) {
     document.documentElement.style.setProperty('--ui', f.toFixed(3));
     body.classList.toggle('small', f < 0.999);
   };
-  fit(); window.addEventListener('resize', fit); window.addEventListener('orientationchange', fit);
+  // each menu screen: the largest zoom (<= 1) at which it fits with no scrolling; a screen too long even at 0.5 (the armoury, the
+  // rules) keeps the window's --ui and scrolls. The zoom is set as --ui on the screen itself, so its max-height maths follow.
+  const scr = document.getElementById('screen');
+  const card = document.getElementById('card');
+  const fitScreen = () => {
+    fitEl(scr && scr.classList.contains('on') ? scr.querySelector(':scope > .scroll') : null);
+    fitEl(card && !card.classList.contains('hidden') ? card : null);
+  };
+  const fitEl = (root) => {
+    if (!root) return;
+    const page = root.querySelector('.page'); if (!page) return;
+    const over = () => { const r = root.getBoundingClientRect(); return page.scrollHeight > page.clientHeight + 2 || r.bottom > window.innerHeight + 1 || r.top < -1 || r.right > window.innerWidth + 1 || r.left < -1; };
+    root.style.removeProperty('--ui'); root.style.zoom = '';
+    if (!body.classList.contains('small')) return;
+    const keep = page.scrollTop;
+    for (let z = 1; z >= 0.499; z -= 0.025) { root.style.setProperty('--ui', z.toFixed(3)); if (!over()) return; }
+    root.style.removeProperty('--ui'); page.scrollTop = keep;
+  };
+  let fitQ = 0; const queueFit = () => { clearTimeout(fitQ); fitQ = setTimeout(fitScreen, 20); };
+  if (scr) new MutationObserver(queueFit).observe(scr, { childList: true, attributes: true, attributeFilter: ['class', 'data-name'] });
+  if (card) new MutationObserver(queueFit).observe(card, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  const refit = () => { fit(); body.classList.toggle('compact', window.innerHeight < 520); queueFit(); };
+  refit(); window.addEventListener('resize', refit); window.addEventListener('orientationchange', refit);
 
   let last = '';
   return {
