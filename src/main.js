@@ -193,6 +193,7 @@ function loadProfile() {
       if (!HELMS[m.helm]) m.helm = ARMOURS[m.armour].helm;
       if (!m.owned.helms.includes(m.helm)) m.owned.helms.push(m.helm);
       m.renown = m.renown || 0;
+      if (m.named === undefined) m.named = true;      // a save from before the welcome screen: he has chosen his name already
       return m;
     }
   } catch (e) { /* ignore */ }
@@ -996,7 +997,7 @@ function updateRide(dt, dtReal) {
         if (Pl.hold && !Pl.saidHold) { Pl.saidHold = true; say('Hold… not yet.', 'THE MARSHAL', 2, { key: 'hold', phases: 'ready', ttl: 3 }); }      // the flags stay up
         if (Pl.horns && !Pl.hornsUp) { Pl.hornsUp = true; ceremony.blowLine(Pl.hold + 3.4); }
         if (Pl.horns && !Pl.blown && u >= Pl.hold) { Pl.blown = true; fanfare('start'); }      // the horns sound a moment before the flags drop
-        if (u >= Pl.hold + (Pl.horns ? 1.5 : 0)) { R.sig = true; say('Laissez-les aller!', 'THE MARSHAL', 2, { key: 'signal', urgent: true, prompt: true, phases: 'ready', ttl: 3 }); if (!Pl.horns) fanfare('short'); flagmen.sweep(); }
+        if (u >= Pl.hold + (Pl.horns ? 1.5 : 0)) { R.sig = true; say('Laissez-les aller!', 'THE MARSHAL', 2, { key: 'signal', urgent: true, prompt: true, phases: 'ready', ttl: 3 }); if (!Pl.horns) fanfare('short'); flagmen.sweep(); audio.crowd('cheer', 0.55 + 0.1 * Math.min(4, M.course)); }      // the go: the shout, a horn, the flags down and a roar from the stands
       }
     }
   }

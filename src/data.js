@@ -144,7 +144,7 @@ export const CAPARISONS = {
 };
 
 export const DEFAULT_PROFILE = {
-  name: 'Sir Nameless', arms: { c1: '#1f4690', c2: '#e0b83c', c3: '#ece8dc', pattern: 'chevron', charge: 'cross' },
+  name: 'Sir Nameless', named: false, arms: { c1: '#1f4690', c2: '#e0b83c', c3: '#ece8dc', pattern: 'chevron', charge: 'cross' },
   horse: 'rouncey', armour: 'mail', helm: 'greathelm', lance: 'standard', venue: 0, table: null, firstPerson: false, bond: {},
   caparison: 'livery', gold: 60, owned: { horses: ['rouncey'], armours: ['mail'], helms: ['greathelm'], caparisons: ['livery', 'none'] }, difficulty: 1, herald: true, arts: {}, lesson: 0,
   renown: 0, skills: {}, retinue: { squire: 1 }, courses: 5,

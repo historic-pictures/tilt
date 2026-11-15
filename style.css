@@ -381,3 +381,11 @@ kbd, .keys kbd { font-family: var(--caps); font-size: 14px; color: var(--ink); p
 .feat.got .seal { opacity: 1; background: radial-gradient(circle at 35% 30%, #d4564a, var(--red) 55%, var(--red2)); box-shadow: inset 0 0 0 3px rgba(255, 230, 170, .35), 0 1px 3px rgba(0,0,0,.35); }
 .feat.no b { color: var(--ink2); }
 #toast.seal b::before { content: '✦'; display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; margin-right: .4em; border-radius: 50%; font-size: .7em; vertical-align: .12em; color: var(--vellum3, #f4ead0); background: radial-gradient(circle at 35% 30%, #d4564a, var(--red) 55%, var(--red2)); }
+/* first visit: take your name */
+.menu.welcome { width: 560px; }
+.welcome .wlead { font-size: 18px; font-style: italic; margin: 0 0 10px; }
+.welcome input.name { width: 100%; box-sizing: border-box; font-size: 22px; margin-bottom: 12px; }
+.welcome .arms-row { flex-wrap: nowrap; gap: 16px; margin-bottom: 8px; }
+.welcome .arms-row canvas { width: 92px; height: auto; flex: none; }
+.welcome .swatches { margin: 2px 0 6px; }
+.welcome .dimtxt { font-size: 14px; font-style: italic; margin: 4px 0 0; }

@@ -42,7 +42,29 @@ export function initMenus(api) {
       <div class="standing"><span>${rank.name}</span><span>${purseText(p.gold)}</span></div>
       ${rankBar(p.renown)}
       <div class="toggles"><span class="chip" data-act="diff">Difficulty: ${DIFFICULTY[p.difficulty ?? 1].name}</span><span class="chip" data-act="herald">Herald: ${p.herald === false ? 'silent' : 'speaks'}</span><span class="chip" data-act="voices" title="The robot voice for the herald, the king, your men and the sellers (needs sound on)">Voices: ${api.voicesOn && !api.voicesOn() ? 'off' : 'on'}</span><span class="chip" data-act="view">View: ${p.firstPerson ? 'first person' : 'third person'}</span><span class="chip" data-act="autoride" title="After a pass: ride back to your mark yourself (W/S gait, A/D steer), or let the horse take you">Ride back: ${p.autoRide === true ? 'auto' : p.autoRide === false ? 'by hand' : 'auto until learned'}</span><label class="chip vol">Music <input type="range" id="musicVol" min="0" max="100" step="5" value="${api.musicVol ? api.musicVol() : 60}"> <span id="musicPct">${api.musicVol ? api.musicVol() : 60}%</span></label>${SFX_HAS_OLD ? `<span class="chip" data-act="sfxpack" title="Switch between the original and the royalty-free sound pack (reloads the page)">Sound pack: ${sfxPack() === 'new' ? 'New' : 'Old'}</span>` : ''}</div>
-      <div class="foot">Sound is off until you switch it on (the button at the top, or M).</div>`);
+      <div class="foot">Sound is on. The speaker button at the top, or M, mutes it.</div>`);
+  }
+
+  /** A name typed by a player: no markup, at most 22 characters, never empty. */
+  const cleanName = (v) => (v || '').replace(/[<>&"`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 22) || 'Sir Nameless';
+  /** First visit: take your name and your colours before anything else. */
+  let wDraft = null;
+  function welcome() {
+    const p = api.profile, a = p.arms; if (wDraft === null) wDraft = '';
+    const sw = (key) => `<div class="swatches"><span class="lbl">${{ c1: 'Field', c2: 'Division' }[key]}</span>${TINCTURES.map(t => `<div class="sw ${a[key] === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}</div>`;
+    root.innerHTML = scroll('menu welcome', `
+      <h1>Tilt</h1><h2>The Jousting Circuit</h2>
+      <p class="wlead">The herald needs a name to cry when you ride in, and the colours you ride under.</p>
+      <h5>Your Name</h5><input class="name" id="wName" maxlength="22" placeholder="Sir Roland of Tyre" value="${wDraft.replace(/"/g, '')}" autocomplete="off" spellcheck="false">
+      <div class="arms-row"><canvas id="wCrest" width="150" height="178"></canvas><div>
+        ${sw('c1')}${sw('c2')}
+        <div class="swatches"><span class="lbl">Ordinary</span>${PATTERNS.map(x => `<div class="chip ${a.pattern === x ? 'sel' : ''}" data-pat="${x}">${x}</div>`).join('')}</div>
+        <p class="dimtxt">You can change all of this later in the Armoury.</p></div></div>
+      <button data-act="welcome">Enter the Lists<small>Take your name to the tiltyard</small></button>`);
+    drawCrest(el('wCrest'), a);
+    const inp = el('wName'); inp.addEventListener('input', () => { wDraft = inp.value; });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); root.querySelector('[data-act="welcome"]').click(); } });
+    setTimeout(() => { try { inp.focus(); } catch (e) { /* ignore */ } }, 50);
   }
 
   function circuit() {
@@ -104,7 +126,7 @@ export function initMenus(api) {
         <div class="swatches"><span class="lbl">Charge</span>${CHARGES.map(x => `<div class="chip ${(a.charge || 'none') === x ? 'sel' : ''}" data-chg="${x}">${x}</div>`).join('')}</div>
         <div class="swatches"><span class="lbl">Historic</span>${HISTORIC_ARMS.map((h, i) => `<div class="chip" title="${h.note}" data-hist="${i}">${h.name}</div>`).join('')}</div></div></div>`);
     drawCrest(el('crestBig'), a); faces();
-    el('nameIn').addEventListener('change', (e) => { p.name = e.target.value.trim() || 'Sir Nameless'; api.saveProfile(); });
+    el('nameIn').addEventListener('change', (e) => { p.name = cleanName(e.target.value); e.target.value = p.name; api.saveProfile(); });
   }
 
   function skills() {
@@ -208,8 +230,9 @@ export function initMenus(api) {
       ${ACH_GROUPS.map(g => { const list = ACHIEVEMENTS.filter(a => a.group === g); return list.length ? `<h5>${g} <small>${list.filter(a => got[a.id]).length}/${list.length}</small></h5><div class="feats">${list.map(seal).join('')}</div>` : ''; }).join('')}`);
   }
 
-  const screens = { main, circuit, exhibition, armoury, skills, how, stable, feats };
+  const screens = { main, circuit, exhibition, armoury, skills, how, stable, feats, welcome };
   function show(name) {
+    if (name === 'main' && api.profile.named === false) name = 'welcome';      // first visit: your name before anything else
     // re-drawing the screen you are on keeps your place on the page
     const keep = root.dataset.name === name && root.classList.contains('on') ? (root.querySelector('.page') || {}).scrollTop || 0 : 0;
     if (api.checkFeats) api.checkFeats();      // purchases and training are checked for feats whenever a screen is drawn
@@ -228,6 +251,8 @@ export function initMenus(api) {
     const p = api.profile, d = t.dataset;
     api.ui(d.go || d.act ? 'select' : 'click');
     if (d.go) { dismissArm = null; return show(d.go); }
+    if (d.act === 'welcome') { p.name = cleanName(wDraft); p.named = true; wDraft = null; api.saveProfile(); api.rebuildPlayer(); return show('main'); }
+    if (root.dataset.name === 'welcome' && (d.col || d.pat)) { if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; } else p.arms.pattern = d.pat; api.saveProfile(); api.rebuildPlayer(); return show('welcome'); }
     if (d.act === 'ride') { const T = p.table; return api.startMatch(T.round, VENUES[T.round].host, true, false, null, p.courses || 5); }
     if (d.act === 'reset') { api.resetCircuit(); return show('circuit'); }
     if (d.act === 'exride') return api.startMatch(exVenue, exOpp, false, false, exMode, MODES[exMode].noExtra ? 4 : exCourses);
