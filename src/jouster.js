@@ -5,6 +5,7 @@ import { PHYS } from './data.js';
 import { lanceRadius } from './physics.js';
 import { Cap, Obb, Hit, capCapGap, capObbGap, closestSegSeg, SS } from './collide.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { touchMode } from './touch.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -98,9 +99,12 @@ function horseUVs(scene) {
   };
 }
 
-const steelDS = nScale(new THREE.MeshStandardMaterial({ color: 0xaeb4bd, metalness: 1, roughness: 0.4, envMapIntensity: 1.15, side: THREE.DoubleSide, normalMap: T_STEEL.normalMap, roughnessMap: T_STEEL.roughnessMap }), 0.35);
-const darkSteel = new THREE.MeshStandardMaterial({ color: 0x4d5158, metalness: 1, roughness: 0.42 });
-const gold = new THREE.MeshStandardMaterial({ color: 0xd9a93a, metalness: 1, roughness: 0.28, envMapIntensity: 1.2 });
+// Phones: polished steel is lit almost only by the sky's reflection, and many phone GPUs cannot render that reflection (half-float
+// targets), so pure metal comes out black. On touch the steel keeps part of an ordinary diffuse colour, so the sun and sky light it anyway.
+const phoneMetal = (m) => { if (touchMode && m.metalness > 0.5) { m.metalness = 0.5; m.roughness = Math.max(m.roughness, 0.38); } return m; };
+const steelDS = phoneMetal(nScale(new THREE.MeshStandardMaterial({ color: 0xaeb4bd, metalness: 1, roughness: 0.4, envMapIntensity: 1.15, side: THREE.DoubleSide, normalMap: T_STEEL.normalMap, roughnessMap: T_STEEL.roughnessMap }), 0.35));
+const darkSteel = phoneMetal(new THREE.MeshStandardMaterial({ color: 0x4d5158, metalness: 1, roughness: 0.42 }));
+const gold = phoneMetal(new THREE.MeshStandardMaterial({ color: 0xd9a93a, metalness: 1, roughness: 0.28, envMapIntensity: 1.2 }));
 const leather = nScale(new THREE.MeshStandardMaterial({ color: 0x6b4630, map: photoTex('brown_leather', 'diff', [3, 3]), roughness: 0.95, envMapIntensity: 0.5, normalMap: photoTex('brown_leather', 'nor_gl', [3, 3]), roughnessMap: photoTex('brown_leather', 'rough', [3, 3]) }), 1.0);
 const black = new THREE.MeshStandardMaterial({ color: 0x070708, roughness: 0.5 });
 const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.08, envMapIntensity: 1.5 });
@@ -211,8 +215,8 @@ export class Jouster {
         for (let i = -2; i < 12; i++) { g.beginPath(); g.moveTo(0, i * 32); g.lineTo(w, i * 32 + 48); g.lineTo(w, i * 32 + 64); g.lineTo(0, i * 32 + 16); g.fill(); }
       }), roughness: 0.45, envMapIntensity: 0.6, normalMap: T_WOOD.normalMap,
     });
-    this.armour = nScale(new THREE.MeshStandardMaterial({ color: a.armourTint ?? AR.tint ?? 0xb4bac3, metalness: 1, roughness: (AR.rough ?? 0.24) + 0.06, envMapIntensity: 1.2, normalMap: T_STEEL.normalMap, roughnessMap: T_STEEL.roughnessMap }), 0.3);
-    this.mail = nScale(new THREE.MeshStandardMaterial({ color: 0x8b9097, metalness: 0.9, roughness: 0.55, envMapIntensity: 0.8, normalMap: T_MAIL.normalMap, map: T_MAIL.map }), 1.2);
+    this.armour = phoneMetal(nScale(new THREE.MeshStandardMaterial({ color: a.armourTint ?? AR.tint ?? 0xb4bac3, metalness: 1, roughness: (AR.rough ?? 0.24) + 0.06, envMapIntensity: 1.2, normalMap: T_STEEL.normalMap, roughnessMap: T_STEEL.roughnessMap }), 0.3));
+    this.mail = phoneMetal(nScale(new THREE.MeshStandardMaterial({ color: 0x8b9097, metalness: 0.9, roughness: 0.55, envMapIntensity: 0.8, normalMap: T_MAIL.normalMap, map: T_MAIL.map }), 1.2));
     this.surcoat = nScale(new THREE.MeshStandardMaterial({ map: armsTexture(a, 256, 256, [2, 2]), roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.3, normalMap: clothN }), 0.6);
     this.trim = new THREE.MeshStandardMaterial({ color: a.c2, roughness: 0.6, envMapIntensity: 0.5 });
   }

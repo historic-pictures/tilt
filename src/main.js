@@ -267,7 +267,9 @@ function rebuildPlayer() {
  * tier: 1 result (strike, verdict, fouls, unhorsing) · 2 course state (marshal, score) · 3 colour (facts, teaching, royals, intros) · 4 ambient (groom, crowd).
  * o: { delay (s), ttl (s), prompt (a screen prompt: not counted in the course budget), phases, free, cat, speak, after: 'strike', prio }
  */
-function say(text, who = 'THE MARSHAL', tier = 2, o = {}) { return voice.line(Object.assign({ text, who, tier }, o)); }
+// Phones are quiet: nobody talks (herald, host, retinue, marshal) except in the lessons; the crowd's big moments still get their line.
+const quietPhone = (o) => touchMode && !G.auto && !(M && M.practice) && !(o && o.cat === 'crowd');
+function say(text, who = 'THE MARSHAL', tier = 2, o = {}) { if (quietPhone(o)) return false; return voice.line(Object.assign({ text, who, tier }, o)); }
 
 // ---- callouts: the big centre text. At most one per strike, the most important (unhorse > break/helm > foul > attaint > miss).
 const CALL = { unhorse: 5, helm: 4, break: 4, turned: 3, foul: 3, across: 2, attaint: 2, miss: 1 };
@@ -289,7 +291,7 @@ function flushCall() {
 // ---- notices wait their turn, and wait out the charge and the replay: each stays up for its own time (seconds), the next follows.
 const toastQ = []; let toastBusy = false, toastCur = null, toastTimer = 0;
 const toastOk = () => !M || !C || S.mode === 'ready' || S.mode === 'intro' || (S.mode === 'after' && (C.verdict || C.carded));
-function toast(title, text, secs = 7, sound = false, seal = false) { toastQ.push([title, text, secs, sound, seal]); pumpToast(); }
+function toast(title, text, secs = 7, sound = false, seal = false) { if (touchMode && !seal && !G.auto) return; toastQ.push([title, text, secs, sound, seal]); pumpToast(); }
 function showToast() {
   const t = toastQ.shift(); toastCur = t; toastBusy = true;
   const el = $('toast'); el.querySelector('b').textContent = t[0]; el.querySelector('span').textContent = t[1];
@@ -372,6 +374,7 @@ function pickLine(key, pool = HERALD[key]) {
 }
 /** The herald speaks. o: extra placeholder values in o.vars; any voice.line option (tier, free, ttl, ...) overrides HMETA. */
 function herald(key, delay = 0, o = {}) {
+  if (quietPhone(o)) return false;
   if (!M || (!M.circuit && !(M.mode.own && (o.text || key === 'win' || key === 'loss' || key === 'draw'))) || profile.herald === false || !HERALD || !(HERALD[key] || o.pool || o.text)) return false;      // (the rules-only modes are exhibition: they speak their own result calls)
   const pk = o.text ? { raw: o.text, done() {} } : pickLine(key, o.pool || HERALD[key]); if (!pk) return false;      // o.text: a line already assembled (the combined result); o.pool: a pool picked by the caller (his remark)
   const vars = Object.assign({ you: profile.name, him: M.od.short, himFull: M.od.name.replace(/, ".*"/, ''), venue: M.V.name, city: M.V.city, year: M.V.year, yourScore: M.score[0], hisScore: M.score[1],
@@ -511,7 +514,7 @@ function react(kind, by = 0, line = true) {
   M.fav.commons = clamp(M.fav.commons + by * Rk.c, -1, 1); M.fav.court = clamp(M.fav.court + by * Rk.k, -1, 1);
   M.favour = (M.fav.commons + M.fav.court) / 2;
   if (Rk.ex > 0.5 && player) M.agit = clamp(M.agit + (1 - player.horseDef.nerve) * 0.35 * Rk.ex, 0, 1);
-  if (line && !M.practice) { const l = crowdLine(kind); if (l) say(l[1], l[0], 4, { cat: 'crowd' }); }      // ambient: dropped during the charge and the strike
+  if (line && !M.practice && (!touchMode || Rk.ex >= 0.75)) { const l = crowdLine(kind); if (l) say(l[1], l[0], 4, { cat: 'crowd' }); }      // ambient: dropped during the charge and the strike
   if (!M.ladyFavour && M.fav.court > 0.6 && by > 0 && !M.practice) {
     M.ladyFavour = true; M.focus = 1; player.ribbon.visible = true; M.ladyPending = true;       // told at the next verdict (see betweenColour)
   }
@@ -645,6 +648,7 @@ function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, cours
   else { ceremony.setup(V); life.setup(); player.visorUp = false; introLines(); }
   flagmen.setup(V, practice); judges.setup(V, practice); judges.setVisible(false);      // (the judges' stand shows from the first course: the intro cameras run through its place)
   updateHud(true);
+  if (touchMode && !practice && !G.auto && !(bridge && bridge.bout > 1)) skipIntro();      // phones: no intro speeches, straight to the marks
   if (bridge && bridge.bout > 1) {      // the next challenger: the short form of the intro (the herald names him, then straight to the marks)
     skipIntro();
     if (profile.herald !== false) voice.later(0.8, () => say(`Bout ${bridge.bout} of ${bridge.n}. The next challenger is ${hailName(od)}, of ${od.land}.`, ANNOUNCER.label, 3, { phases: 'ready', ttl: 6, speak: true, speaker: speakerOf.hugh, voice: 'hugh' }));
@@ -686,7 +690,7 @@ function beginCourse(first = false) {
   $('banner').classList.add('hidden'); $('hud').classList.remove('hidden'); $('card').classList.add('hidden');
   if (first) $('verdict').classList.add('hidden');
   const extra = M.course > M.courses;
-  if (first && !M.practice && !G.auto) startHelmBeat();      // the helm is fitted before the lances go up
+  if (first && !M.practice && !G.auto && !touchMode) startHelmBeat();      // the helm is fitted before the lances go up
   // now and then the squire mutters where a bold knight might look (until he has done it once; at most a few times ever)
   if (!first && !M.practice && !M.hintG && M.course >= 2 && !(profile.stats.ladySeen || []).length && (profile.stats.hintG || 0) < 3 && Math.random() < 0.18) {
     M.hintG = true;
