@@ -3,7 +3,7 @@ import { buildWorld, LANE_X, START_Z, LIST_HALF } from './world.js';
 import { Jouster, LANCE_REACH, preloadHorse } from './jouster.js';
 import { FX } from './fx.js';
 import { clamp, lerp, damp, smoothstep, wobble, drawCrest, TAU } from './util.js';
-import { HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
+import { HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, modeKit, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
 import { initMenus, purseText, rankBar } from './menus.js';
 import { reckon, settle } from './economy.js';
 import { createPreviews } from './previews.js';
@@ -632,9 +632,10 @@ function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, cours
   lateMen = {}; lateRolled = false; const welcome = (man('pursuivant') ? man('pursuivant').welcome : 0) + crew('welcome');
   M = { V, vIdx, od, circuit, practice, mode, PT, courses: mode.fixedCourses ?? (mode.noExtra && !mode.pickCourses ? 4 : (!practice && courses) || COURSES_PER_MATCH), bridge: bridge || null, course: 0, score: [0, 0], marks: [[], []], favour: V.home * 0.8, fav: { commons: V.home + welcome, court: V.home * 0.6 + welcome }, stamina: 1,
     agit: 0.15 + (1 - player.horseDef.nerve) * 0.3, focus: 1, fouls: 0, breaks: [0, 0], result: null, hp: { horse: 1, body: 1 }, bodyS: { p: { arm: 0, wind: 0 }, o: { arm: 0, wind: 0 } }, taught: {}, lesson: practice ? Math.min(profile.lesson || 0, LESSONS.length - 1) : -1,
-    sights: [0, 0], maxDef: 0, tilts: 0, usedFacts: new Set(), ladyPending: false, teachPick: null,
+    kit: modeKit(practice ? null : mode), shyN: [0, 0], shieldOff: [0, 0], sights: [0, 0], maxDef: 0, tilts: 0, usedFacts: new Set(), ladyPending: false, teachPick: null,
     stats: [0, 1].map(() => ({ broken: 0, attaint: 0, helm: 0, miss: 0, top: 0, best: 0 })), tech: { sight: 0, lance: 0, horse: 0, will: 0, n: 0 } };
   if (bridge && bridge.keep) { const k = bridge.keep; M.stamina = k.stamina; M.hp.horse = k.horse; M.hp.body = k.body; M.agit = k.agit; M.focus = Math.min(k.focus, k.body); M.fav = Object.assign({}, k.fav); M.favour = k.favour; if (k.bodyS) Object.assign(M.bodyS.p, k.bodyS); }      // the bridge: nothing is mended between bouts
+  if (M.kit.shieldTall > 1) { player.tallShield(M.kit.shieldTall); if (!practice) opp.tallShield(M.kit.shieldTall); }      // the Renntartsche: the same tall shield for both
   M.retUsed = new Set(); field.setup(profile.retinue, profile.arms, practice, practice ? null : { name: od.short, arms: od.arms });
   $('nameP').textContent = profile.name; $('nameO').textContent = od.name.replace(/, ".*"/, '');
   drawCrest($('crestP'), profile.arms); drawCrest($('crestO'), od.arms);
@@ -673,7 +674,8 @@ function beginCourse(first = false) {
       bias: new THREE.Vector2((Math.random() - 0.5), (Math.random() - 0.5)), seed: Math.random() * 50, brace: Math.random() < lerp(0.25, 0.9, od.skill), go: 0.25 + Math.random() * 0.35,
       guard: Math.random() < lerp(0.08, 0.5, od.skill), rattled: 1, retarget: false, knock: new THREE.Vector2() },
   };
-  { const b = profile.bond, id = profile.horse, before = bondLevel(b[id]); b[id] = (b[id] || 0) + 1; saveProfile(); M.bondUp = bondLevel(b[id]) > before; }
+  C.rec.n = M.course; (M.recs || (M.recs = [])).push(C.rec);      // every course's recording is kept for the match (the pause menu's Replays)
+  { const b = profile.bond, id = profile.horse, before =bondLevel(b[id]); b[id] = (b[id] || 0) + 1; saveProfile(); M.bondUp = bondLevel(b[id]) > before; }
   flagmen.raise(); judges.drop();      // flags up for this course; the judges' flags are down
   if (first) { player.setPose(-START_Z, 1); if (M.practice) opp.setSide(1); else opp.setPose(START_Z, -1); }
   else { player.fresh(); opp.fresh(); if (M.practice) opp.setSide(dirP()); }
@@ -949,12 +951,13 @@ function rideBack(j, T, dt) {
  *  out from the tilt, swings round at a walk (radius set by the speed, so it is never a perfect ellipse) and is steered onto the mark; the last few centimetres are blended. */
 function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 /** Walking speed at which the turning circle has radius R (turnRate is monotone enough over this range for a bisection). */
-function speedForRadius(R) { let lo = 1.2, hi = 4.5; for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; if (m / turnRate(m) < R) lo = m; else hi = m; } return (lo + hi) / 2; }
+const RIDE_TURN = 1.35;      // the scripted ride-out wheels this much faster than the stick would (a horse turns on its haunches when it is brought round, and the course should not wait on it)
+function speedForRadius(R) { let lo = 1.2, hi = 4.5; for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; if (m / (RIDE_TURN * turnRate(m)) < R) lo = m; else hi = m; } return (lo + hi) / 2; }
 function rideInit(j, T) {
   const d = j.dir, r = mulberry((Math.random() * 4294967296) >>> 0);
   T.d = d; T.base = d > 0 ? 0 : Math.PI; T.ph = wrapA(j.root.rotation.y - T.base); T.sv = 0; T.yr = 0; T.rz = j.root.rotation.z; T.t = 0; T.tt = 0; T.sub = 'run'; T.init = true;
   T.wOut = Math.min(d * j.root.position.x, -(2.9 + r() * 1.5));      // how far out from the tilt he drifts (local frame: w = d*x, u = d*z, tilt at w = 0)
-  T.uTurn = 39.6 + r() * 1.6; T.rK = 0.9 + r() * 0.25; T.vWalk = 1.7 + r() * 0.5; T.drift = 0.8 + r() * 0.5;
+  T.uTurn = 35.4 + r() * 1.6; T.rK = 0.9 + r() * 0.25; T.vWalk = 1.7 + r() * 0.5; T.drift = 0.8 + r() * 0.5;
   j.manualPos = true;
 }
 function rideOut(j, T, dt) {
@@ -966,11 +969,11 @@ function rideOut(j, T, dt) {
     const d = T.d, r = j.root, mw = j.lane, mu = START_Z; T.t += dt;
     let w = d * r.position.x, u = d * r.position.z, v = j.speed, svT = 0, vT, acc = 2.6, dec = 2.8;
     if (T.sub === 'run' && (u >= T.uTurn || T.t > 14)) {      // wheel round: the speed chosen so the turning circle just reaches the far side of the tilt
-      T.sub = 'turn'; const Rn = Math.max(1.4, (mw - w) / 2 * T.rK * 0.95); T.vTurn = clamp(speedForRadius(Rn), 1.6, 3.4);
+      T.sub = 'turn'; const Rn = Math.max(1.4, (mw - w) / 2 * T.rK * 0.95); T.vTurn = clamp(speedForRadius(Rn), 1.6, 3.8);
     }
     if (T.sub === 'run') {
-      vT = u < 25 ? 9 : u < T.uTurn - 5 ? 6 : lerp(6, T.vWalk + 0.7, smoothstep(T.uTurn - 5, T.uTurn - 0.5, u));
-      dec = 3;
+      vT = u < 24 ? 11.5 : lerp(9.5, T.vWalk + 1.4, smoothstep(T.uTurn - 11, T.uTurn - 1, u));      // on at a canter, then eased down over the last dozen metres to the pace of the turn
+      dec = 5.5; acc = 4.2;
       // drift out from the tilt, slowly, once the pass is behind him
       const he = clamp(-(w - T.wOut) * 0.3 * smoothstep(3, 18, u), -0.24, 0.1) * T.drift - T.ph;
       svT = clamp(he * 1.6, -1, 1);
@@ -985,7 +988,7 @@ function rideOut(j, T, dt) {
         // arrival: the tolerance grows with the time spent in the turn, and after 7 s (or if he has walked past the mark) he is blended on regardless, so it always ends
         const grow = Math.max(0, T.tT - 3.5);
         if (du < 0.6 + grow * 0.6 && v < 1.0 + grow * 0.5 && Math.abs(w - mw) < 0.45 + grow * 0.5 && Math.abs(wrapA(T.ph - Math.PI)) < 0.2 + grow * 0.25 || T.tT > 7 || du < -0.8 || T.t > 20) {
-          T.sub = 'blend'; T.tt = 0; T.b0 = [r.position.x, r.position.z, T.ph, r.rotation.z]; T.bd = clamp(0.5 + 0.4 * Math.hypot(r.position.x - d * mw, r.position.z - d * mu), 0.5, 2.2);
+          T.sub = 'blend'; T.tt = 0; T.b0 = [r.position.x, r.position.z, T.ph, r.rotation.z]; T.bd = clamp(0.4 + 0.3 * Math.hypot(r.position.x - d * mw, r.position.z - d * mu), 0.5, 2.2); rideService(j, T);
         }
       }
       if (u > 46.4 && svT < 0.4) svT = 0.4;
@@ -1001,7 +1004,7 @@ function rideOut(j, T, dt) {
     // gait: speed follows the target with ease in, ease out
     v = v < vT ? Math.min(vT, v + acc * dt) : Math.max(vT, v - dec * dt); j.speed = v;
     // steering: the stick value is damped, the yaw rate follows it with its own lag (no sudden angular velocity)
-    T.sv = damp(T.sv, svT, 4.5, dt); const yrT = T.sv * turnRate(v); T.yr = damp(T.yr, yrT, 7, dt); T.ph += T.yr * dt;
+    T.sv = damp(T.sv, svT, 4.5, dt); const yrT = T.sv * turnRate(v) * RIDE_TURN; T.yr = damp(T.yr, yrT, 7, dt); T.ph += T.yr * dt;
     w += Math.sin(T.ph) * v * dt; u += Math.cos(T.ph) * v * dt;
     if (Math.abs(w) > 6.6) { w = Math.sign(w) * 6.6; }
     r.position.x = d * w; r.position.z = d * u; r.rotation.y = T.base + T.ph;
@@ -1011,8 +1014,13 @@ function rideOut(j, T, dt) {
 function rideArrive(j, T) {
   const d = T.d;
   j.face(-d); j.root.position.set(-j.dir * j.lane, 0, d * START_Z); j.manualPos = false; j.speed = 0; T.stage = 'done';
+  rideService(j, T);
+}
+/** The squire's service: begun as the rider comes on to his mark (while he settles the last few metres), so that the next course need not wait for it.
+ *  Broken: he throws the stump down beside his horse; his squire walks up, hands a fresh lance (the swap happens as it reaches his hand), then fetches the stump. Whole: he keeps it. */
+function rideService(j, T) {
+  if (T.served) return; T.served = true;
   if (M.result) return;      // the match ended under the ride: just stand there
-  // broken: he throws the stump down beside his horse; his squire walks up, hands a fresh lance (the swap happens as it reaches his hand), then fetches the stump. Whole: he keeps it.
   const broken = j.lanceBroken, isP = j === player, who = isP ? 'you' : 'opp';
   const swap = () => { j.lance.visible = true; if (j.lanceBroken) { j._mendLance(); j.lanceLower = 0; if (isP) { audio.ui('click'); if (!C.retSpoke) say('A fresh lance, my lord.', 'YOUR SQUIRE', 4, { cat: 'squire' }); } } };
   if (isP) rollLate();
@@ -1053,8 +1061,13 @@ function updateRide(dt, dtReal) {
   }
   // lateral: steer + shying
   if (live) {
-    const steer = (keys.left ? -1 : 0) + (keys.right ? 1 : 0);          // left = toward the tilt
-    const shy = Math.max(0, M.agit - 0.45) * 1.6 * (0.4 + wobble(S.time * 0.9, 3) * 0.6);
+    const steer = ((keys.left ? -1 : 0) + (keys.right ? 1 : 0)) * (M.kit.blind ? PHYS.kit.blindSteer : 1);          // left = toward the tilt; a blinkered horse keeps his line and is slow to be turned
+    let shy = M.kit.blind ? 0 : Math.max(0, M.agit - 0.45) * 1.6 * (0.4 + wobble(S.time * 0.9, 3) * 0.6);      // (a blinkered horse cannot shy)
+    // open eyes: a nervous horse may shy from the oncoming lance in the last strides, once, losing a little pace and veering away
+    if (M.kit.shy && S.mode === 'charge' && !C.shyRolled && gap < PHYS.kit.shyGap && gap > 4) {
+      C.shyRolled = true;
+      if (Math.random() < M.kit.shy * clamp((M.agit - PHYS.kit.shyAt) * PHYS.kit.shyGain, 0, PHYS.kit.shyMax) * (1.3 - player.horseDef.nerve)) { C.latV += PHYS.kit.shyKick; player.speed *= PHYS.kit.shyPace; M.shyN[0]++; callout('YOUR HORSE SHIES', 'bad'); }
+    }
     C.latV += (steer * 3.2 + shy) * dt * clamp(player.speed / 5, 0.15, 1);
     C.latV *= Math.exp(-2.4 * dt);
     C.lat += C.latV * dt;
@@ -1079,7 +1092,7 @@ function updateRide(dt, dtReal) {
     if (C.couch > 0.5) C.flags.couch = true;
     C.setT = C.couch >= 0.999 ? C.setT + dt : 0;
     if (C.setT > 0.25) C.flags.set = true;
-    C.fatigue = clamp(C.fatigue + (C.couch > 0.6 ? (C.setT > 2.4 * (sk('arm') ? SKILLS.arm.hold : 1) / LANCES[profile.lance || 'standard'].fatigue ? 0.3 * LANCES[profile.lance || 'standard'].fatigue * (1 + PHYS.body.armBuild * M.bodyS.p.arm) : 0) : -0.4) * dt, 0, 1);
+    C.fatigue = clamp(C.fatigue + (C.couch > 0.6 ? (C.setT > 2.4 * (sk('arm') ? SKILLS.arm.hold : 1) / lanceOf(true).fatigue ? 0.3 * lanceOf(true).fatigue * (M.kit.queue ? PHYS.kit.queueFatigue : 1) * (1 + PHYS.body.armBuild * M.bodyS.p.arm) : 0) : -0.4) * dt, 0, 1);
     player.lanceLower = C.couch;
     C.braceCd -= dt; C.braceT -= dt; C.braceAge += dt; C.guardAge += dt;
     player.brace = damp(player.brace, C.braceT > 0 ? 1 : 0, 14, dt);
@@ -1136,6 +1149,10 @@ function updateRide(dt, dtReal) {
     if (gap < 36) opp.lanceLower = clamp(opp.lanceLower + dt / 0.95, 0, 1);
     opp.brace = damp(opp.brace, O.brace && gap < 5 ? 1 : 0, 10, dt);
     opp.guard = damp(opp.guard, O.guard && gap < 24 ? 1 : 0, 5 * (1 - PHYS.damage.guardSlow * opp.dmg.pauldronL), dt);
+    if (M.kit.shy && !M.practice && !O.shyRolled && gap < PHYS.kit.shyGap && gap > 4) {      // his horse too, if his eyes are open
+      O.shyRolled = true;
+      if (Math.random() < M.kit.shy * clamp((opp.agit - PHYS.kit.shyAt) * PHYS.kit.shyGain, 0, PHYS.kit.shyMax) * (1.3 - (HORSES[od.horse].nerve ?? 0.6))) { opp.speed *= PHYS.kit.shyPace; O.knock.x += (Math.random() < 0.5 ? -1 : 1) * 0.3; M.shyN[1]++; }
+    }
     if (!O.retarget && gap < 14) { O.retarget = true; if (player.guard > 0.5 && O.zone === 'helm') O.zone = 'body'; else if (player.guard > 0.5 && O.zone === 'shield' && Math.random() < od.skill) O.zone = 'body'; }
   } else if (after && (!M.result || C.turn.o.init && C.turn.o.stage === 'run') && !M.practice) { rideOut(opp, C.turn.o, dt); opp.brace = damp(opp.brace, 0, 6, dt); opp.guard = damp(opp.guard, 0, 5, dt); opp.lanceLower = damp(opp.lanceLower, 0, 11, dt); }
   else {
@@ -1152,7 +1169,7 @@ function updateRide(dt, dtReal) {
   // ---------------- aim both lances from the fresh positions, then re-point them
   const gap2 = gapNow();
   if (live && gap2 > 0.5) {
-    aimMouse.x = damp(aimMouse.x, mouse.x, 16 * Math.sqrt(PHYS.lanceArm.refKg / PHYS.lance[profile.lance || 'standard'].kg), dt); aimMouse.y = damp(aimMouse.y, mouse.y, 16 * Math.sqrt(PHYS.lanceArm.refKg / PHYS.lance[profile.lance || 'standard'].kg), dt);
+    aimMouse.x = damp(aimMouse.x, mouse.x, 16 * Math.sqrt(PHYS.lanceArm.refKg / lanceOf(true).kg), dt); aimMouse.y = damp(aimMouse.y, mouse.y, 16 * Math.sqrt(PHYS.lanceArm.refKg / lanceOf(true).kg), dt);
     ray.setFromCamera(G.auto ? mouse : aimMouse, camera);
     opp.zoneWorld('body', _zc);
     const o = ray.ray.origin, d = ray.ray.direction;
@@ -1166,7 +1183,7 @@ function updateRide(dt, dtReal) {
     if (dt > 0) { const y = player.bob || 0, w = TAU * (0.78 + 0.12 * player.speed); bobHist.y = damp(bobHist.y, y, 1.5, dt); bobHist.a = -w * w * (y - bobHist.y) * clamp(player.speed / 3, 0, 1); }
     // the arm state is the point's offset from where you mean it to be: the target sweeping past is followed, the bounce is not
     if (!C.armLive) { C.armLive = true; arm.reset(0, 0); }
-    arm.step(dt, 0, 0, { set: clamp(C.setT / 0.45, 0, 1) * (C.couch >= 0.999 ? 1 : 0), lanceKg: PHYS.lance[profile.lance || 'standard'].kg, fatigue: clamp(C.fatigue + PHYS.body.armFatigue * M.bodyS.p.arm, 0, 1), agit: clamp(M.agit + PHYS.body.windAgit * M.bodyS.p.wind, 0, 1),
+    arm.step(dt, 0, 0, { set: Math.min(clamp(C.setT / 0.45, 0, 1) * (C.couch >= 0.999 ? 1 : 0), M.kit.rest), lanceKg: lanceOf(true).kg, fatigue: clamp(C.fatigue + PHYS.body.armFatigue * M.bodyS.p.arm, 0, 1), agit: clamp(M.agit + PHYS.body.windAgit * M.bodyS.p.wind, 0, 1),
       aVert: bobHist.a, aLat: -C.latV * 2.4, absorb: clamp(0.25 + 0.45 * C.collected + 0.3 * (H.steady - 0.5), 0, 0.85), focus: S.focusOn, scale: armScale(), t: S.time });
     C.sway = arm.err;
     const yaw = cmdYaw + arm.yaw, pitch = cmdPitch + arm.pitch;
@@ -1175,7 +1192,7 @@ function updateRide(dt, dtReal) {
   }
   if (S.mode === 'charge' && !C.oL.done && gap2 > 0.5) {
     player.zoneWorld(O.zone, _a);
-    const amp = lerp(0.5, 0.11, clamp(od.skill + DIFFICULTY[profile.difficulty ?? 1].ai, 0, 1)) * (1 + 0.5 * clamp(M.fav.commons, 0, 1)) * O.rattled * (1 + PHYS.body.oppArm * M.bodyS.o.arm + PHYS.body.oppWind * M.bodyS.o.wind);
+    const amp = lerp(0.5, 0.11, clamp(od.skill + DIFFICULTY[profile.difficulty ?? 1].ai, 0, 1)) * (1 + 0.5 * clamp(M.fav.commons, 0, 1)) * O.rattled * (1 + PHYS.body.oppArm * M.bodyS.o.arm + PHYS.body.oppWind * M.bodyS.o.wind) * (1 + PHYS.kit.wander * (1 - M.kit.rest));      // no lance rest: his point wanders too
     _a.x += amp * (wobble(S.time * 1.7, O.seed) * 0.7 + O.bias.x * 0.9) + O.knock.x;
     _a.y += amp * (wobble(S.time * 2.1, O.seed + 9) * 0.7 + O.bias.y * 0.9) + O.knock.y;
     O.knock.multiplyScalar(Math.exp(-5 * dt));
@@ -1201,7 +1218,7 @@ function updateRide(dt, dtReal) {
   } else if (after) aftermath(dtReal);
 
   // keep the last few seconds for instant replay
-  if ((S.mode === 'charge' || (after && C.afterT < 2.6)) && !C.replayed) { C.rec.f.push({ t: C.t, p: player.snapshot(), o: opp.snapshot() }); if (C.rec.f.length > 520) C.rec.f.shift(); }
+  if ((S.mode === 'charge' || (after && C.afterT < 2.6)) && !C.replayed && !R) { C.rec.f.push({ t: C.t, p: player.snapshot(), o: opp.snapshot() }); if (C.rec.f.length > 520) C.rec.f.shift(); }
 
   if (C.cut) { C.cut.t -= dtReal; if (C.cut.ots > 0) C.cut.ots -= dtReal; if (C.cut.t <= 0) { C.cut = null; $('royalCap').classList.add('hidden'); if (C.verdict && !M.result && S.mode !== 'charge') $('verdict').classList.remove('hidden'); } }
   // The quintain's sandbag is a real thing swinging round on its arm: be gone before it comes about, or it catches you in the back.
@@ -1223,26 +1240,29 @@ function updateRide(dt, dtReal) {
 
 /** What happens once both lances are spent: replay, the verdict, the royal gallery, then wheel about for the next course. */
 function aftermath(dtReal) {
-  C.afterT += dtReal;
+  C.afterT += dtReal; recMeta();
+  if (C.capT > 0) { C.capT -= dtReal; if (C.capT <= 0) $('royalCap').classList.add('hidden'); }      // the judges' caption shown over a replay
+  if (R) return;      // a replay is playing: the ride-out turn goes on underneath (updateReplay), the verdict waits for the cut back
   if (C.countDue) { if (C.raised || C.afterT > 2.5) { C.countDue = false; settleCount(); } else return; }      // Judged Tilt: the card waits a moment for the lance to come up
   const anyHit = (C.pL.res && C.pL.res.zone !== 'miss' && C.pL.res.zone !== 'none') || (C.oL.res && C.oL.res.zone !== 'miss' && C.oL.res.zone !== 'none');
-  const wait = C.cine ? 2.6 : M.practice ? 2.3 : 1.25;      // at the quintain, wait for the bag to come about before the replay
+  const wait = C.cine ? 2.2 : M.practice ? 2.3 : 1.25;      // at the quintain, wait for the bag to come about before the replay
+  const replay = anyHit && G.replays !== false && C.rec.f.length > 20;
   if (!C.replayed && C.afterT > wait) {
     if (!M.practice) {
       if (!C.montDone) { C.montDone = true; startMontage(); }      // a big moment gets the reaction montage first
       if (C.mont) { stepMontage(dtReal); return; }
-      if (!C.judged) { C.judged = true; raiseJudges(); }
+      if (!C.judged) { C.judged = true; raiseJudges(replay); }      // with a replay the flags go up under it (their caption stays on screen); without, the camera visits the table
       if (C.cut && C.cut.kind === 'judges') return;      // the camera stays on the judges while the flags go up
     }
-    if (anyHit && G.replays !== false && C.rec.f.length > 20) { startReplay(); return; }
-    C.replayed = true;
+    if (replay) { startReplay(); return; }
+    trimRec(C.rec); C.replayed = true;
   }
   if (!C.replayed) return;
   if (!M.practice && judges.busy()) return;      // the flags are up; Hugh's call follows them
   if (M.result) { if (!C.carded) { C.carded = true; showCard(); } return; }
   if (!C.verdict) { C.verdict = true; C.verdictT = 0; showVerdict(); betweenColour(royalReaction()); }
   C.verdictT += dtReal;
-  if (C.turn.p.stage === 'done' && (C.turn.o.stage === 'done' || M.practice) && C.verdictT > 1.6 && !field.serving()) beginCourse(false);
+  if (C.turn.p.stage === 'done' && (C.turn.o.stage === 'done' || M.practice) && C.verdictT > (C.seenReplay ? 0.8 : 1.6) && !field.serving()) beginCourse(false);
 }
 
 // ------------------------------------------------------------------ the beats around a course: the helm fitting, the marshal's hold, the reaction montage, the judges' flags
@@ -1324,7 +1344,7 @@ function beatSkip(dtReal) {
 /** The judges raise their flags (src/judges.js has the system), then Hugh's combined call follows. A camera cut to the table runs 3.2 s (we are not in a replay here),
  *  long enough to read the caption (Danilo, 15 Nov: at 1.2 s he never saw what it said). */
 const FLAG_HOLD = 3.4, FLAG_CUT = 3.2;
-function raiseJudges() {
+function raiseJudges(overReplay) {
   if (!judges.has()) { releaseCall(C); return; }
   const p = C.pL.res, o = C.oL.res, cy = strokeCat(p), ch = strokeCat(o);
   const lv = (r, c) => !r || r.zone === 'none' || c === 'foul' ? 'down' : c === 'unhorse' || c === 'helm' || c.startsWith('break') ? 'high' : c === 'miss' ? 'wave' : 'level';
@@ -1332,7 +1352,8 @@ function raiseJudges() {
   const lab = (c, mine) => ({ unhorse: mine ? 'UNHORSED HIM' : 'UNHORSED YOU', helm: 'LANCE BROKEN ON THE HELM', breakShield: 'LANCE BROKEN', breakBody: 'LANCE BROKEN', attaint: 'A TOUCH', glance: 'A TOUCH', miss: 'NO TOUCH', foul: 'FOUL' }[c] || '');
   const Cc = C;
   judges.show({ you: lv(p, cy), him: lv(o, ch), mid }, FLAG_HOLD, () => releaseCall(Cc));
-  C.cut = { kind: 'judges', t: FLAG_CUT }; $('verdict').classList.add('hidden');
+  if (overReplay) C.capT = FLAG_HOLD; else C.cut = { kind: 'judges', t: FLAG_CUT };
+  $('verdict').classList.add('hidden');
   $('royalCap').textContent = `THE JUDGES · YOU: ${lab(cy, true)} · HIM: ${lab(ch, false)}`; $('royalCap').classList.remove('hidden');
 }
 /** The flags are down: Hugh gives his combined result call, and the replay's coaching line may follow it. */
@@ -1524,10 +1545,16 @@ function techSnapshot(zone, cent) {
   return { sight, lance, horse, will, q: 0.4 * lance + 0.35 * horse + 0.25 * will, perfect, braced, tips, speedFrac };
 }
 
-function fxSplinters(a, b, vel, n) { fx.splinters(a, b, vel, n); if (C && S.mode !== 'replay') C.rec.ev.push({ t: C.t, k: 'spl', a: a.clone(), b: b.clone(), v: vel.clone(), n }); }
-function fxShaft(a, b, vel) { fx.shaft(a, b, vel); if (C && S.mode !== 'replay') C.rec.ev.push({ t: C.t, k: 'sh', a: a.clone(), b: b.clone(), v: vel.clone() }); }
-function fxSparks(p, n, s) { fx.sparks(p, n, s); if (C && S.mode !== 'replay') C.rec.ev.push({ t: C.t, k: 'spk', p: p.clone(), n, s }); }
+function fxSplinters(a, b, vel, n) { fx.splinters(a, b, vel, n); if (C && !R) C.rec.ev.push({ t: C.t, k: 'spl', a: a.clone(), b: b.clone(), v: vel.clone(), n }); }
+function fxShaft(a, b, vel) { fx.shaft(a, b, vel); if (C && !R) C.rec.ev.push({ t: C.t, k: 'sh', a: a.clone(), b: b.clone(), v: vel.clone() }); }
+function fxSparks(p, n, s) { fx.sparks(p, n, s); if (C && !R) C.rec.ev.push({ t: C.t, k: 'spk', p: p.clone(), n, s }); }
 
+/** The lance a rider carries this match: the type may fix a heavier one (the Rennen lance), which also tires the arm faster. */
+function lanceOf(isP) {
+  const id = isP ? (profile.lance || 'standard') : 'standard', b = PHYS.lance[id], kg = Math.max(b.kg, M ? M.kit.lanceKgMin : 0);
+  return { kg, breakJ: b.breakJ, fatigue: LANCES[id].fatigue * kg / b.kg };
+}
+function fxPiece(p, q, sx, sy, sz, vel) { fx.piece(p, q, sx, sy, sz, vel); if (C && S.mode !== 'replay') C.rec.ev.push({ t: C.t, k: 'pc', p: p.clone(), q: q.clone(), sx, sy, sz, v: vel.clone() }); }
 function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   st.done = true;
   if (C.hitT === null) C.hitT = C.t;
@@ -1555,6 +1582,7 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
       const f = clamp(Math.max(sh.lead, C.t - sh.t) / 0.03, 0, 1), k = f * clamp(sh.unhorse ? 1 : sh.power, 0, 1);
       if (k > 0.05) { q *= 1 - 0.55 * k; cent *= 1 - 0.5 * k; st.spoiled = k; if (k > 0.3) forceBreak = false; if (isP && C.tech) C.tech.spoiled = k; }
     } }
+  q = Math.min(q, M.kit.rest);      // no lance rest (Castile 1330): the rider cannot lock himself behind the lance, so less of him goes into the blow
   // ---- the angle of the stroke: a point that meets the surface too obliquely skids instead of biting
   let square = 1, glanced = false;
   if (geo && zone !== 'horse' && !M.practice) {
@@ -1566,7 +1594,7 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
       cosT = Math.min(1, Math.abs(_s1.dot(geo.dir)) + 0.12) * (geo.m > 0.93 ? 0.4 : 1);
     }
     square = cosT;
-    const limit = GL[M.mode.sharp ? 'sharp' : 'coronel'] + (GL[zone] || 0) - (zone === 'helm' && Bj.armourDef.helmDef ? Bj.armourDef.helmDef.deflect || 0 : 0) + (zone === 'shield' && Bj.dmg ? PHYS.damage.shieldGlance * Bj.dmg.shield : 0);
+    const limit = GL[M.mode.sharp ? 'sharp' : 'coronel'] + (GL[zone] || 0) + (zone === 'shield' ? M.kit.shieldCatch : 0) - (zone === 'helm' && Bj.armourDef.helmDef ? Bj.armourDef.helmDef.deflect || 0 : 0) + (zone === 'shield' && Bj.dmg ? PHYS.damage.shieldGlance * Bj.dmg.shield : 0);
     if (!forceBreak && Math.acos(clamp(cosT, 0, 1)) * 57.2958 > limit) {
       glanced = true;
       // where the point goes: outward along the surface, the way it was already off centre, and on with the lance
@@ -1582,11 +1610,13 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
     }
   }
   if (zone === 'helm' && cent > 0.55 && !glanced && !M.practice) M.sights[isP ? 0 : 1]++;
-  const lanceS = PHYS.lance[isP ? (profile.lance || 'standard') : 'standard'];
+  const lanceS = lanceOf(isP);
+  const legSoft = M.kit.sack && !!geo && !st.skid && /^thigh/.test(geo.part || '');      // the Stechsack: a stroke low on the thigh is soft and scores nothing
+  if (legSoft) forceBreak = false;
   const defBraced = isP ? Bj.brace > 0.5 : C.braceT > 0;
   const hit = impact(closing, { horseKg: PHYS.horseKg[Aj.horseDef.id] || 500, armourKg: (Aj.armourDef.kg ?? PHYS.armourKg[Aj.armourDef.id] ?? 28), lanceKg: lanceS.kg, breakJ: lanceS.breakJ * M.mode.lance, coupling: q, boost },
     M.practice ? { quintain: true } : { horseKg: PHYS.horseKg[Bj.horseDef.id] || 500, armourKg: (Bj.armourDef.kg ?? PHYS.armourKg[Bj.armourDef.id] ?? 28), braced: defBraced, seat: isP ? M.od.seat : (sk('seat') ? SKILLS.seat.seat : 0.6), protection: Bj.armourDef.protection },
-    zone, cent, { turned: st.turned, forceBreak, bite: M.mode.bite, hold: M.mode.hold, sharp: M.mode.sharp, square, glance: glanced, pass: zone === 'shield' && Bj.dmg ? 1 + PHYS.damage.shieldPass * Bj.dmg.shield : 1 });
+    zone, cent, { turned: st.turned, forceBreak, bite: M.mode.bite, hold: M.mode.hold * M.kit.cantle, lock: M.kit.lock, sharp: M.mode.sharp, sharpJ: M.kit.sharpJ * PHYS.refJ, springJ: M.kit.spring * PHYS.refJ, soft: legSoft, square, glance: glanced, pass: zone === 'shield' && Bj.dmg ? 1 + PHYS.damage.shieldPass * Bj.dmg.shield : 1 });
   const power = hit.power;
   Aj.tipWorld(_tip);
   const velA = new THREE.Vector3(0, 0, Aj.dir * Aj.speed);
@@ -1607,17 +1637,22 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   const broke = hit.broke;
   armourBlow(Aj, Bj, zone, st, geo, hit, glanced, isP);
   bodyBlow(Bj, zone, st, hit, glanced, isP);
+  if (hit.sprang && !M.practice) {      // the Renntartsche gives way: it flies off the arm as a piece, and that is the stroke's score
+    Bj.shield.getWorldPosition(_hd); Bj.shield.getWorldQuaternion(_qa);
+    fxPiece(_hd.clone(), _qa.clone(), 0.42, 0.62, 0.03, new THREE.Vector3(0, 0, Aj.dir * Aj.speed)); fxSparks(_hd.clone(), 8, 3);
+    Bj.setShieldGone(true); M.shieldOff[isP ? 1 : 0]++;
+  }
   if (isP && broke) C.flags.broke = true;
   if (!broke && !M.practice) { if (isP) C.kickUp = PHYS.shaft.kick; else opp.lanceLower = Math.min(opp.lanceLower, 1 - PHYS.shaft.kick); }
   const unhorse = hit.unhorse || (broke && G.forceUnhorse === (isP ? 'opp' : 'player'));
   if (!M.practice) C.shock[isP ? 'o' : 'p'] = { t: C.t, power, unhorse, lead: Math.abs(C.lead) / Math.max(closing, 1) };   // lead: seconds until the other point would land
-  Bj.hit(M.practice ? power : clamp(hit.omega * 1.15 * (zone === 'helm' && Bj.visorUp ? 1.5 : 1), 0.4, 7), true, { zone, lat: clamp((off ? off[0] : 0) * 0.4 + (zone === 'shield' ? 0.7 : zone === 'helm' ? 0 : 0.15), -1, 1) });
+  Bj.hit(M.practice ? power : clamp(hit.omega * 1.15 * (zone === 'helm' && Bj.visorUp ? 1.5 : 1), 0.4, 7), true, { headMul: M.kit.bolted ? PHYS.kit.boltedHead : 1, zone, lat: clamp((off ? off[0] : 0) * 0.4 + (zone === 'shield' ? 0.7 : zone === 'helm' ? 0 : 0.15), -1, 1) });
   if (!M.practice) {
     // the horses feel it too: the struck one loses pace by the blow's momentum over his weight, the striker a little by the reaction
     const dv = hit.J / ((PHYS.horseKg[Bj.horseDef.id] || 500) + PHYS.riderKg + (Bj.armourDef.kg ?? 28)) * PHYS.recoil.horse;
     Bj.speed = Math.max(0, Bj.speed - dv); Aj.speed = Math.max(0, Aj.speed - dv * 0.5);
     // and the struck rider's own lance is thrown off its line (which is why the first blow spoils the second)
-    if (isP) C.o.knock.set((Math.random() - 0.5) * 0.26 * power, 0.2 * power); else { arm.vy -= dirP() * 0.6 * PHYS.recoil.arm * power; arm.vp += PHYS.recoil.arm * power; }
+    if (isP) C.o.knock.set((Math.random() - 0.5) * 0.26 * power, 0.2 * power); else { arm.vy -= dirP() * 0.6 * PHYS.recoil.arm * power; arm.vp += PHYS.recoil.arm * power * (1 + PHYS.kit.lockKick * (M.kit.lock - 1)); }      // a pinned torso cannot roll with the blow
   }
   const [hd] = hear(_tip);
   audio.impact(power, zone, hd); fxSparks(_tip.clone(), 10 + (power * 14 | 0), 4 + power * 3);
@@ -1630,7 +1665,9 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   { const MD = M.mode, sinT = Math.sqrt(Math.max(0, 1 - square * square));
     if (broke && MD.nearTip && brokeAt > LANCE_REACH - MD.nearTip - 0.1) { pts = M.PT.attaint; code = 'a'; text = 'broke his lance within a foot of the point: no spear broken, only a touch'; }
     else if (broke && MD.crosswise && sinT > MD.crosswise) { pts = M.PT.attaint; code = 'a'; text = 'broke his lance crosswise, not with the point: it counts for nothing'; }
+    if (hit.sprang && !broke) { pts = M.PT.broken; code = 'a'; text = 'his shield sprang from the arm: the stroke counts'; }
     if (MD.onlyShield && zone !== 'shield') { pts = 0; text += ' (only the shield scores)'; }
+    if (legSoft) { pts = 0; code = 'a'; text = 'struck low on the thigh, on the sack: a soft touch that counts for nothing'; }
   }
   { const st2 = M.stats[isP ? 0 : 1]; if (broke) st2.broken++; else st2.attaint++; if (zone === 'helm') st2.helm++; st2.best = Math.max(st2.best, power); }
   const visorHit = zone === 'helm' && !!Bj.visorUp;      // struck on the helm with the visor raised: the blow goes in under the brow
@@ -1666,8 +1703,10 @@ function bodyBlow(Bj, zone, st, hit, glanced, isP) {
   const K = PHYS.body, A = M.bodyS[isP ? 'p' : 'o'], B = M.bodyS[isP ? 'o' : 'p'], P = clamp(hit.power, 0, 1.6), soft = glanced || st.skid ? 0.4 : 1;
   A.arm = clamp(A.arm + K.armShock * P * (hit.broke ? 0.45 : 1) * soft, 0, 1);
   const w = zone === 'body' ? 1 : zone === 'shield' ? 0.55 : zone === 'helm' ? 0.3 : 0, prot = Bj.armourDef.protection ?? 0.7, dent = Bj.dmg ? Bj.dmg.breast || 0 : 0;
-  B.wind = clamp(B.wind + K.wind * P * w * (1.3 - 0.6 * prot) * (1 + K.dentWind * dent) * (glanced ? 0.5 : 1), 0, 1);
-  B.arm = clamp(B.arm + K.armJolt * P * w, 0, 1);
+  // load transfer: what does not go into leaning and falling goes into the man (a locked saddle holds him up and winds him; a low one lets him go over and spares him)
+  const lk = M.kit.lock - 1, lkW = Math.max(0.2, 1 + PHYS.kit.lockWind * lk), lkA = Math.max(0.2, 1 + PHYS.kit.lockArm * lk);
+  B.wind = clamp(B.wind + K.wind * P * w * (1.3 - 0.6 * prot) * (1 + K.dentWind * dent) * (glanced ? 0.5 : 1) * lkW, 0, 1);
+  B.arm = clamp(B.arm + K.armJolt * P * w * lkA, 0, 1);
 }
 function armourBlow(Aj, Bj, zone, st, geo, hit, glanced, isP) {
   if (!Bj.dmg || M.practice || zone === 'horse') return;
@@ -1877,6 +1916,7 @@ function showCard() {
   const nextOd = B && !final ? KNIGHTS.find(k => k.id === B.queue[B.bout]) : null;
   $('cardTitle').textContent = B ? (final ? (B.held ? 'THE BRIDGE IS HELD' : 'THE BRIDGE IS LOST') : M.result.startsWith('win') ? 'BOUT WON' : M.result === 'draw' ? 'BOUT DRAWN' : 'BOUT LOST')
     : M.void ? 'THE JOUST IS VOID' : { 'win': 'VICTORY', 'win-unhorse': 'VICTORY BY UNHORSING', 'loss': 'DEFEAT', 'loss-unhorse': 'UNHORSED', 'loss-dq': 'DISQUALIFIED', 'win-dq': 'VICTORY — HE IS DISQUALIFIED', 'loss-yield': 'YOU YIELD — TOO BATTERED TO RIDE', 'draw': 'HONOURS EVEN', 'practice': 'YOU ARE READY FOR THE LISTS' }[M.result];
+  $('cardReplays').classList.toggle('hidden', !recList().length);
   $('cardHint').textContent = nextOd ? `The next challenger is ${nextOd.short} · ${touchMode ? 'TAP' : 'SPACE / CLICK'} to meet him` : touchMode ? 'TAP to continue' : 'SPACE / CLICK to continue';
   if (M.how) voice.later(0.4, () => say(`The prize is given for ${M.how}.`, 'THE JUDGES', 1, { ttl: 8 }));
   const base = `${profile.name} ${M.score[0]} — ${M.score[1]} ${M.od.short}`;
@@ -1947,73 +1987,206 @@ function lerpSnap(a, b, k) {
   if (a.dir !== b.dir) return k < 0.5 ? a : b;
   return o;
 }
-function startReplay() {
+function replayGeom() {
+  const f = R.f; let k = f.findIndex(fr => fr.t >= R.tImp); if (k < 0) k = f.length - 1;
+  R.z = (f[k].p.pz + (f[k].o.pz ?? 0)) / 2; R.side = Math.sign(f[k].p.px) || -1; R.pd = f[k].p.dir || 1; if (M.practice) R.z = 0;      // where the lances met, the side of the tilt you ride on, which way you ride
+}
+const ANGLES = ['LOW SIDE', 'CHASE', 'REVERSE', 'CRANE', 'IMPACT', 'FALL'];      // 0-4 are the five angles (V cycles them); 5 is the follow-the-fallen-man camera of an unhorsing replay
+/** The camera passes of the automatic replay (EA FC goal-replay style): one angle for an ordinary course, two for a break, three for a helm break or an unhorsing. Times are relative to the impact. */
+function planPasses() {
+  const f = R.f, p = C.pL.res, o = C.oL.res, real = (r) => !!r && r.broke && !r.foul && r.zone !== 'horse';
+  const un = !!C.cine && !!((p && p.unhorse) || (o && o.unhorse)), helm = (real(p) && p.code === 'h') || (real(o) && o.code === 'h'), brk = real(p) || real(o);
+  const main = [0, 2, 1, 3][M.course % 4];
+  const N = (shot, a, b, prof) => { let t0 = Math.max(f[0].t, R.tImp + a); const t1 = Math.min(f[f.length - 1].t, R.tImp + b); if (t1 - t0 < 0.4) t0 = Math.max(f[0].t, t1 - 0.4); return { shot, t0, t1, prof }; };
+  if (un) { R.fallP = C.cine === player; R.fall = new THREE.Vector3(); R.fdir = C.cine.dir || 1; R.fx0 = Math.sign(C.cine.root.position.x) || 1; return [N(main, -0.7, 0.5, 'n'), N(4, -0.6, 0.6, 'c'), N(5, -0.25, 1.8, 'f')]; }
+  if (helm) return [N(main, -0.7, 0.5, 'n'), N(4, -0.6, 0.6, 'c'), N(main === 2 ? 3 : 2, -0.7, 0.5, 'n')];
+  if (brk) return [N(main, -0.7, 0.5, 'n'), N(4, -0.6, 0.6, 'c')];
+  return [N(main, -0.8, 0.65, 'n')];
+}
+/** How fast the recording runs at d seconds from the impact: it slows to a crawl through the strike. */
+function passSpeed(P, d) {
+  if (P.prof === 'f') return d < 0.3 ? 0.4 : 0.4 + 0.2 * clamp((d - 0.3) / 0.7, 0, 1);
+  const k = P.prof === 'c' ? [0.7, 0.09] : [0.8, 0.15];
+  return k[0] - (k[0] - k[1]) * Math.exp(-(d * d) / (0.22 * 0.22));
+}
+function startReplay(opt = {}) {
   const f = C.rec.f, tImp = C.hitT ?? C.ev.impact ?? f[f.length - 1].t;
-  R = { f, ev: C.rec.ev, tImp, t: Math.max(f[0].t, tImp - 1.0), t1: Math.min(f[f.length - 1].t, tImp + (C.cine ? 1.5 : 0.9)), i: 0, e: 0, liveP: player.snapshot(), liveO: opp.snapshot(),
-    z: (player.z + opp.z) / 2, side: -Math.sign(player.root.position.x) || -1, shot: 1, back: S.mode };
-  // an unhorsing gets three passes from three cameras; every other replay stays a single pass
-  R.multi = !!C.cine && !!((C.pL.res && C.pL.res.unhorse) || (C.oL.res && C.oL.res.unhorse));
-  R.pass = 0; R.t0 = R.t;
-  if (R.multi) { R.t0 = R.t = Math.max(f[0].t, tImp - 0.7); R.t1 = Math.min(f[f.length - 1].t, tImp + 1.8); R.fallP = C.cine === player; R.fall = new THREE.Vector3(); R.fdir = C.cine.dir || 1; R.fx0 = Math.sign(C.cine.root.position.x) || 1; $('replayTag').textContent = 'REPLAY 1/3'; }
-  // the camera sits where the lances met
-  { let k = f.findIndex(fr => fr.t >= tImp); if (k < 0) k = f.length - 1; R.z = (f[k].p.pz + (f[k].o.pz ?? 0)) / 2; R.side = Math.sign(f[k].p.px) || -1; if (M.practice) R.z = 0; }
-  player.replaying = opp.replaying = true; fx.clear(); showMarks(R.t);
+  R = { f, ev: C.rec.ev, tImp, i: 0, e: 0, liveP: player.snapshot(), liveO: opp.snapshot(), back: S.mode, live: !opt.frozen, hl: false, course: M.course, fxDt: 0, rate: 1, shot: 0, pass: 0, t: 0, t0: 0, t1: 1 };
+  replayGeom(); R.passes = planPasses(); setPass(0);
+  if (!R.live) player.replaying = opp.replaying = true;      // a live replay dresses the riders afresh each frame (replayDress), so that his ride-out turn goes on underneath
+  fx.clear(); showMarks(R.t, R.course);
   S.mode = 'replay'; S.slowT = 0; S.timeScale = 1;
-  $('replayTag').classList.remove('hidden'); $('replayKeys').classList.remove('hidden'); $('hud').classList.add('hidden'); $('verdict').classList.add('hidden'); $('royalCap').classList.add('hidden');
+  $('replayTag').classList.remove('hidden'); $('replayKeys').classList.remove('hidden'); $('hud').classList.add('hidden'); $('verdict').classList.add('hidden'); if (!(C.capT > 0)) $('royalCap').classList.add('hidden');
+  $('replayKeys').innerHTML = touchMode ? '' : '<kbd>V</kbd> change view &nbsp;&nbsp; <kbd>SPACE</kbd> skip &nbsp;&nbsp; <kbd>ESC</kbd> menu';
   // what each lance did, drawn at the bottom corners while the replay runs
   const p = C.pL.res, o = C.oL.res;
   if (p) { drawHitMap($('rhitYou'), p, C.pL.near, { quintain: M.practice, arms: M.od.arms }); $('rwhatYou').textContent = plain(p, C.pL, true)[0]; $('replayYou').classList.remove('hidden'); }
   if (o && !M.practice) { drawHitMap($('rhitHim'), o, C.oL.near, { arms: profile.arms }); $('rwhatHim').textContent = plain(o, C.oL, false)[0]; $('replayHim').classList.remove('hidden'); }
   if (C.resultArgs && !M.practice) C.colourLater = true; else replayColour();      // exactly one colour line, ~1.5 s in (no more if you watch it again); after Hugh's call if that is still to come
 }
-/** V during a replay: the other camera. */
+function replayTag() { $('replayTag').textContent = `${R.hl ? 'COURSE ' + R.course : R.passes.length > 1 ? `REPLAY ${R.pass + 1}/${R.passes.length}` : 'INSTANT REPLAY'} · ${ANGLES[R.shot]}`; }
+/** Start camera pass n of the automatic replay: the frames and fx events rewind to its start and the camera cuts. */
+function setPass(n) {
+  const P = R.passes[n]; R.pass = n; R.shot = P.shot; R.t0 = P.t0; R.t1 = P.t1; R.cut = true; replaySeek(P.t0); replayTag();
+}
+function replaySeek(t) {
+  R.t = clamp(t, R.t0, R.t1); R.e = R.ev.findIndex(e => e.t > R.t); if (R.e < 0) R.e = R.ev.length; fx.clear();
+}
+/** V during a replay: the next of the five angles (the fall camera of an unhorsing hands back to the first). */
 function replayView() {
   if (!R) return;
-  if (R.multi && R.pass > 0) R.shot = R.shot === 2 ? 1 : R.shot === 1 ? 0 : 2;     // own camera, then the head-on one, then the other one
-  else R.shot = R.shot === 1 ? 0 : 1;
-  R.cut = true;
+  R.shot = (R.shot + 1) % 5; R.cut = true; if (R.hl) S.rplShot = R.shot; replayTag();
 }
-/** Start the next pass of the unhorsing sequence: rewind the frames and the fx events, cut to the next camera. */
-function nextReplayPass() {
-  R.pass++; R.t = R.t0; R.i = 0; R.e = 0; R.shot = 2; R.cut = true;
-  fx.clear();
-  $('replayTag').textContent = 'REPLAY ' + (R.pass + 1) + '/3';
+function updateReplay(dtReal, dt) {
+  if (R.live) {      // his ride-out turn (and yours, until you take the rein) goes on in game time underneath: undress the riders, run the course's own logic, dress them again later in the frame
+    replayUndress(); const m = S.mode; S.mode = R.back; updateRide(dt, dtReal); S.mode = m;
+  }
+  if (R.hl) {
+    if (!R.pause) { R.t += dtReal; if (R.t >= R.t1) replaySeek(R.t0); }
+    R.fxDt = R.pause ? 0 : dtReal;
+  } else {
+    const P = R.passes[R.pass]; R.rate = passSpeed(P, R.t - R.tImp); R.t += dtReal * R.rate; R.fxDt = dtReal * R.rate;
+    if (R.t >= P.t1) { if (R.pass < R.passes.length - 1) setPass(R.pass + 1); else endReplay(); }
+  }
 }
-function updateReplay(dtReal) {
-  const near = Math.abs(R.t - R.tImp), d = R.t - R.tImp;
-  let speed = near < 0.12 ? 0.07 : near < 0.4 ? 0.2 : 0.5;
-  if (R.multi) speed = d < -0.6 ? 0.6 : d < -0.3 ? 0.6 - 0.25 * (d + 0.6) / 0.3 : d < 0.3 ? 0.35 : 0.35 + 0.25 * clamp((d - 0.3) / 0.7, 0, 1);
-  R.t += dtReal * speed;
-  if (R.t >= R.t1) { if (R.multi && R.pass < 2) nextReplayPass(); else return endReplay(); }
-  while (R.i < R.f.length - 2 && R.f[R.i + 1].t <= R.t) R.i++;
-  const a = R.f[R.i], b = R.f[Math.min(R.i + 1, R.f.length - 1)], k = clamp((R.t - a.t) / Math.max(1e-5, b.t - a.t), 0, 1);
-  player.applySnap(lerpSnap(a.p, b.p, k)); opp.applySnap(lerpSnap(a.o, b.o, k)); showMarks(R.t);
+/** Put the riders into the replay pose for this frame (a live replay first saves how they really stand). */
+function replayDress() {
+  if (!R) return;
+  if (R.live) { R.liveP = player.snapshot(); R.liveO = opp.snapshot(); R.lr = [player.raiseT, opp.raiseT]; player.replaying = opp.replaying = true; R.dressed = true; }
+  const f = R.f, t = R.t;
+  while (R.i > 0 && f[R.i].t > t) R.i--;
+  while (R.i < f.length - 2 && f[R.i + 1].t <= t) R.i++;
+  const a = f[R.i], b = f[Math.min(R.i + 1, f.length - 1)], k = clamp((t - a.t) / Math.max(1e-5, b.t - a.t), 0, 1);
+  R.sp = lerpSnap(a.p, b.p, k); R.so = lerpSnap(a.o, b.o, k);
+  player.applySnap(R.sp); opp.applySnap(R.so); showMarks(t, R.course);
   player.update(0); opp.update(0);
-  if (R.multi) {   // where the fallen rider is, for the third camera
-    const fs = lerpSnap(R.fallP ? a.p : a.o, R.fallP ? b.p : b.o, k);
+  if (R.fall) {   // where the fallen rider is, for the fall camera
+    const fs = R.fallP ? R.sp : R.so;
     if (fs.unhorsed && fs.rp) R.fall.set(fs.rp[0], fs.rp[1], fs.rp[2]); else R.fall.set(fs.px, 1.5, fs.pz);
     R.fdir = fs.dir || R.fdir;
   }
-  while (R.e < R.ev.length && R.ev[R.e].t <= R.t) { const e = R.ev[R.e++]; if (e.k === 'spl') fx.splinters(e.a, e.b, e.v, e.n); else if (e.k === 'sh') fx.shaft(e.a, e.b, e.v); else fx.sparks(e.p, e.n, e.s); }
-  fx.update(dtReal * speed);
+  while (R.e < R.ev.length && R.ev[R.e].t <= t) { const e = R.ev[R.e++]; if (e.k === 'spl') fx.splinters(e.a, e.b, e.v, e.n); else if (e.k === 'sh') fx.shaft(e.a, e.b, e.v); else if (e.k === 'pc') fx.piece(e.p, e.q, e.sx, e.sy, e.sz, e.v); else fx.sparks(e.p, e.n, e.s); }
+  fx.update(R.fxDt);
 }
-/** Dents, shield marks and the plume as they were at replay time t of this course (nothing before its blow). */
-function showMarks(t) { const k = M.course * 1000 + t; player.showDamage(k); if (opp.showDamage) opp.showDamage(k); }
+function replayUndress() {
+  if (!R || !R.dressed) return; R.dressed = false;
+  player.applySnap(R.liveP); opp.applySnap(R.liveO); player.raiseT = R.lr[0]; opp.raiseT = R.lr[1]; player.replaying = opp.replaying = false;
+}
+/** The replay cameras, each a function of the recorded frame (R.sp, R.so: you and he at replay time R.t). */
+function replayCam() {
+  const sp = R.sp, so = R.so, D = R.pd, sd = R.side, z0 = R.z, u = clamp((R.t - (R.tImp - 1)) / 2, 0, 1), mx = (sp.px + so.px) / 2, mz = (sp.pz + so.pz) / 2;
+  switch (R.shot) {
+    case 1: {      // CHASE: tight behind your rider, looking down the lists at the man coming in
+      const fx = Math.sin(sp.ry), fz = Math.cos(sp.ry);
+      want.set(sp.px - fx * 3.3 + sd * 0.55, 2.3, sp.pz - fz * 3.3); wantLook.set(lerp(sp.px, so.px, 0.4) + fx * 5, 1.8, sp.pz + fz * 9); return 52;
+    }
+    case 2: {      // REVERSE: behind the opponent, looking at you come in
+      const fx = Math.sin(so.ry), fz = Math.cos(so.ry), s = smoothstep(R.tImp - 0.3, R.tImp + 0.2, R.t);
+      want.set(so.px - fx * 4.6 - sd * 0.5, 2.5, so.pz - fz * 4.6); wantLook.set(lerp(sp.px, mx, s), 1.85, lerp(sp.pz, mz, s)); return 46;
+    }
+    case 3: want.set(sd * 3.2, 6.8 + 3.2 * u, z0 - D * (16 - 6 * u)); wantLook.set(0, 1.3, mz); return 40;      // CRANE: high, down the tilt as they meet
+    case 4: want.set(sd * 4.6, 2.15, z0 - D * 0.5); wantLook.set(-sd * 0.1, 1.9, lerp(z0, mz, 0.6)); return 29 - 7 * u;      // IMPACT: helm and shield level, a long lens
+    case 5: { const F = R.fall; want.set(F.x + R.fx0 * 2.3, Math.max(0.9, F.y + 0.7), F.z - R.fdir * 3.4 + R.fdir * u * 0.8); wantLook.set(F.x, Math.max(0.35, F.y * 0.6), F.z); return 38; }
+    default: want.set(sd * (7.4 - u * 1.2), 2.0, z0 - D * (2.6 - u * 2.2)); wantLook.set(-sd * 0.2, 1.95, z0 + D * u * 0.6); return 34;      // LOW SIDE at the tilt
+  }
+}
+/** Dents, shield marks and the plume as they were at replay time t of the given course (nothing before its blow). */
+function showMarks(t, course) { const k = (course ?? M.course) * 1000 + t; player.showDamage(k); if (opp.showDamage) opp.showDamage(k); }
+function hideReplayUi() { for (const id of ['replayTag', 'replayKeys', 'replayYou', 'replayHim', 'hlBack']) $(id).classList.add('hidden'); }
 function endReplay() {
+  if (!R) return;
+  if (R.hl) { closeHL(); return; }
+  if (R.live) replayUndress(); else { player.applySnap(R.liveP); opp.applySnap(R.liveO); }
   showMarks(Infinity);
-  player.applySnap(R.liveP); opp.applySnap(R.liveO);
   player.replaying = opp.replaying = false; player.update(0); opp.update(0);
-  fx.clear(); S.mode = R.back === 'after' ? 'after' : R.back; R = null;
-  if (C) C.replayed = true;
+  fx.clear(); S.mode = R.back; R = null;
+  if (C) { C.replayed = true; C.seenReplay = true; C.cutWas = true; C.cineCut = false; C.fovSnap = true; trimRec(C.rec); }      // cut straight back to your rider, wherever he is in the turn
   $('replayTag').textContent = 'INSTANT REPLAY';
-  for (const id of ['replayTag', 'replayKeys', 'replayYou', 'replayHim']) $(id).classList.add('hidden');
+  hideReplayUi();
   $('hud').classList.remove('hidden');
   if (C && C.verdict && !M.result) $('verdict').classList.remove('hidden');
 }
 
+// ---- the match's recordings: every course is kept (M.recs) for the pause menu's replays
+/** Fill in the facts of a finished course (once): its strokes and the impact time. */
+function recMeta() {
+  const r = C.rec; if (r.p) return;
+  r.n = M.course; r.p = C.pL.res; r.o = C.oL.res; r.tImp = C.hitT ?? C.ev.impact ?? (r.f.length ? r.f[r.f.length - 1].t : 0);
+}
+/** Keep memory bounded: only the last seconds before the blow are kept of a finished course. */
+function trimRec(r) {
+  if (!r || !r.p) return; const lo = r.tImp - 4;
+  let n = 0; while (n < r.f.length - 8 && r.f[n].t < lo) n++; if (n > 0) r.f.splice(0, n);
+  n = 0; while (n < r.ev.length && r.ev[n].t < lo) n++; if (n > 0) r.ev.splice(0, n);
+}
+function recTitle(r) {
+  const bit = (res, mine) => {
+    if (!res || res.zone === 'none') return null;
+    if (res.unhorse) return mine ? 'you unhorse him' : 'he unhorses you';
+    if (res.zone === 'horse') return mine ? 'a foul on his horse' : 'a foul on your horse';
+    if (res.zone === 'miss') return mine ? 'you miss' : 'he misses';
+    if (res.broke) return mine ? `lance broken on his ${res.zone}` : `his lance broken on your ${res.zone}`;
+    return mine ? `a touch on his ${res.zone}` : `he touches your ${res.zone}`;
+  };
+  const rank = (s) => !s ? 0 : /unhorse/.test(s) ? 4 : /broken/.test(s) ? 3 : /touch/.test(s) ? 2 : 1;
+  const parts = [bit(r.p, true), M.practice ? null : bit(r.o, false)].filter(Boolean).sort((a, b) => rank(b) - rank(a));
+  const keep = parts.length > 1 && rank(parts[1]) < 2 ? [parts[0]] : parts;
+  return `Course ${r.n} — ${keep.length ? keep.join(', ') : 'no stroke'}`;
+}
+const recList = () => (M && M.recs ? M.recs : []).map((r, i) => [r, i]).filter(([r]) => r.p && r.f.length > 8);
+
+// ---- highlights: a recorded course played from the pause menu or the end-of-match card, full speed, from any angle. The match state is untouched (the riders are put back on leaving).
+function openHL(idx, shot) {
+  const rec = M && M.recs && M.recs[idx]; if (!rec || !rec.p || rec.f.length < 8 || !player || !opp) return;
+  if (R && !R.hl) endReplay();
+  const f = rec.f, old = R && R.hl ? R : null;      // (another course picked while a highlight plays keeps the real poses saved by the first)
+  R = { f, ev: rec.ev, tImp: rec.tImp, i: 0, e: 0, liveP: old ? old.liveP : player.snapshot(), liveO: old ? old.liveO : opp.snapshot(), back: old ? old.back : S.mode, live: false, hl: true, course: rec.n, pause: false, shot: shot ?? S.rplShot ?? 0, fxDt: 0, rate: 1, vis: old ? old.vis : ['hud', 'verdict', 'royalCap'].filter(id => !$(id).classList.contains('hidden')) };
+  replayGeom(); R.t0 = Math.max(f[0].t, R.tImp - 3.2); R.t1 = f[f.length - 1].t; replaySeek(R.t0); R.cut = true; S.rplShot = R.shot;
+  player.replaying = opp.replaying = true; fx.clear();
+  S.mode = 'replay'; S.hl = true; document.body.classList.add('rpl-open');
+  for (const id of ['hud', 'verdict', 'royalCap', 'replayYou', 'replayHim', 'pmenu', 'banner']) $(id).classList.add('hidden');
+  $('replayTag').classList.remove('hidden'); $('replayKeys').classList.remove('hidden'); $('hlBack').classList.remove('hidden'); replayTag(); hlKeys();
+}
+function hlKeys() { $('replayKeys').innerHTML = touchMode ? '' : `<kbd>V</kbd> angle &nbsp;&nbsp; <kbd>SPACE</kbd> ${R && R.pause ? 'play' : 'pause'} &nbsp;&nbsp; <kbd>←</kbd><kbd>→</kbd> scrub &nbsp;&nbsp; <kbd>ESC</kbd> back`; }
+function closeHL() {
+  if (!R || !R.hl) return;
+  showMarks(Infinity); player.applySnap(R.liveP); opp.applySnap(R.liveO); player.replaying = opp.replaying = false; player.update(0); opp.update(0);
+  fx.clear(); S.mode = R.back; S.hl = false; for (const id of R.vis) $(id).classList.remove('hidden'); R = null; hideReplayUi();
+  showReplayList();
+}
+function hlSelect(d) {
+  const L = recList(); if (!L.length) return; const cur = L.findIndex(([, i]) => i === S.rplSel);
+  S.rplSel = L[clamp((cur < 0 ? 0 : cur) + d, 0, L.length - 1)][1];
+  for (const el of $('pmList').querySelectorAll('.rrow')) el.classList.toggle('sel', +el.dataset.i === S.rplSel);
+}
+/** The pause menu's Replays list (also reached from the end-of-match card). */
+function showReplayList() {
+  const L = recList(), el = $('pmList');
+  if (S.rplSel == null || !L.some(([, i]) => i === S.rplSel)) S.rplSel = L.length ? L[L.length - 1][1] : null;
+  el.innerHTML = `<h3>REPLAYS</h3>` + (L.length ? `<div class="rlist">` + L.map(([r, i], n) => `<div class="rrow${i === S.rplSel ? ' sel' : ''}" data-i="${i}"><span class="rt">${touchMode ? '' : `<kbd>${n + 1}</kbd>`}${recTitle(r)}</span><span class="ra">${ANGLES.slice(0, 5).map((a, j) => `<button data-i="${i}" data-a="${j}">${a}</button>`).join('')}</span></div>`).join('') + `</div>` : `<p class="rnone">No course has been ridden yet.</p>`)
+    + `<div class="rfoot">${touchMode ? '' : '<span><kbd>1</kbd>–<kbd>9</kbd> play &nbsp; <kbd>V</kbd> angle &nbsp; <kbd>SPACE</kbd> pause &nbsp; <kbd>←</kbd><kbd>→</kbd> scrub</span>'}<button class="btn" id="pmBack">Back</button></div>`;
+  $('pmenu').classList.remove('hidden'); $('pmMain').classList.add('hidden'); el.classList.remove('hidden'); $('banner').classList.add('hidden'); $('card').classList.add('hidden'); document.body.classList.add('rpl-open');
+}
+function openReplays(from) {
+  if (!M || !player) return;
+  if (R && !R.hl) endReplay();      // a replay that was playing (and paused) gives way to the list
+  S.rpl = true; S.rplFrom = from;
+  if (from === 'card') S.paused = true;
+  showReplayList();
+}
+function showPauseMain() {
+  if (touchMode) { $('bannerTop').textContent = 'THE LISTS ARE STILL'; $('bannerMain').textContent = 'Paused'; $('bannerSub').innerHTML = ''; $('banner').classList.remove('hidden'); $('pmenu').classList.add('hidden'); }
+  else { $('pmenu').classList.remove('hidden'); $('pmMain').classList.remove('hidden'); $('pmList').classList.add('hidden'); }
+}
+function closeReplays() {
+  S.rpl = false; document.body.classList.remove('rpl-open'); $('pmList').classList.add('hidden'); $('pmenu').classList.add('hidden');
+  if (S.rplFrom === 'card') { S.paused = false; $('card').classList.remove('hidden'); } else showPauseMain();
+}
+
 function advance() {
+  if (R && R.hl) { replayView(); return; }      // a tap (or a click) in a highlight: the next angle
   if (S.paused) return;
-  if (S.mode === 'replay') { endReplay(); return; }
+  if (S.mode === 'replay') { if (touchMode) replayView(); else endReplay(); return; }
   if (S.mode === 'intro') return;      // a tap no longer skips the intro: hold Space / Enter (see skipVote)
   if (S.mode === 'after' && C.carded && M.result && M.bridge && !M.bridge.final) { audio.ui('select'); nextBout(); return; }      // the bridge goes on: the next challenger
   if (S.mode === 'after' && C.carded && M.result) { audio.ui('select'); const wasCircuit = M.circuit; endMatch(); menus.show(wasCircuit ? 'circuit' : 'main'); }
@@ -2030,6 +2203,7 @@ function endMatch() {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   voice.reset(); strikeCall = null;
   if (R) { player.replaying = false; R = null; }
+  S.hl = false; S.rpl = false; S.paused = false; document.body.classList.remove('rpl-open'); for (const id of ['pmenu', 'pmList', 'hlBack']) $(id).classList.add('hidden');
   if (world && world.crowd && world.crowd.spotlight) world.crowd.spotlight(-1);
   field.clear(); ceremony.clear(); flagmen.clear(); judges.clear(); life.clear(); speech.hide(); disposeRider(opp); opp = null; M = null; C = null; S.mode = 'menu'; S.timeScale = 1; fx.clear();
   rebuildPlayer();
@@ -2069,6 +2243,18 @@ function doBrace() { if (S.mode !== 'charge' || C.braceCd > 0) return; C.braceT 
 window.addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
   const k = e.code;
+  if (M && S.paused && R && R.hl) {      // a highlight playing from the pause menu
+    if (k === 'KeyV') replayView();
+    else if (k === 'Space' || k === 'Enter') { R.pause = !R.pause; hlKeys(); }
+    else if (k === 'ArrowLeft' || k === 'ArrowRight') { R.pause = true; hlKeys(); replaySeek(R.t + (k === 'ArrowLeft' ? -0.25 : 0.25)); }
+    else if (k === 'Escape' || k === 'KeyP' || k === 'Backspace') closeHL();
+    e.preventDefault(); return;
+  }
+  if (M && S.rpl && S.paused) {      // the Replays list
+    if (/^Digit[1-9]$/.test(k)) { const L = recList()[+k[5] - 1]; if (L) openHL(L[1]); e.preventDefault(); return; }
+    if (k === 'ArrowUp' || k === 'ArrowDown') { hlSelect(k === 'ArrowUp' ? -1 : 1); e.preventDefault(); return; }
+    if ((k === 'Enter' || k === 'Space') && S.rplSel != null) { openHL(S.rplSel); e.preventDefault(); return; }
+  }
   if (k === 'ShiftLeft' || k === 'ShiftRight') { if (!e.repeat && (S.mode === 'ready' || S.mode === 'charge') && !burst()) { if (!sk('burst') || !C || C.tier < 4) spur(); } }
   else if (k === 'KeyW' || k === 'ArrowUp') { if (!e.repeat && (S.mode === 'ready' || S.mode === 'charge')) spur(); else if (!e.repeat && S.mode === 'after' && C && C.rb && C.turn.p.stage === 'free') C.rb.rt = Math.min(3, C.rb.rt + 1); }
   else if (k === 'KeyH') { if (!e.repeat) toggleVisor(); }
@@ -2082,13 +2268,13 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'Space' || k === 'Enter') { e.preventDefault(); if (S.mode === 'intro' || (C && (C.mont || C.beat))) { skipKey = true; return; } if (e.repeat) return; if (S.mode === 'charge' && k === 'Space') doBrace(); else advance(); }
   else if (k === 'KeyV') { if (S.mode === 'replay') replayView(); else { S.fp = !S.fp; profile.firstPerson = S.fp; saveProfile(); } }
   else if (k === 'KeyM') setSound(S.muted);
-  else if (k === 'KeyR') { if (C && S.mode === 'after' && C.replayed && C.rec.f.length > 20 && !C.cut) startReplay(); else if (C && S.mode === 'ready' && C.rec0) { C.rec = C.rec0; } }
+  else if (k === 'KeyR') { if (M && S.paused && !S.rpl) openReplays('pause'); else if (M && !S.paused && M.result && C && C.carded && S.mode === 'after') openReplays('card'); else if (C && S.mode === 'after' && C.replayed && C.rec.f.length > 20 && !C.cut && !R) startReplay({ frozen: true }); }
   else if (k === 'KeyE' || k === 'Digit4') { if (S.mode === 'ready') interlude(4); else if (C && player.speed < 2.6 && C.patCd <= 0 && S.mode === 'charge') { C.patCd = 1.2; M.agit = clamp(M.agit - 0.22, 0, 1); audio.snort(0); } }
   else if (k === 'KeyX' || k === 'Digit1') { if (S.mode === 'ready') interlude(1); else if (C && S.mode === 'after' && opp && opp.unhorsed && !C.courtesy) { C.courtesy = true; react('salute', 1, false); discover('courtesy'); withFeats(() => courtesyFeat(profile)); say('You salute your fallen foe. The gallery approves.', 'THE GALLERY', 2, { prompt: true, phases: 'after' }); } }
   else if (k === 'KeyG') ladyEye();      // not in the key hints: found by accident, or from the squire's mutter
   else if (k === 'Digit2') interlude(2);
   else if (k === 'Digit3') interlude(3);
-  else if (k === 'Escape' || k === 'KeyP') { if (M) setPaused(!S.paused); }
+  else if (k === 'Escape' || k === 'KeyP') { if (M) { if (S.rpl) closeReplays(); else setPaused(!S.paused); } }
   else if (k === 'Backspace') { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } }
   if (k.startsWith('Arrow') || k === 'Space') e.preventDefault();
 });
@@ -2115,11 +2301,24 @@ $('card').addEventListener('click', advance);
 window.addEventListener('blur', () => { skipKey = false; keys.rein = keys.left = keys.right = keys.guard = keys.look = keys.throw = false; focusHeld = false; if (M && S.mode === 'charge' && !G.manual) setPaused(true); });
 
 function setPaused(v) {
+  if (!v) { if (R && R.hl) closeHL(); if (S.rpl) { const card = S.rplFrom === 'card'; closeReplays(); if (card) return; } }      // (the touch pause button also backs out of a highlight, and of the list)
   S.paused = v; const b = $('banner');
-  if (v) { $('bannerTop').textContent = 'THE LISTS ARE STILL'; $('bannerMain').textContent = 'Paused'; $('bannerSub').innerHTML = touchMode ? '' : '<b>Esc</b> to ride on &nbsp;·&nbsp; <b>Backspace</b> to leave the lists'; b.classList.remove('hidden'); if (window.speechSynthesis) window.speechSynthesis.pause(); }
-  else { if (S.mode !== 'intro') b.classList.add('hidden'); if (window.speechSynthesis) window.speechSynthesis.resume(); }
+  if (v) { showPauseMain(); if (window.speechSynthesis) window.speechSynthesis.pause(); }
+  else { S.rpl = false; document.body.classList.remove('rpl-open'); $('pmenu').classList.add('hidden'); if (S.mode !== 'intro') b.classList.add('hidden'); if (window.speechSynthesis) window.speechSynthesis.resume(); }
   if (!S.muted) audio.setMuted(v);
 }
+// the pause menu's buttons (desktop), its Replays list, and the highlight's Back button
+$('pmRide').addEventListener('click', () => setPaused(false));
+$('pmRpl').addEventListener('click', () => openReplays('pause'));
+$('pmLeave').addEventListener('click', () => { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } });
+$('hlBack').addEventListener('click', () => closeHL());
+$('cardReplays').addEventListener('click', (e) => { e.stopPropagation(); openReplays('card'); });
+$('pmList').addEventListener('click', (e) => {
+  const t = e.target.closest('button, .rrow'); if (!t) return;
+  if (t.id === 'pmBack') { closeReplays(); return; }
+  const i = +(t.dataset.i); if (!(i >= 0)) return;
+  openHL(i, t.dataset.a != null ? +t.dataset.a : undefined);
+});
 
 // ------------------------------------------------------------------ HUD
 let hudT = 0;
@@ -2218,7 +2417,7 @@ function updateMask() {
   const m = $('helmMask');
   const on = (M && C && player && C.cut && C.cut.kind === 'visor') || S.fp && M && C && (S.mode === 'ready' || S.mode === 'charge' || S.mode === 'after') && !player.unhorsed && !C.cut && !(C.cine) && !player.visorUp && !player.helmOff;      // visor up or helm off: the full view
   if (!on) { if (m.style.display !== 'none') m.style.display = 'none'; return; }
-  const vis = player.armourDef.vision, frog = player.armourDef.helm === 'frogmouth';
+  const vis = player.armourDef.vision, frog = player.armourDef.helm === 'frogmouth' || M.kit.bolted;      // the bolted Stechhelm: the slit sits high, so sit up at the last moment to see
   const half = (5 + vis * 30) * (1 - PHYS.damage.helmView * player.dmg.helm), c = 47 - player.brace * (frog ? 36 : 8);   // sit up in the frog-mouth and the sight lifts to the sky
   m.style.display = 'block';
   m.style.background = `linear-gradient(to bottom, #050505 0, #050505 ${c - half}%, rgba(5,5,5,0) ${c - half + 3}%, rgba(5,5,5,0) ${c + half - 3}%, #050505 ${c + half}%, #050505 100%)`;
@@ -2264,18 +2463,7 @@ function updateCamera(dtReal) {
     want.set(c.x + Math.sin(a) * 6.2 * dd, 1.7 + (on === opp ? t : t - 4.2) * 0.16, c.z + Math.cos(a) * 6.2 * dd);
     wantLook.set(c.x, 1.75, c.z); rate = 4; wantFov = 40; snap = Math.abs(t - 4.2) < 0.05 || t < 0.05;
   } else if (S.mode === 'replay' && R) {
-    const u = R.multi ? clamp((R.t - R.t0) / Math.max(0.1, R.t1 - R.t0), 0, 1) : clamp((R.t - (R.tImp - 1)) / 2, 0, 1);
-    if (R.multi && R.pass === 1 && R.shot === 2) {     // low at the tilt, square to the lists, following the point between the two riders so both stay in frame
-      // before the hit both riders close on the impact point; after it, follow the man going down
-      const F = R.fall, mz = F ? F.z : R.z;     // square on to the man who goes down, from his ride into the hit to the ground
-      want.set(R.side * 7.2, 1.35, mz); wantLook.set(0, 1.45, mz); wantFov = 46; rate = 14;
-    }
-    else if (R.multi && R.pass === 2 && R.shot === 2) {
-      const F = R.fall; want.set(F.x + R.fx0 * 2.3, Math.max(0.9, F.y + 0.7), F.z - R.fdir * 3.4 + R.fdir * u * 0.8); wantLook.set(F.x, Math.max(0.35, F.y * 0.6), F.z); wantFov = 38;
-    }
-    else if (R.shot === 0) { want.set(R.side * (7.4 - u * 1.2), 2.0, R.z - D * (2.6 - u * 2.2)); wantLook.set(-R.side * 0.2, 1.95, R.z + D * u * 0.6); wantFov = 34; }
-    else { want.set(R.side * 1.5, 1.35, R.z + D * (7.5 - u * 1.5)); wantLook.set(-R.side * 0.3, 2.0, R.z); wantFov = 30; }
-    rate = 30; if (!R.camSet || R.cut) { R.camSet = true; R.cut = false; snap = true; }
+    wantFov = replayCam(); rate = 30; if (!R.camSet || R.cut) { R.camSet = true; R.cut = false; snap = true; fov = wantFov; }
   } else if (C && C.cut) {
     const k = C.cut.kind, p = player.root.position;
     if (C.cut.ots > 0) {      // over your shoulder: your knight from behind, looking the way he is addressing
@@ -2349,6 +2537,7 @@ function updateCamera(dtReal) {
   if (snap || camPos.distanceTo(want) > 60) { camPos.copy(want); camLook.copy(wantLook); }
   const k = 1 - Math.exp(-rate * dtReal);
   camPos.lerp(want, k); camLook.lerp(wantLook, 1 - Math.exp(-rate * 1.2 * dtReal));
+  if (C && C.fovSnap && !R) { C.fovSnap = false; fov = wantFov; }      // cut back from a replay: no zoom
   fov = damp(fov, wantFov, 4, dtReal);
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   camera.position.copy(camPos);
@@ -2372,7 +2561,12 @@ G.hitboxes = (on = true) => { G._hbDebug = !!on; if (!on) { if (player) player.d
 G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) frame(dt); };
 function frame(dtReal) {
   touch.update();
-  if (S.paused) { post.render(0); return; }
+  if (S.paused) {
+    if (R && R.hl) { S.time += dtReal; updateReplay(dtReal, dtReal); replayDress(); updateCamera(dtReal); post.render(dtReal); }      // a highlight plays while the match stands still
+    else post.render(0);
+    return;
+  }
+  if (R && R.live) replayUndress();      // (back to the real poses before anything of the match runs)
   S.time += dtReal; frameId++;
   S.focusOn = focusHeld && M && M.focus > 0 && S.mode === 'charge' && C && !C.pL.done;
   if (S.focusOn) M.focus = Math.max(0, M.focus - dtReal * (sk('nerve') ? SKILLS.nerve.drain : 0.42) * (1 + PHYS.body.windFocus * M.bodyS.p.wind));      // winded, he cannot hold his breath for long
@@ -2396,7 +2590,7 @@ function frame(dtReal) {
     if (S.skipHold >= SKIP_HOLD && !S.skipWanted.me) skipVote();
     if (S.mode === 'intro' && S.introT > (introNew() ? INTRO_END : 8.4)) finishIntro();
   } else if (S.mode === 'menu') { if (player) player.update(dt); if (S.menuView === 'armoury') previews.update(dtReal, menus.root, profile.arms); if (S.menuView === 'stable') stable.update(dtReal, menus.root, menus.stableHorse(), profile.arms, menus.stableCap()); else stable.release(); }
-  else if (S.mode === 'replay') updateReplay(dtReal);
+  else if (S.mode === 'replay') updateReplay(dtReal, dt);
   else if (M && C) { if (C.patCd > 0) C.patCd -= dtReal; updateRide(dt, dtReal); }
 
   field.update(dt, fieldEnv());
@@ -2404,6 +2598,7 @@ function frame(dtReal) {
   if (M) flagmen.update(dtReal, S.time, [player && player.root.position, opp && opp.root && opp.root.position]);
   if (M) { judges.update(dtReal, S.time); beatSkip(dtReal); }
   life.update(dt, { mode: M ? S.mode : 'menu', focusZ: player && opp && M ? (player.z + opp.z) / 2 : 0, canCall: !!M && !M.result && (S.mode === 'ready' || S.mode === 'after') });
+  if (R) replayDress();      // the replay pose for this frame (after everything that looks at the riders' real places)
   if (G._hbDebug) { if (player) player.dbgUpdate(frameId, true); if (opp && opp.dbgUpdate) opp.dbgUpdate(frameId, true); }
   S.excite = damp(S.excite, 0.12, 0.45, dtReal);
   if (strokeQ.mute > 0) strokeQ.mute -= dtReal;
@@ -2418,7 +2613,7 @@ function frame(dtReal) {
     if (player) world.focusShadow(S.mode === 'intro' && introNew() ? ceremony.focus(S.introT, player, opp, _a) : S.mode === 'intro' && S.introT < 4.2 && opp ? opp.root.position : (C && C.cine && S.mode === 'after' ? C.cine.rider.position : player.root.position));
   }
   audio.update(dtReal, { excitement: S.excite, anticipation: S.antic || 0, speed: player && M && S.mode !== 'replay' ? player.speed : 0, favour: M ? M.favour : 0 });
-  if (S.mode !== 'replay') fx.update(dt);
+  if (S.mode !== 'replay' && !R) fx.update(dt);
   updateCamera(dtReal);
   speech.update();
   if (player) player.root.updateMatrixWorld(true);
@@ -2432,7 +2627,7 @@ function frame(dtReal) {
 // ------------------------------------------------------------------ boot
 const previews = createPreviews();
 const stable = createStable();
-const touch = initTouch({ S, mouse, inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
+const touch = initTouch({ S, mouse, openReplays: () => openReplays('pause'), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
   leave() { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } } });
 const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
   get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, newTable,
@@ -2450,7 +2645,7 @@ $('soundBtn').addEventListener('click', () => setSound(S.muted));
   };
   window.addEventListener('pointerdown', wake); window.addEventListener('keydown', wake);
 }
-G.setSound = setSound; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
+G.setSound = setSound; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
 resize();
 const firstVenue = Math.min(profile.venue || 0, VENUES.length - 1);
 await Promise.all([preloadHorse(), preloadScans(VENUES[firstVenue].sky)]);

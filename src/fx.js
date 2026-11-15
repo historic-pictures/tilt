@@ -115,6 +115,14 @@ export class FX {
     s.w = (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 7);
     s.sc.set(0.05, 0.05, len); s.life = 14;
   }
+  /** A flat piece (a shield sprung off the arm): sx x sy x sz metres, orientation q, thrown up and back with velocity vel plus a kick. */
+  piece(p, q, sx, sy, sz, vel) {
+    const s = this.s[this.sc]; this.sc = (this.sc + 1) % this.maxS;
+    s.p.copy(p); s.q.copy(q);
+    s.v.set((Math.random() - 0.5) * 2, 3 + Math.random() * 1.5, (Math.random() - 0.5) * 2).addScaledVector(vel, 0.4);
+    s.ax.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(); s.w = (Math.random() < 0.5 ? -1 : 1) * (5 + Math.random() * 6);
+    s.sc.set(sx, sy, sz); s.life = 14;
+  }
   clear() { for (const q of this.petalP.p) q.life = 0; for (const s of this.s) s.life = 0; for (let i = 0; i < this.maxS; i++) this.spl.setMatrixAt(i, this._zero); this.spl.instanceMatrix.needsUpdate = true; }
 
   update(dt) {

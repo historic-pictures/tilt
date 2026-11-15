@@ -76,8 +76,10 @@ export const KNIGHTS = [
   { id: 'lalaing', name: 'Jacques de Lalaing', short: 'Lalaing', land: 'Burgundy', arms: { c1: '#a81e1e', c2: '#ece8dc', c3: '#ece8dc', pattern: 'paly', charge: 'diamond' }, horse: 'courser', armour: 'milanese', skill: 0.72, seat: 0.7, drive: 0.92 },
   { id: 'quinones', name: 'Suero de Quiñones', short: 'Quiñones', land: 'León', arms: { c1: '#e0b83c', c2: '#1f4690', c3: '#a81e1e', pattern: 'quarterly', charge: 'none' }, horse: 'andalusian', armour: 'milanese', skill: 0.78, seat: 0.66, drive: 0.88 },
   { id: 'freydal', name: 'Maximilian, "Freydal"', short: 'Freydal', land: 'Empire', arms: { c1: '#191919', c2: '#e0b83c', c3: '#e0b83c', pattern: 'fess', charge: 'star' }, horse: 'destrier', armour: 'stechzeug', skill: 0.88, seat: 0.9, drive: 0.9, armourTint: 0x30333a },
-  // Palman (fl. 1331–1363), a German knight from Styria who commanded Emperor Dušan's guard of 300 German knights in Serbia. No arms of his are known; these are the game's.
-  { id: 'palman', name: 'Palman Bracht', short: 'Palman', land: 'Serbia', arms: { c1: '#ece8dc', c2: '#191919', c3: '#191919', pattern: 'bend', charge: 'none' }, horse: 'destrier', armour: 'bascinet', skill: 0.74, seat: 0.82, drive: 0.9 },
+  // Palman (documented 1333–1356; "Palman of Letinberch", Littenberg in Lower Styria; Latin "Palmanus Teutonicus"), a German knight
+  // who captained the German mercenaries (about 300) of Stefan Dušan, King of Serbia (emperor only from 1346). "Bracht" is not in the
+  // records (docs/era-atmosphere-research.md). No jousting is recorded for him. No arms of his are known; these are the game's.
+  { id: 'palman', name: 'Palman Bracht', short: 'Palman', land: 'Styria', arms: { c1: '#ece8dc', c2: '#191919', c3: '#191919', pattern: 'bend', charge: 'none' }, horse: 'destrier', armour: 'bascinet', skill: 0.74, seat: 0.82, drive: 0.9 },
   { id: 'ulrich', name: 'Ulrich von Liechtenstein', short: 'Liechtenstein', land: 'Styria', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#1f4690', pattern: 'chief', charge: 'none', over: [{ kind: 'chevron', c: '#1f4690' }] }, horse: 'destrier', armour: 'mail', skill: 0.8, seat: 0.8, drive: 0.95 },
   { id: 'blackprince', name: 'Edward, the Black Prince', short: 'the Prince', land: 'England', arms: { c1: '#191919', c2: '#191919', c3: '#ece8dc', pattern: 'plain', charge: 'feathers' }, horse: 'destrier', armour: 'bascinet', skill: 0.92, seat: 0.88, drive: 0.95 },
 ];
@@ -111,18 +113,22 @@ export const POINTS = { miss: 0, attaint: 1, broken: 2, helm: 3, unhorse: 5, fou
 //   metres of the coronel is no spear broken, only a touch.   crosswise: a lance broken at more than this (sine of the angle from square) was
 //   broken across, not with the point, and counts as a touch.   onlyShield: only strokes on the shield score.   noExtra: no extra courses.
 //   bite / lance / hold / sharp: physics multipliers (how much goes through the point, what the lance carries, what the saddle holds).
+//   kit: the equipment the rules fix for BOTH riders (never a purchase), merged over KIT0 by modeKit(); see KIT0 below. kitNote: one plain line of it for the menu card.
 // Sources: Tiptoft's Ordinances of 1466 (Harl. MS 69, printed in Cripps-Day 1918, App. IV); the statutes of Alfonso XI's Order of the Band, 1330
 // (trans. Fallows 2010). Both are silent on the pace of the horse and on how the lance is driven. The German forms are described, not legislated,
 // in the sources read, so their numbers are this game's.
 export const MODES = {
   planken: { id: 'planken', name: 'Standard Joust', sub: 'over the tilt', tilt: true, bite: 1, lance: 1, hold: 1, points: {}, tiltPts: [-2], tiltOut: 3, horseOut: 2,
-    blurb: 'The joust as the circuit runs it: a barrier between the riders, coronel lances, and the cheque kept in broken lances. A touch 1, a lance broken 2, broken on the helm 3. The Germans called it the Realgestech or Plankengestech.' },
+    kit: { shy: 1 }, kitNote: 'Eyes uncovered: a nervous horse may shy in the last strides.',
+    blurb: 'The joust as the circuit runs it: a barrier between the riders, coronel lances, and the cheque kept in broken lances. A touch 1, a lance broken 2, broken on the helm 3. The joust over the tilt, which the Germans knew as the Welsches Gestech.' },
   tiptoft: { id: 'tiptoft', name: "Tiptoft's Ordinances", sub: 'England, 1466', tilt: true, bite: 1, lance: 1, hold: 1,
     points: { attaint: 0, broken: 1, helm: 2, unhorse: 3, coronel: 3 }, tiltPts: [-2, -3], tiltOut: 3, horseOut: 1, sightWin: 3, nearTip: 0.3,
+    kit: { shy: 1 }, kitNote: 'Eyes uncovered: a nervous horse may shy in the last strides.',
     blurb: 'The rules the Earl of Worcester set down at Windsor for the royal jousts. A spear broken on the body counts one, on the helm two, bearing your man down three. A touch that breaks nothing counts nothing, and a spear broken within a foot of its point is only a touch. Three blows dead in the sight of the helm win the prize. Hit a horse and the prize is lost; the tilt costs two, then three, then the prize.' },
   castile: { id: 'castile', name: 'Statutes of the Band', sub: 'Castile, 1330 · open field', tilt: false, bite: 1, lance: 1, hold: 1,
     points: { attaint: 0, broken: 1, helm: 2, unhorse: 2 }, horseOut: 2, crosswise: 0.6, noExtra: true,
-    blurb: 'King Alfonso XI\'s rules for his knights of the Band, a century before the tilt. Four courses and no more. Only a lance splintered on your man with the point counts; one broken crosswise counts nothing. Knock off his helm and it counts as a second lance. If neither touches the other, both jousted poorly.' },
+    kit: { cantle: 1.15, lock: 1.15, rest: 0.55, shy: 1 }, kitNote: 'War saddle with high cantle and no lance rest: you stay up, but the blow jars you more and the lance wanders.',
+    blurb: 'King Alfonso XI’s rules for his knights of the Band, a century before the tilt, with no rest for the lance yet. Four courses and no more. Only a lance splintered on your man with the point counts; one broken crosswise counts nothing. Knock off his helm and it counts as a second lance. If neither touches the other, both jousted poorly.' },
   // ---- rules-only modes (no equipment or physics change: bite, lance, hold all 1). `own` = the mode words its own verdict, card and Hugh's calls (see main.js).
   sudden: { id: 'sudden', name: 'Sudden Death', sub: 'first blood · over the tilt', tilt: true, bite: 1, lance: 1, hold: 1, own: true,
     points: { attaint: 0, broken: 1, helm: 1, unhorse: 1, lanceLow: 0 }, tiltPts: [-2], tiltOut: 3, horseOut: 2, firstBreak: true, noExtra: true, pickCourses: true,
@@ -133,11 +139,28 @@ export const MODES = {
   bridge: { id: 'bridge', name: 'Keep the Bridge', sub: "pas d'armes style · over the tilt", tilt: true, bite: 1, lance: 1, hold: 1, own: true, bridge: true,
     points: {}, tiltPts: [-2], tiltOut: 3, horseOut: 2, fixedCourses: 3,
     blurb: 'Three challengers come one after another, each stronger than the last, three courses apiece on the Standard cheque. Your wind, your horse and your harness are not mended between bouts. Win two to hold the bridge.' },
-  gestech: { id: 'gestech', name: 'Deutsches Gestech', sub: 'Germany · open field', tilt: false, bite: 1, lance: 1.12, hold: 1.06, points: { helm: 2, unhorse: 6 }, horseOut: 2,
-    blurb: 'The old German joust of peace. No barrier: you pass left side to left side in the open. Coronel lances, deep saddles; breaking the lance or bearing your man down is the whole of it.' },
-  rennen: { id: 'rennen', name: 'Scharfrennen', sub: 'Germany · open field, sharp lances', tilt: false, sharp: true, bite: 1.3, lance: 1.6, hold: 0.82, points: { attaint: 1, broken: 1, helm: 0, unhorse: 6 }, onlyShield: true, horseOut: 2,
-    blurb: 'The joust of war. Sharp points that bite where a coronel would skid, stout lances that seldom break, and a saddle with no back to it. The mark is the shield and nothing else scores: hit it and you get one; put him on the ground and you win.' },
+  gestech: { id: 'gestech', name: 'Deutsches Gestech', sub: 'Germany · open field', tilt: false, bite: 1, lance: 1, hold: 1, points: { helm: 2, unhorse: 6 }, horseOut: 2,
+    kit: { cantle: 0.78, lock: 0.85, queue: true, blind: true, shieldCatch: 6, bolted: true, sack: true },
+    kitNote: 'Low saddle: you fall more easily, but less of the blow goes into you. Bolted helm, padded sack over the thighs, blinkered horse.',
+    blurb: 'The old German joust of peace. No barrier: you pass left side to left side in the open, in a low saddle with a padded sack across the horse’s chest to guard your legs. Hollow coronel lances, a bolted frog-mouth helm and a hollow target on the breast. Breaking the lance or bearing your man down is the whole of it, and falls are common.' },
+  rennen: { id: 'rennen', name: 'Scharfrennen', sub: 'Germany · open field, solid lances', tilt: false, sharp: true, bite: 1.2, lance: 1.6, hold: 1, points: { attaint: 1, broken: 1, helm: 0, unhorse: 6 }, onlyShield: true, horseOut: 2,
+    kit: { cantle: 0.8, lock: 0.85, queue: true, blind: true, lanceKgMin: 8.5, sharpJ: 0.6, shieldTall: 1.3, spring: 0.45 },
+    kitNote: 'Heavy solid lance, tall shield that springs away when struck square, blinkered horse. A glancing touch does not unseat.',
+    blurb: 'The joust of war. Solid lances with a blunted point that seldom break, and a saddle with little back to it. The mark is a tall shield that springs away from the arm when struck square: that is your point, and nothing else scores. Put him on the ground and you win.' },
 };
+// ---- Equipment fixed by the type of joust (the same for both riders; nothing here is bought). Merged over KIT0 by modeKit(); the defaults leave the
+// physics exactly as it was for the Standard tilt, so a mode with no `kit` plays as before. Sources and the reasoning: docs/joust-kit-research.md.
+//   cantle: how far back he can be bent before he goes over (x the unhorse threshold).   lock: how firmly the saddle holds him: a held man is thrown less
+//     (x theta) but the blow goes into his wind and arm instead, and the lance arm kicks harder.   rest: the lance rest's cap on coupling (1 = full rest; Castile 1330 has none).
+//   queue: the hook on the breastplate carries the lance's weight (arm tires slower).   lanceKgMin: the type's lance is at least this heavy (kg).
+//   sharpJ: a sharp point only unseats a man if the blow carries at least this share of PHYS.refJ.   shieldCatch: degrees the shield's glance limit is more forgiving (concave Stechtartsche).
+//   shieldTall: the shield's height scale (Renntartsche).   spring: the shield flies off a square, hard stroke at this share of refJ (and it is the score).
+//   blind: the horse's eyes are covered: it keeps its line and never shies.   shy: chance scale for an open-eyed horse to shy in the last strides (0 = never).
+//   bolted: Stechhelm bolted to the cuirass (the head is not snapped back; the slit sits high, so lift your head at the last moment).   sack: the thighs are covered: a stroke there is soft and counts for nothing.
+export const KIT0 = { cantle: 1, lock: 1, rest: 1, queue: false, lanceKgMin: 0, sharpJ: 0, shieldCatch: 0, shieldTall: 1, spring: 0, blind: false, shy: 0, bolted: false, sack: false };
+// Kept for later: the high, locked Hohenzeug saddle (Freydal: unhorsing "nearly impossible"; only broken lances score). No mode uses it yet.
+export const KIT_HOHENZEUG = { cantle: 1.6, lock: 1.8, queue: true, blind: true, bolted: true, sack: true, shieldCatch: 6 };
+export const modeKit = (mode) => Object.assign({}, KIT0, mode && mode.kit);
 // Off (0). Set to e.g. 0.9 to mark a course against a rider who meets at less than that share of the canter or checks his horse in the last strides.
 // It is not a rule found in the medieval cheques, and a slow horse already pays for it in the shock, so it is left out.
 export const SLOW_PACE = 0;
@@ -395,6 +418,13 @@ export const PHYS = {
   // and his nerve runs out sooner. Between courses the breath mostly comes back, a jarred arm hardly.
   body: { armShock: 0.16, armJolt: 0.05, wind: 0.42, dentWind: 0.8, windRest: 0.35, armRest: 0.9,
     armFatigue: 0.55, armBuild: 1.2, armCouch: 0.5, windAgit: 0.6, windFocus: 1.0, oppArm: 0.9, oppWind: 0.45 },
+  // What the type's equipment does (see KIT0 in this file; main.js strike(), the charge loop). lockWind / lockArm: how much more of a blow a held man takes in
+  // wind and arm per unit of lock above 1 (research: 0.8 and 0.5); lockTheta: how much less he is thrown; lockKick: the lance arm's recoil per unit of lock.
+  // springAbsorb: share of the blow a shield that gives way takes up; springCent: how true the stroke must be; soft: share of a stroke the sack lets through.
+  // blindSteer: the blinkered horse's steering response; boltedHead: how much of a blow to the helm still snaps the head back; queueFatigue: arm fatigue with a queue.
+  // shyAt / shyGain / shyMax: the open-eyed horse's chance to shy (once per course, inside shyGap metres of the other man); shyKick: its sideways kick; shyPace: pace it loses.
+  kit: { lockWind: 0.8, lockArm: 0.5, lockTheta: 0.5, lockKick: 1, springCent: 0.5, springAbsorb: 0.35, soft: 0.3, blindSteer: 0.35, boltedHead: 0.35, queueFatigue: 0.7,
+    shyAt: 0.12, shyGain: 1.0, shyMax: 0.45, shyGap: 14, shyKick: 1.1, shyPace: 0.93, wander: 0.8 },
   // The unhorsed rider as one rigid body: mass (kg), moment of inertia (kg m2), bounce, grip of the sand.
   fall: { kg: 105, inertia: 13, bounce: 0.18, friction: 0.65 },
   quintainKg: 250,      // the board, its arm and sandbag, and the reaction of the post
@@ -435,7 +465,7 @@ export const ACHIEVEMENTS = [
   knightAch('lalaing', 'Lalaing Bested', 'Beat Jacques de Lalaing.'),
   knightAch('quinones', 'Quiñones Bested', 'Beat Suero de Quiñones.'),
   knightAch('freydal', 'Freydal Bested', 'Beat Maximilian, "Freydal".', 8),
-  knightAch('palman', 'Palman Bested', 'Beat Palman Bracht, captain of the German guard.'),
+  knightAch('palman', 'Palman Bested', 'Beat Palman Bracht, captain of the German mercenaries.'),
   knightAch('ulrich', 'Ulrich Bested', 'Beat Ulrich von Liechtenstein.'),
   knightAch('blackprince', 'The Prince Bested', 'Beat Edward, the Black Prince.', 10),
   { id: 'retinue', group: 'Retinue & Stable', name: 'A Full Household', text: 'Have all five of your retinue in your service.', rule: { men: 'full' } },

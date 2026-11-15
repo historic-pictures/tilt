@@ -826,10 +826,25 @@ export class Jouster {
   }
 
   // ------------------------------------------------------------ state
+  /** A shield that sprang off the arm (see main.js strike): hidden until the squire re-fits it. */
+  setShieldGone(on) { this.shGone = !!on; this.shield.visible = !on; }
+  /** The squire fits a fresh shield between courses: the spare has none of the old damage. */
+  refitShield() {
+    if (!this.shGone) return;
+    this.setShieldGone(false); this.dmg.shield = 0; this.dlog = this.dlog.filter(e => e.region !== 'shield'); this._rebuild(Infinity);
+  }
+  /** A taller shield for the type of joust (Renntartsche): the plate, its back, the hit volume and the aiming mark all grow by k in height. */
+  tallShield(k) {
+    if (!(k > 1) || this._tall) return; this._tall = k;
+    for (const m of [this.shFace, this.shBack]) m.scale.y *= k;
+    const h = this.hb && this.hb.find(x => x.name === 'shield'); if (h) { const d = Object.assign({}, h.def); d.h = [d.h[0] * 1.08, d.h[1] * k, d.h[2]]; d.c = [d.c[0], d.c[1] + d.h[1] * 0.1, d.c[2]]; h.def = d; }
+    this.zones[1].r = 0.25 * (1 + 0.5 * (k - 1));
+  }
   /** Turn the rider to travel the other way (he keeps the tilt on his left, so he changes sides). */
   face(dir) { this.dir = dir; this.root.rotation.set(0, dir > 0 ? 0 : Math.PI, 0); this.hbValid = false; }
   /** A fresh lance and a settled seat, without moving the horse. */
   fresh() {
+    this.refitShield();
     this.raise = this.raiseT = 0;
     this.speed = 0; this.lanceLower = 0; this.recoil = this.recoilV = 0; this.sideRecoil = this.sideRecoilV = 0; this.brace = 0; this.rear = 0; this.guard = 0; this.look = 0; this.manualPos = false; this.going = null; this.twist = this.twistV = this.headK = this.headV = this.shK = this.shV = this.stag = this.stagV = 0;
     this._mendLance();
@@ -933,7 +948,7 @@ export class Jouster {
     const R = PHYS.recoil, lat = o.lat || 0;
     this.recoilV += kick * (1 - 0.3 * Math.abs(lat)); this.sideRecoilV += (fromLeft ? -1 : 1) * 0.4 * kick;
     this.twistV += kick * lat * R.twist;
-    if (o.zone === 'helm') this.headV += kick * R.head;
+    if (o.zone === 'helm') this.headV += kick * R.head * (o.headMul ?? 1);
     if (o.zone === 'shield') this.shV += kick * R.shield;
     this.stagV += (fromLeft ? -1 : 1) * Math.abs(kick) * R.stagger * 8;
   }
@@ -1081,7 +1096,7 @@ export class Jouster {
   snapshot() {
     const r = this.root, s = { px: r.position.x, pz: r.position.z, ry: r.rotation.y, rz: r.rotation.z, dir: this.dir, speed: this.speed, phase: this.phase, time: this.time,
       lanceLower: this.lanceLower, ax: this.aimLocal.x, ay: this.aimLocal.y, az: this.aimLocal.z, brace: this.brace, recoil: this.recoil, sideRecoil: this.sideRecoil,
-      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff };
+      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff, shGone: !!this.shGone };
     if (this.unhorsed) { const p = this.rider.position, q = this.rider.quaternion; s.rp = [p.x, p.y, p.z]; s.rq = [q.x, q.y, q.z, q.w]; s.tx = this.torso.rotation.x; }
     return s;
   }
@@ -1090,7 +1105,7 @@ export class Jouster {
     this.speed = s.speed; this.phase = s.phase; this.time = s.time; this.lanceLower = s.lanceLower; this.aimLocal.set(s.ax, s.ay, s.az).normalize();
     this.brace = s.brace; this.recoil = s.recoil; this.sideRecoil = s.sideRecoil; this.rear = s.rear; this.guard = s.guard; this.look = s.look; this.agit = s.agit;
     this.twist = s.twist || 0; this.headK = s.headK || 0; this.shK = s.shK || 0; this.stag = s.stag || 0;
-    this.raise = this.raiseT = s.raise || 0; this.visorUp = !!s.visorUp; this.helmOff = !!s.helmOff;
+    this.raise = this.raiseT = s.raise || 0; this.visorUp = !!s.visorUp; this.helmOff = !!s.helmOff; if (!!s.shGone !== !!this.shGone) this.setShieldGone(!!s.shGone);
     this.lanceFore.visible = !s.lanceBroken; this.lanceStump.visible = s.lanceBroken; if (this.lanceKept) this.lanceKept.visible = s.lanceBroken;
     if (s.unhorsed) {
       if (this.rider.parent !== this.scene) this.scene.attach(this.rider);

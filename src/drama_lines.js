@@ -17,7 +17,7 @@ export const KNIGHT_BIO = {
   lalaing: 'Burgundy\'s best-known knight, and the terror of every pas d\'armes.',
   quinones: 'He held the bridge at Órbigo for his lady until three hundred lances were broken.',
   freydal: 'Maximilian of Austria, heir of the Empire, who loved the joust above statecraft.',
-  palman: 'A German knight of Styria who led the Serbian Emperor\'s three hundred.',
+  palman: 'A German knight from Styria, captain of the Serbian king\'s German mercenaries.',
   ulrich: 'A Styrian knight and poet who rode the lists for his lady.',
   blackprince: 'The Prince of Wales, victor of Poitiers.',
 };
@@ -101,7 +101,7 @@ export const BOAST_HIM = {
   lalaing: ['Lalaing has beaten the best knights in Burgundy, and he is bored.'],
   quinones: ['Quiñones held Órbigo bridge for three hundred lances. He will not stop.'],
   freydal: ['Maximilian is heir to the Empire, and he does not lose willingly.'],
-  palman: ['Palman led three hundred German knights for Serbia\'s Emperor. Think carefully.'],
+  palman: ['Palman captained the German mercenaries of the King of Serbia. Think carefully.'],
   ulrich: ['Ulrich rode across Europe dressed as Lady Venus, and nobody laughed.'],
   blackprince: ['The Prince took a king prisoner at Poitiers. Today, you.'],
   _: ['{him} has never lost in front of a crowd like this. Pity.'],

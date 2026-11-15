@@ -72,7 +72,7 @@ export function breakAt(sinT, u = Math.random()) {
  * One lance striking one target.
  * s (striker): { horseKg, armourKg, lanceKg, breakJ, coupling 0..1 (how well seat, arm and rest lock the rider behind the lance), boost }
  * d (defender): { horseKg, armourKg, braced, seat 0..1, protection 0..1 } or { quintain: true }
- * opts: { turned, forceBreak, bite, hold, sharp, square 0..1 (cosine of the angle from square), glance (the point skidded) }
+ * opts: { lock (saddle hold), sharpJ (J a sharp point needs to unseat), springJ (J at which the shield flies), soft (a stroke on the sack), turned, forceBreak, bite, hold, sharp, square 0..1 (cosine of the angle from square), glance (the point skidded) }
  * Returns { vClose, Eavail, E (J delivered), J (N·s), broke, omega (rad/s kick to the torso), theta (peak lean, rad), thetaMax, unhorse, power }
  */
 export function impact(vClose, s, d, zone, cent, opts = {}) {
@@ -84,20 +84,22 @@ export function impact(vClose, s, d, zone, cent, opts = {}) {
   const Eavail = 0.5 * mu * vClose * vClose;
   // only a sliver of that reaches the target through the point: it depends on how square and how centred the stroke is
   // (the quintain's board is flat, square-on and backed by its post, so more of the blow goes home)
-  const eta = P.pointShare * (opts.bite || 1) * (0.35 + 0.65 * (opts.square ?? 1)) * (opts.glance ? P.glance.keep : 1) * (d.quintain ? 2 : 1) * (0.08 + 0.92 * Math.pow(clamp(cent, 0, 1), 1.2)) * (P.zoneShare[zone] ?? 1) * (opts.turned ? 0.3 : 1) * (opts.pass ?? 1);
+  const eta = P.pointShare * (opts.bite || 1) * (0.35 + 0.65 * (opts.square ?? 1)) * (opts.glance ? P.glance.keep : 1) * (d.quintain ? 2 : 1) * (0.08 + 0.92 * Math.pow(clamp(cent, 0, 1), 1.2)) * (P.zoneShare[zone] ?? 1) * (opts.turned ? 0.3 : 1) * (opts.pass ?? 1) * (opts.soft ? PHYS.kit.soft : 1);
   const cap = s.breakJ * (0.6 + 0.4 * s.coupling) * (s.boost || 1);   // what the lance can carry before it shatters
   const want = Eavail * eta;
-  let broke = (want >= cap || opts.forceBreak) && !opts.turned && !opts.glance;
+  let broke = (want >= cap || opts.forceBreak) && !opts.turned && !opts.glance && !opts.soft;
   const E = broke ? cap : Math.min(want, cap);
   if (d.quintain) return { vClose, Eavail, E, J: Math.sqrt(2 * P.quintainKg * E), broke, omega: 0, theta: 0, thetaMax: 9, unhorse: false, power: E / P.refJ };
   // the blow lands on the defender's upper body, above the seat: it kicks him back about the hips
   const mU = P.upperKg + 0.5 * d.armourKg, I = P.upperInertia + 0.2 * d.armourKg;
-  const J = Math.sqrt(2 * mU * E);
+  // a shield that gives way (the Renntartsche on its spring) takes up a share of the blow, once, and the stroke scores for it
+  const sprang = !!opts.springJ && zone === 'shield' && !opts.glance && !opts.turned && !opts.soft && cent >= P.kit.springCent && E >= opts.springJ;
+  const J = Math.sqrt(2 * mU * E) * (sprang ? 1 - P.kit.springAbsorb : 1);
   const lever = P.zoneLever[zone] ?? 0.35;
   const omega = J * lever / I;
   const K = P.seatK * (0.7 + 0.6 * (d.seat ?? 0.6)) + (d.braced ? P.braceK : 0);
-  const theta = omega / Math.sqrt(K / I);                                  // peak lean of an undamped seat
+  const theta = omega / Math.sqrt(K / I) * (1 - P.kit.lockTheta * ((opts.lock ?? 1) - 1));                                  // peak lean of an undamped seat
   const thetaMax = (P.seatMax + 0.15 * ((d.protection ?? 0.7) - 0.55)) * (opts.hold || 1);     // deep jousting saddles and locked harness hold longer
-  const unhorse = (broke || opts.sharp) && theta * (1 + (Math.random() - 0.5) * 0.12) > thetaMax;   // a sharp point that has bitten bears him back whether or not the lance breaks
-  return { vClose, Eavail, E, J, broke, omega, theta, thetaMax, unhorse, power: E / P.refJ };
+  const unhorse = (broke || (opts.sharp && E >= (opts.sharpJ || 0))) && theta * (1 + (Math.random() - 0.5) * 0.12) > thetaMax;   // a sharp point that has bitten bears him back whether or not the lance breaks
+  return { vClose, Eavail, E, J, broke, omega, theta, thetaMax, unhorse, sprang, power: E / P.refJ };
 }

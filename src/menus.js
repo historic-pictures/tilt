@@ -95,7 +95,7 @@ export function initMenus(api) {
   function exhibition() {
     root.innerHTML = scroll('sheet', `<div class="top"><div><h3>Exhibition Joust</h3><p>Choose the lists and the knight you will run against. No entry fee and no ransom; the purse is ${marks(purse(0, 'win', false))}.</p></div>
       <div class="actions"><button class="btn" data-go="main">Back</button><button class="btn primary" data-act="exride">Ride</button></div></div>
-      <h5>The Joust</h5><div class="grid">${Object.values(MODES).map(m => `<div class="pick ${m.id === exMode ? 'sel' : ''}" data-exm="${m.id}"><b>${m.name}</b><em>${m.sub}</em><p>${m.blurb}</p></div>`).join('')}</div>
+      <h5>The Joust</h5><div class="grid">${Object.values(MODES).map(m => `<div class="pick ${m.id === exMode ? 'sel' : ''}" data-exm="${m.id}"><b>${m.name}</b><em>${m.sub}</em><p>${m.blurb}${m.kitNote ? ' ' + m.kitNote : ''}</p></div>`).join('')}</div>
       <h5>Courses <small>${fixedCourses(exMode) ? (MODES[exMode].bridge ? 'Three against each challenger' : MODES[exMode].fixedCourses ? 'Fixed by the rules of the joust' : 'Fixed at four by the statutes') : MODES[exMode].firstBreak ? 'the joust is void if no lance breaks in this many' : 'level scores run up to two extra courses'}</small></h5><div class="swatches">${fixedCourses(exMode) ? `<div class="chip sel">${fixedCourses(exMode)}</div>` : EX_COURSES.map(n => `<div class="chip ${n === exCourses ? 'sel' : ''}" data-exc="${n}">${n}</div>`).join('')}</div>
       <h5>The Lists</h5><div class="grid">${VENUES.map((v, i) => `<div class="pick ${i === exVenue ? 'sel' : ''}" data-exv="${i}"><b>${v.name}</b><em>${v.year}</em><p>${v.city}. ${v.blurb}</p></div>`).join('')}</div>
       <h5>Your Opponent${MODES[exMode].bridge ? ' <small>one of the three challengers, in order of skill; the rest are drawn</small>' : ''}</h5><div class="grid">${KNIGHTS.map(k => `<div class="pick ${k.id === exOpp ? 'sel' : ''}" data-exo="${k.id}">${crest(k.arms, 30, 36)} <span class="ovr">${ovr(k)}</span><b>${k.short}</b><em>${k.land}</em><p>${k.name} — ${HORSES[k.horse].name}, ${HELMS[ARMOURS[k.armour].helm].name}, ${ARMOURS[k.armour].name}</p>${stat('Aim', k.skill)}${stat('Seat', k.seat)}${stat('Drive', k.drive)}</div>`).join('')}</div>`);
@@ -173,7 +173,7 @@ export function initMenus(api) {
         <p>Attaint (a touch) 1 · Lance broken 2 · Broken on the helm 3 · Unhorsing wins the match.<br>Hit the tilt −2 · Hit a horse −3, and twice loses you the prize.<br>
         Ride on with your lance still low −1. Five courses by default (you choose three to fifteen on the circuit screen, three to twenty in an exhibition); level cheques run extra courses.</p>
         <h5>The Jousts</h5>
-        ${Object.values(MODES).map(m => `<p><b>${m.name}</b> (${m.sub}). ${m.blurb}</p>`).join('')}</div>
+        ${Object.values(MODES).map(m => `<p><b>${m.name}</b> (${m.sub}). ${m.blurb}${m.kitNote ? ' ' + m.kitNote : ''}</p>`).join('')}</div>
       <div><h5>Technique</h5>
         <p><b>Lower it late and gently.</b> "Like a clock weight," wrote Quijada de Reayo. Couch too early and your arm tires and the point wanders; too late and it is still settling in the rest when you meet.</p>
         <p><b>Speed is the shock.</b> A lance only breaks if you bring weight and pace to it. But the faster the gallop, the more the point bounces — a smooth horse and a collected stride steady it.</p>

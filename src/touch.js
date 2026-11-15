@@ -25,7 +25,7 @@ export function goFullscreen() {
 }
 
 /**
- * h = { S, mouse, inMatch(), getC(), spur(), brace(), advance(), setPaused(v), leave(), initAudio(), setSkip(v) }
+ * h = { S, openReplays(), mouse, inMatch(), getC(), spur(), brace(), advance(), setPaused(v), leave(), initAudio(), setSkip(v) }
  * Returns { update() }, to be called once a frame.
  */
 export function initTouch(h) {
@@ -41,7 +41,7 @@ export function initTouch(h) {
   const ui = mk('div', 'touchUI');
   const bSpur = mk('button', 'tSpur', 'SPUR', ui), bBrace = mk('button', 'tBrace', 'BRACE', ui), bPause = mk('button', 'tPause', '<i></i><i></i>', ui);
   bSpur.setAttribute('aria-label', 'Spur'); bBrace.setAttribute('aria-label', 'Brace'); bPause.setAttribute('aria-label', 'Pause');
-  mk('div', 'tPauseMenu', '<button id="tRide">Ride on</button><button id="tLeave">Leave the lists</button>', ui);
+  mk('div', 'tPauseMenu', '<button id="tRide">Ride on</button><button id="tRpl">Replays</button><button id="tLeave">Leave the lists</button>', ui);
 
   const press = (el, fn) => {
     el.addEventListener('pointerdown', (e) => {
@@ -57,6 +57,7 @@ export function initTouch(h) {
   press(bBrace, () => h.brace());
   press(bPause, () => { if (h.inMatch()) h.setPaused(!S.paused); });
   press(document.getElementById('tRide'), () => h.setPaused(false));
+  press(document.getElementById('tRpl'), () => { if (h.openReplays) h.openReplays(); });
   press(document.getElementById('tLeave'), () => h.leave());
 
   // ---- the layer: one finger aims (relative, like a trackpad), any finger can tap or hold
@@ -76,7 +77,7 @@ export function initTouch(h) {
   });
   const end = (e, cancelled) => {
     const r = pts.get(e.pointerId); if (!r) return; pts.delete(e.pointerId); if (aim === e.pointerId) aim = null;
-    if (!cancelled && r.moved < 14 && performance.now() - r.t < 450 && !r.skip && S.mode !== 'charge' && !S.paused) h.advance();
+    if (!cancelled && r.moved < 14 && performance.now() - r.t < 450 && !r.skip && S.mode !== 'charge' && (!S.paused || S.hl)) h.advance();
   };
   layer.addEventListener('pointerup', (e) => { e.preventDefault(); end(e, false); });
   layer.addEventListener('pointercancel', (e) => end(e, true));
