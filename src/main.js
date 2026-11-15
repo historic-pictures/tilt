@@ -449,54 +449,94 @@ function retinueSpeak(sit, chance, wait = 2.6) {
 }
 
 // ------------------------------------------------------------------ crowd reactions
+// Every pass outcome has its own kind: its own sound recipe here (snd: [category, strength, extra lead s]) and its own animation table in crowd.js (buildTable).
+// c / k: how it moves the commons' / the court's favour for `by`; ex: how far it lifts the mood (S.excite).
 const REACT = {
-  start:   { c: 0, k: 0, snd: [['cheer', 0.6]], ex: 0.55 },
-  salute:  { c: 0.03, k: 0.13, snd: [['applause', 0.55]], ex: 0.42 },
-  rouse:   { c: 0.08, k: -0.02, snd: [['cheer', 0.8]], ex: 0.6 },
-  taunt:   { c: 0.03, k: -0.06, snd: [['ooh', 0.5]], ex: 0.45 },
-  attaint: { c: 0.02, k: 0.04, snd: [['cheer', 0.4]], ex: 0.5 },
-  break:   { c: 0.11, k: 0.09, snd: [['roar', 0.75]], ex: 0.8 },
-  helm:    { c: 0.14, k: 0.2, snd: [['gasp', 0.7], ['roar', 0.9], ['applause', 0.7]], ex: 0.95 },
-  unhorse: { c: 0.35, k: 0.18, snd: [['roar', 1], ['gasp', 0.9]], ex: 1 },
-  miss:    { c: -0.08, k: -0.02, snd: [['groan', 0.6]], ex: 0.35 },
-  glance:  { c: 0.02, k: 0.0, snd: [['ooh', 0.6]], ex: 0.4 },      // the point skids off: an "ooh", no roar
-  tilt:    { c: -0.05, k: -0.09, snd: [['ooh', 0.5]], ex: 0.4 },
-  foul:    { c: -0.2, k: -0.4, snd: [['boo', 0.95]], ex: 0.65 },
-  sandbag: { c: 0.0, k: -0.03, snd: [['ooh', 0.6]], ex: 0.5 },
-  win:     { c: 0.15, k: 0.15, snd: [['roar', 1], ['applause', 1]], ex: 1 },
-  loss:    { c: 0, k: 0, snd: [['applause', 0.6]], ex: 0.5 },
+  start:     { c: 0, k: 0, snd: [['cheer', 0.6]], ex: 0.55 },
+  salute:    { c: 0.03, k: 0.13, snd: [['applause', 0.55]], ex: 0.42 },
+  rouse:     { c: 0.08, k: -0.02, snd: [['cheer', 0.8]], ex: 0.6 },
+  taunt:     { c: 0.03, k: -0.06, snd: [['laugh', 0.6]], ex: 0.4 },                                    // the player plays the fool: commons laugh, the gallery raises eyebrows
+  attaint:   { c: 0.02, k: 0.04, snd: [['polite', 0.6]], ex: 0.3 },                                    // a touch that does not break: a polite ripple
+  break:     { c: 0.11, k: 0.09, snd: [['roar', 0.75], ['polite', 0.5, 0.3]], ex: 0.8 },               // lance broken on the shield or body: roar, the gallery claps behind it
+  helm:      { c: 0.14, k: 0.2, snd: [['gasp', 0.7], ['roar', 0.9], ['applause', 0.7]], ex: 0.95 },    // on the helm: gasp, then the roar 0.2 s later
+  unhorse:   { c: 0.35, k: 0.18, snd: [['roar', 1], ['gasp', 0.9]], ex: 1 },
+  bothbreak: { c: 0.1, k: 0.1, snd: [['roar', 0.95], ['applause', 0.9, 0.3], ['cheer', 0.8]], ex: 0.97 },   // both lances in splinters: the biggest roar short of a fall; by 0 (everyone alike)
+  miss:      { c: -0.08, k: -0.02, snd: [['groan', 0.6]], ex: 0.3 },                                   // a clean miss: "aww", then a few jeers and laughs
+  bothmiss:  { c: -0.04, k: -0.04, snd: [['laugh', 0.8], ['whistle', 0.7]], ex: 0.4 },                 // neither touches: laughter and whistles
+  glance:    { c: 0.02, k: 0.0, snd: [['ooh', 0.6]], ex: 0.4 },                                        // the point skids off: a long "ooh", hands on heads
+  near:      { c: 0.0, k: 0.0, snd: [['gasp', 0.9]], ex: 0.45 },                                       // the point goes by the helm: a sharp gasp
+  tilt:      { c: -0.05, k: -0.09, snd: [['wince', 0.8]], ex: 0.4 },                                   // a lance into the barrier: "oof"
+  foul:      { c: -0.2, k: -0.4, snd: [['boo', 0.95], ['whistle', 0.5, 0.4]], ex: 0.65 },
+  sandbag:   { c: 0.0, k: -0.03, snd: [['laugh', 0.7]], ex: 0.5 },
+  win:       { c: 0.15, k: 0.15, snd: [['roar', 1], ['applause', 1]], ex: 1 },
+  loss:      { c: 0, k: 0, snd: [['applause', 0.6]], ex: 0.5 },
 };
+// Plain modern English, short. Several per kind, and the same line is never shown twice running (see crowdLine).
 const CROWD_LINES = {
-  salute: [['THE GALLERY', 'The ladies wave their sleeves; the lords incline their heads.']],
-  rouse: [['THE COMMONS', 'The rails erupt — they love a knight who plays to them.']],
-  taunt: [['THE GALLERY', 'Raised eyebrows in the gallery. The commons laugh.']],
-  attaint: [['THE STANDS', 'A ripple of applause — a touch, no more.']],
-  break: [['THE COMMONS', 'A roar from the rails — caps fly into the air!'], ['THE COMMONS', 'The commons howl and hammer on the fence!'], ['THE STANDS', 'The townsfolk are on their feet, pennants waving.']],
-  helm: [['THE GALLERY', 'The whole gallery rises. Kerchiefs flutter like doves.'], ['THE COMMONS', 'Upon the helm! The rails go wild.']],
-  unhorse: [['THE COMMONS', 'Pandemonium at the rails — hats, hoods and tankards in the air!'], ['THE GALLERY', 'Ladies cover their eyes; every lord is on his feet.']],
-  miss: [['THE COMMONS', 'Jeers and whistles from the commons.'], ['THE COMMONS', 'Catcalls from the rails. They came to see lances broken.']],
-  tilt: [['THE GALLERY', 'A wince runs along the gallery. Clumsy.']],
-  foul: [['THE GALLERY', 'The gallery turns away in disgust; the commons shake their fists.']],
-  sandbag: [['THE COMMONS', 'The idlers at the rail fall about laughing.']],
-  win: [['THE GALLERY', 'Flowers and favours rain down from the gallery!']],
-  loss: [['THE STANDS', 'Courteous applause for the beaten knight.']],
+  salute: [['THE GALLERY', 'The ladies wave their sleeves; the lords incline their heads.'], ['THE GALLERY', 'Kerchiefs flutter along the gallery.']],
+  rouse: [['THE COMMONS', 'The rails erupt. They love a knight who plays to them.'], ['THE COMMONS', 'The commons stamp and shout his name.']],
+  taunt: [['THE GALLERY', 'Raised eyebrows in the gallery. The commons laugh.'], ['THE COMMONS', 'The rails hoot with laughter.']],
+  attaint: [['THE STANDS', 'A ripple of applause. A touch, no more.'], ['THE GALLERY', 'Polite clapping from the gallery.'], ['THE STANDS', 'A touch. The crowd waits for more.']],
+  break: [['THE COMMONS', 'A roar from the rails. Caps fly into the air!'], ['THE COMMONS', 'The commons howl and hammer on the fence!'], ['THE STANDS', 'The townsfolk are on their feet, pennants waving.']],
+  helm: [['THE GALLERY', 'The whole gallery rises. Kerchiefs flutter like doves.'], ['THE COMMONS', 'Right on the helm! The rails go wild.'], ['THE STANDS', 'A gasp, then a roar. That one rang his head.']],
+  unhorse: [['THE COMMONS', 'Pandemonium at the rails. Hats, hoods and tankards in the air!'], ['THE GALLERY', 'Ladies cover their eyes; every lord is on his feet.'], ['THE STANDS', 'He is down! The whole field is shouting.']],
+  bothbreak: [['THE STANDS', 'Both lances in splinters! The stands are on their feet.'], ['THE COMMONS', 'Two clean breaks! The rails shake with noise.'], ['THE GALLERY', 'Even the gallery cheers. That was a fine course.']],
+  miss: [['THE COMMONS', 'Jeers and whistles from the commons.'], ['THE COMMONS', 'Catcalls from the rails. They came to see lances broken.'], ['THE STANDS', 'A long groan runs round the stands.']],
+  bothmiss: [['THE COMMONS', 'Both lances missed. The rails whistle and laugh.'], ['THE GALLERY', 'The gallery shakes its head. Nobody hit anything.'], ['THE STANDS', 'Laughter from the stands. Two misses.']],
+  glance: [['THE STANDS', 'A long "ooh" as the point skids off.'], ['THE COMMONS', 'Hands go to heads all along the rail. So close.'], ['THE GALLERY', 'A hush, then a sigh. The lance glanced away.']],
+  near: [['THE STANDS', 'A sharp gasp. That passed a hand from his helm.'], ['THE GALLERY', 'Ladies clutch at their sleeves. That was close.']],
+  tilt: [['THE GALLERY', 'A wince runs along the gallery. Clumsy.'], ['THE COMMONS', 'A groan from the rails. Right into the barrier.'], ['THE STANDS', 'The crowd flinches as the lance hits the tilt.']],
+  foul: [['THE GALLERY', 'The gallery turns away in disgust; the commons shake their fists.'], ['THE COMMONS', 'Boos from every rail. He struck the horse!'], ['THE STANDS', 'Angry shouting. Nobody likes a blow on the horse.']],
+  sandbag: [['THE COMMONS', 'The idlers at the rail fall about laughing.'], ['THE COMMONS', 'The rail roars with laughter at the sandbag.']],
+  win: [['THE GALLERY', 'Flowers and favours rain down from the gallery!'], ['THE STANDS', 'The whole crowd rises for the winner.']],
+  loss: [['THE STANDS', 'Courteous applause for the beaten knight.'], ['THE GALLERY', 'The gallery applauds the loser politely.']],
 };
-let crowdEvId = 0;
+let crowdEvId = 0, lastCrowdLine = '';
+/** One crowd line for the kind, never the one just shown (and none if the kind has only that one). */
+function crowdLine(kind) {
+  const L = CROWD_LINES[kind]; if (!L) return null;
+  const ok = L.filter(l => l[1] !== lastCrowdLine); if (!ok.length) return null;
+  const l = pick(ok); lastCrowdLine = l[1]; return l;
+}
 function react(kind, by = 0, line = true) {
   const Rk = REACT[kind]; if (!Rk) return;
   const gasp = Rk.snd.some(x => x[0] === 'gasp');
-  for (const [snd, str] of Rk.snd) audio.crowd(snd, str, gasp && snd !== 'gasp' ? 0.2 : 0);      // the gasp goes 0.2 s before the roar
+  const fav = M ? clamp(by * M.favour * 2, -1, 1) : 0;      // is the house with the man this is about?
+  for (const [snd, str, ld] of Rk.snd) audio.crowd(snd, str, (ld || 0) + (gasp && snd !== 'gasp' && kind !== 'near' ? 0.2 : 0), { fav });      // the gasp goes 0.2 s before the roar
   S.excite = Math.max(S.excite, Rk.ex); S.scorer = Rk.c + Rk.k >= 0 ? by : -by;
   if (Rk.ex > 0.75) S.waveT = S.time;
-  S.crowdEv = { id: ++crowdEvId, kind: { rouse: 'break', taunt: 'miss', glance: 'attaint' }[kind] || kind, by };
+  S.crowdEv = { id: ++crowdEvId, kind: { rouse: 'break', sandbag: 'taunt' }[kind] || kind, by };
   if (!M) return;
   M.fav.commons = clamp(M.fav.commons + by * Rk.c, -1, 1); M.fav.court = clamp(M.fav.court + by * Rk.k, -1, 1);
   M.favour = (M.fav.commons + M.fav.court) / 2;
   if (Rk.ex > 0.5 && player) M.agit = clamp(M.agit + (1 - player.horseDef.nerve) * 0.35 * Rk.ex, 0, 1);
-  if (line && CROWD_LINES[kind] && !M.practice) { const l = pick(CROWD_LINES[kind]); say(l[1], l[0], 4, { cat: 'crowd' }); }      // ambient: dropped during the charge and the strike
+  if (line && !M.practice) { const l = crowdLine(kind); if (l) say(l[1], l[0], 4, { cat: 'crowd' }); }      // ambient: dropped during the charge and the strike
   if (!M.ladyFavour && M.fav.court > 0.6 && by > 0 && !M.practice) {
     M.ladyFavour = true; M.focus = 1; player.ribbon.visible = true; M.ladyPending = true;       // told at the next verdict (see betweenColour)
   }
+}
+// The two strokes of a pass land within a few tenths of a second of each other: collect them and fire ONE reaction for the pair
+// (both broke -> bothbreak, both missed -> bothmiss, otherwise the bigger of the two). A fall or a foul does not wait.
+const strokeQ = { list: [], t: 0, mute: 0 };
+const STROKE_RANK = { miss: 0, attaint: 1, glance: 2, near: 2.5, break: 3, helm: 4 };
+function crowdStroke(kind, by) {
+  if (strokeQ.mute > 0) return;      // the pass already had its reaction (a fall or a foul)
+  strokeQ.list.push([kind, by]); strokeQ.t = 0.3;
+  if (kind === 'unhorse' || kind === 'foul') flushStrokes();
+}
+function flushStrokes() {
+  const L = strokeQ.list; if (!L.length) return;
+  let k, by = 0;
+  const all = (...ks) => L.length === 2 && L.every(e => ks.includes(e[0]));
+  const un = L.filter(e => e[0] === 'unhorse'), foul = L.find(e => e[0] === 'foul');
+  if (un.length) { k = 'unhorse'; by = un.length > 1 ? 0 : un[0][1]; }
+  else if (foul) { k = 'foul'; by = foul[1]; }
+  else if (all('break', 'helm')) { k = 'bothbreak'; by = 0; }
+  else if (all('miss')) { k = 'bothmiss'; by = 0; }
+  else { let best = L[0]; for (const e of L) if (STROKE_RANK[e[0]] > STROKE_RANK[best[0]]) best = e; k = best[0]; by = best[1]; }
+  L.length = 0;
+  if (k === 'unhorse' || k === 'foul') strokeQ.mute = 0.8;
+  react(k, by);
 }
 function fanfare(kind) { audio.fanfare(kind); S.fanfareT = kind === 'short' ? 1.3 : 2.8; }
 
@@ -1372,7 +1412,8 @@ function sweep(Aj, Bj, st, isP, contact = true) {
     st.done = true; st.res = { zone: 'miss', pts: 0, code: 'm', up, early, text: up ? 'never brought his lance down' : early ? 'let his lance up before the stroke' : 'passed wide — no attaint' };
     M.stats[isP ? 0 : 1].miss++;
     if (isP) { C.tech = techSnapshot(null, 0); callout(up ? 'LANCE NEVER LOWERED' : early ? 'LANCE RAISED TOO SOON' : 'MISSED', 'bad', CALL.miss); }
-    if (!M.practice || isP) react('miss', isP ? 1 : -1, isP);
+    { const nearHelm = !up && !early && !!st.near && st.near.zone === 'helm' && st.near.d < 0.18;      // the point went by the helm within a hand: a sharp gasp, not an "aww"
+      if (!M.practice || isP) crowdStroke(nearHelm ? 'near' : 'miss', isP ? 1 : -1); }
     // (a miss is spoken in the combined result call once both lances are spent)
   }
 }
@@ -1474,7 +1515,7 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
     st.res = { zone, pts: M.PT.foulHorse, code: 'f', text: 'struck the horse — a foul stroke', foul: true, off };
     { const [d, pan] = hear(_tip); audio.impact(power, 'horse', d); audio.whinny(pan, d); } fx.dust(_tip, 6, 0.3, 1, 0.3);
     Bj.speed *= 0.75; if (isP) M.fouls++; else { M.oFouls = (M.oFouls || 0) + 1; M.hp.horse = Math.max(0.15, M.hp.horse - 0.4); }   // his fouls count against him too
-    react('foul', isP ? 1 : -1);
+    crowdStroke('foul', isP ? 1 : -1);
     callout(isP ? (M.fouls >= (M.mode.horseOut || 2) ? 'YOU STRUCK HIS HORSE — THE PRIZE IS LOST' : 'FOUL — YOU HIT HIS HORSE &nbsp;−3') : (M.oFouls >= (M.mode.horseOut || 2) ? 'HE STRUCK YOUR HORSE AGAIN — HE IS DISQUALIFIED' : 'FOUL — HE HIT YOUR HORSE'), 'bad', CALL.foul);
     if (!(M.circuit && profile.herald !== false && HERALD)) say(`Foul! ${who} struck a horse.`, 'THE MARSHAL', 1, { kind: 'result', after: 'strike', prio: 3, phases: RES4 });
     return;
@@ -1518,7 +1559,7 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   }
   st.res = { zone, pts, code, text, broke, unhorse, power, cent, off, glanced, skid: st.skid || null, spoiled: st.spoiled || 0, turned: !!st.turned, E: hit.E, J: hit.J, v: closing, theta: hit.theta, thetaMax: hit.thetaMax };
   const kind = unhorse ? 'unhorse' : broke && zone === 'helm' ? 'helm' : broke ? 'break' : glanced || st.turned ? 'glance' : 'attaint';
-  react(kind, isP ? 1 : -1);
+  crowdStroke(kind, isP ? 1 : -1);
   // say it plainly, right where the eye is
   const Z = zone.toUpperCase(), sgn = pts > 0 ? `+${pts}` : `${pts}`;
   // One big callout per strike, the most important (the director in callout() keeps the best of the two blows); the rest is in the verdict.
@@ -2162,6 +2203,8 @@ function frame(dtReal) {
   life.update(dt, { mode: M ? S.mode : 'menu', focusZ: player && opp && M ? (player.z + opp.z) / 2 : 0, canCall: !!M && !M.result && (S.mode === 'ready' || S.mode === 'after') });
   if (G._hbDebug) { if (player) player.dbgUpdate(frameId, true); if (opp && opp.dbgUpdate) opp.dbgUpdate(frameId, true); }
   S.excite = damp(S.excite, 0.12, 0.45, dtReal);
+  if (strokeQ.mute > 0) strokeQ.mute -= dtReal;
+  if (strokeQ.list.length) { strokeQ.t -= dtReal; if (strokeQ.t <= 0 || (C && C.pL.done && C.oL.done)) flushStrokes(); }      // one reaction for the pair of strokes
   if (world) {
     S.fanfareT = Math.max(0, (S.fanfareT || 0) - dtReal);
     const ps = world.propState; ps.mode = S.mode === 'replay' ? 'after' : S.mode; ps.fanfare = S.fanfareT > 0; ps.excitement = S.excite;

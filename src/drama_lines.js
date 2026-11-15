@@ -18,6 +18,7 @@ export const KNIGHT_BIO = {
   quinones: 'He held the bridge at Órbigo for his lady until three hundred lances were broken.',
   freydal: 'Maximilian of Austria, heir of the Empire, who loved the joust above statecraft.',
   palman: 'A German knight of Styria who led the Serbian Emperor\'s three hundred.',
+  stefan: 'Serbian despot and knight of the Dragon, who made Belgrade his capital.',
   ulrich: 'A Styrian knight and poet who rode the lists for his lady.',
   blackprince: 'The Prince of Wales, victor of Poitiers.',
 };
@@ -102,6 +103,7 @@ export const BOAST_HIM = {
   quinones: ['Quiñones held Órbigo bridge for three hundred lances. He will not stop.'],
   freydal: ['Maximilian is heir to the Empire, and he does not lose willingly.'],
   palman: ['Palman led three hundred German knights for Serbia\'s Emperor. Think carefully.'],
+  stefan: ['He fought at Nicopolis and at Angora. You are not Angora.', 'Byzantium made him Despot. Belgrade made him its lord.', 'A knight of the Dragon, and a poet. He will write about this.'],
   ulrich: ['Ulrich rode across Europe dressed as Lady Venus, and nobody laughed.'],
   blackprince: ['The Prince took a king prisoner at Poitiers. Today, you.'],
   _: ['{him} has never lost in front of a crowd like this. Pity.'],

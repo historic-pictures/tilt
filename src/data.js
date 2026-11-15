@@ -78,6 +78,9 @@ export const KNIGHTS = [
   { id: 'freydal', name: 'Maximilian, "Freydal"', short: 'Freydal', land: 'Empire', arms: { c1: '#191919', c2: '#e0b83c', c3: '#e0b83c', pattern: 'fess', charge: 'star' }, horse: 'destrier', armour: 'stechzeug', skill: 0.88, seat: 0.9, drive: 0.9, armourTint: 0x30333a },
   // Palman (fl. 1331–1363), a German knight from Styria who commanded Emperor Dušan's guard of 300 German knights in Serbia. No arms of his are known; these are the game's.
   { id: 'palman', name: 'Palman Bracht', short: 'Palman', land: 'Serbia', arms: { c1: '#ece8dc', c2: '#191919', c3: '#191919', pattern: 'bend', charge: 'none' }, horse: 'destrier', armour: 'bascinet', skill: 0.74, seat: 0.82, drive: 0.9 },
+  // Despot Stefan Lazarević (c. 1377–1427): a founding knight of the Order of the Dragon (1408); at the Buda congress of 1412, where a great tournament was held.
+  // No source shows him jousting himself. Arms: the white-on-red of the Serbian rulers; a proper charge would be the double-headed eagle (the game has none yet).
+  { id: 'stefan', name: 'Despot Stefan Lazarević', short: 'Stefan', land: 'Serbia', arms: { c1: '#a81e1e', c2: '#e0b83c', c3: '#ece8dc', pattern: 'plain', charge: 'cross' }, horse: 'destrier', armour: 'bascinet', skill: 0.76, seat: 0.84, drive: 0.88 },
   { id: 'ulrich', name: 'Ulrich von Liechtenstein', short: 'Liechtenstein', land: 'Styria', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#1f4690', pattern: 'chief', charge: 'none', over: [{ kind: 'chevron', c: '#1f4690' }] }, horse: 'destrier', armour: 'mail', skill: 0.8, seat: 0.8, drive: 0.95 },
   { id: 'blackprince', name: 'Edward, the Black Prince', short: 'the Prince', land: 'England', arms: { c1: '#191919', c2: '#191919', c3: '#ece8dc', pattern: 'plain', charge: 'feathers' }, horse: 'destrier', armour: 'bascinet', skill: 0.92, seat: 0.88, drive: 0.95 },
 ];
@@ -419,6 +422,7 @@ export const ACHIEVEMENTS = [
   knightAch('quinones', 'Quiñones Bested', 'Beat Suero de Quiñones.'),
   knightAch('freydal', 'Freydal Bested', 'Beat Maximilian, "Freydal".', 8),
   knightAch('palman', 'Palman Bested', 'Beat Palman Bracht, captain of the German guard.'),
+  knightAch('stefan', 'The Despot Bested', 'Beat Despot Stefan Lazarević.'),
   knightAch('ulrich', 'Ulrich Bested', 'Beat Ulrich von Liechtenstein.'),
   knightAch('blackprince', 'The Prince Bested', 'Beat Edward, the Black Prince.', 10),
   { id: 'retinue', group: 'Retinue & Stable', name: 'A Full Household', text: 'Have all five of your retinue in your service.', rule: { men: 'full' } },

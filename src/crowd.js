@@ -10,7 +10,8 @@
 //   when undefined it is derived from side (+1 faces -X, -1 faces +X).
 //
 // UPDATE state s: excitement, anticipation, favour, favourCommons, favourCourt, scorer, waveStart, focusZ,
-//   event {id, kind, by}. Event ids are edge-detected; kinds: break helm unhorse attaint miss foul salute win loss start.
+//   event {id, kind, by}. Event ids are edge-detected; kinds: break helm unhorse attaint glance miss bothbreak bothmiss near tilt foul taunt salute win loss start.
+//   `by` = whose stroke (+1 the player, -1 the opponent, 0 = everyone alike: the double events). Supporters of `by` and the rest get different tables, per class.
 //
 // PER-PERSON LAYOUT (typed arrays indexed by spectator i; built once, nothing allocated per frame)
 //   constants: px,py,pz, side, cls, thr (allegiance threshold in (-1,1): supports A when thr < favour of its class),
@@ -51,9 +52,12 @@ const STRAW = ['#cfa95c', '#c19a4e', '#d8b86e'];
 const FLOWERS = ['#d8222a', '#f2efe6', '#e87aa0', '#f0c040'];
 
 // ---- event reaction channels ----
-const NCH = 14;
+const NCH = 17;
 const CH_CHEER = 0, CH_DIS = 1, CH_FIST = 2, CH_JEER = 3, CH_ANGRY = 4, CH_POLITE = 5, CH_KERCH = 6,
-  CH_BOW = 7, CH_BLESS = 8, CH_CROSS = 9, CH_RECOIL = 10, CH_STAND = 11, CH_WILD = 12, CH_SHAKE = 13;
+  CH_BOW = 7, CH_BLESS = 8, CH_CROSS = 9, CH_RECOIL = 10, CH_STAND = 11, CH_WILD = 12, CH_SHAKE = 13,
+  CH_HEAD = 14,   // both hands (or one) clutched to the head: "ooh"
+  CH_SLUMP = 15,  // shoulders drop, head down, arms hang: "aww"
+  CH_LAUGH = 16;  // shoulders shake; commons point and guffaw, the gallery laughs behind a hand
 
 // module-level scratch (no per-frame allocation)
 let r0 = 1, r1 = 0, r2 = 0, r3 = 0, r4 = 1, r5 = 0, r6 = 0, r7 = 0, r8 = 1; // body rotation, column-major
@@ -332,6 +336,9 @@ export function buildCrowd(group, spots, opts = {}) {
   const tbl = new Float32Array(4 * 2 * NCH); // [(cls<<1 | supportsDoer) * NCH + channel]
   const setT = (c, s, ch, v) => { tbl[((c << 1) | s) * NCH + ch] = v; };
   let lastEvId = null, evOn = false, evT = -1e9, evDur = 3.2, evBy = 0;
+  // per-person variation, redrawn for every event so no two reactions look alike: extra delay, strength (a few barely react), which arm leads, one hand or two
+  const evJit = new Float32Array(n), evInt = new Float32Array(n), evArm = new Uint8Array(n), evOne = new Uint8Array(n);
+  const EV_DUR = { unhorse: 4.0, win: 4.0, bothbreak: 3.8, salute: 3.0, foul: 3.6, bothmiss: 3.0, miss: 2.6, attaint: 2.4, taunt: 2.4, glance: 1.9, near: 1.6, tilt: 1.8 };
 
   // pooled tossed items: slots [0,HATS) hats, [HATS,POOL) flowers / favours
   const pX = new Float32Array(POOL), pY = new Float32Array(POOL), pZ = new Float32Array(POOL);
@@ -346,33 +353,61 @@ export function buildCrowd(group, spots, opts = {}) {
   function buildTable(k) {
     tbl.fill(0);
     switch (k) {
-      case 'break':
+      case 'break':       // a lance broken on the shield or body: the stands roar, the gallery applauds
         setT(0, 1, CH_CHEER, 0.9); setT(0, 1, CH_FIST, 0.7); setT(0, 1, CH_STAND, 1); setT(0, 0, CH_DIS, 0.35);
         setT(1, 1, CH_CHEER, 0.7); setT(1, 1, CH_STAND, 0.8); setT(1, 0, CH_DIS, 0.25);
         setT(2, 1, CH_POLITE, 0.9); setT(2, 0, CH_POLITE, 0.6); setT(3, 1, CH_POLITE, 0.4); break;
-      case 'helm':
-        setT(0, 1, CH_CHEER, 1); setT(0, 1, CH_FIST, 0.8); setT(0, 1, CH_STAND, 1); setT(0, 0, CH_DIS, 0.4);
-        setT(1, 1, CH_CHEER, 0.8); setT(1, 1, CH_STAND, 1); setT(1, 0, CH_DIS, 0.3);
+      case 'helm':        // broken on the helm: everyone up, the ladies wave kerchiefs
+        setT(0, 1, CH_CHEER, 1); setT(0, 1, CH_FIST, 0.8); setT(0, 1, CH_STAND, 1); setT(0, 0, CH_DIS, 0.4); setT(0, 0, CH_HEAD, 0.5);
+        setT(1, 1, CH_CHEER, 0.8); setT(1, 1, CH_STAND, 1); setT(1, 0, CH_DIS, 0.3); setT(1, 0, CH_HEAD, 0.4);
         setT(2, 1, CH_STAND, 1); setT(2, 0, CH_STAND, 1); setT(2, 1, CH_POLITE, 1); setT(2, 0, CH_POLITE, 0.8);
         setT(2, 1, CH_KERCH, 0.9); setT(2, 0, CH_KERCH, 0.5); break;
-      case 'unhorse':
+      case 'unhorse':     // the fall: commons go wild, the fallen man's gallery crosses itself
         setT(0, 1, CH_CHEER, 1); setT(0, 1, CH_FIST, 0.6); setT(0, 1, CH_STAND, 1); setT(0, 1, CH_WILD, 1);
-        setT(0, 0, CH_DIS, 0.8); setT(0, 0, CH_WILD, 1);
+        setT(0, 0, CH_DIS, 0.8); setT(0, 0, CH_WILD, 1); setT(0, 0, CH_HEAD, 0.6);
         setT(1, 1, CH_CHEER, 0.9); setT(1, 1, CH_STAND, 1); setT(1, 0, CH_DIS, 0.5);
-        setT(2, 1, CH_STAND, 1); setT(2, 0, CH_STAND, 1); setT(2, 1, CH_POLITE, 1); setT(2, 0, CH_POLITE, 0.8);
-        setT(2, 1, CH_KERCH, 0.9); setT(2, 0, CH_KERCH, 0.7);
+        setT(2, 1, CH_STAND, 1); setT(2, 1, CH_POLITE, 1); setT(2, 1, CH_KERCH, 0.9);
+        setT(2, 0, CH_STAND, 1); setT(2, 0, CH_CROSS, 0.8); setT(2, 0, CH_KERCH, 0.3); setT(2, 0, CH_RECOIL, 0.4);
         setT(3, 0, CH_CROSS, 1); setT(3, 1, CH_CROSS, 1); break;
-      case 'attaint':
-        setT(0, 1, CH_CHEER, 0.6); setT(0, 1, CH_FIST, 0.4); setT(0, 0, CH_DIS, 0.3); setT(0, 1, CH_STAND, 1);
-        setT(1, 1, CH_CHEER, 0.5); setT(1, 0, CH_DIS, 0.15);
-        setT(2, 0, CH_POLITE, 1); setT(2, 1, CH_POLITE, 1); break;
-      case 'miss':
-        setT(0, 0, CH_JEER, 1); setT(0, 1, CH_DIS, 0.5); setT(1, 0, CH_JEER, 0.4); setT(1, 1, CH_DIS, 0.3); break;
-      case 'foul':
-        setT(0, 0, CH_ANGRY, 1); setT(0, 1, CH_ANGRY, 0.5); setT(0, 0, CH_JEER, 0.4);
+      case 'attaint':     // a touch that does not break: a polite ripple, nobody leaps up
+        setT(0, 1, CH_CHEER, 0.25); setT(0, 1, CH_POLITE, 0.7); setT(0, 0, CH_POLITE, 0.45); setT(0, 0, CH_DIS, 0.12);
+        setT(1, 1, CH_POLITE, 0.8); setT(1, 0, CH_POLITE, 0.5);
+        setT(2, 0, CH_POLITE, 0.9); setT(2, 1, CH_POLITE, 1); setT(3, 1, CH_POLITE, 0.3); break;
+      case 'glance':      // the point skids off: "ooh", hands to the heads, no roar
+        setT(0, 1, CH_HEAD, 1); setT(0, 0, CH_HEAD, 0.9); setT(0, 1, CH_STAND, 0.6); setT(0, 0, CH_STAND, 0.4);
+        setT(1, 1, CH_HEAD, 0.8); setT(1, 0, CH_HEAD, 0.7);
+        setT(2, 1, CH_RECOIL, 0.5); setT(2, 0, CH_RECOIL, 0.5); setT(2, 1, CH_HEAD, 0.3); setT(2, 0, CH_HEAD, 0.3); break;
+      case 'miss':        // a clean miss: "aww", shoulders slump; a few jeers and laughs from the commons
+        setT(0, 1, CH_SLUMP, 1); setT(0, 1, CH_DIS, 0.35); setT(0, 1, CH_LAUGH, 0.2);
+        setT(0, 0, CH_JEER, 0.7); setT(0, 0, CH_LAUGH, 0.9); setT(0, 0, CH_SLUMP, 0.3);
+        setT(1, 1, CH_SLUMP, 0.8); setT(1, 0, CH_LAUGH, 0.5); setT(1, 0, CH_JEER, 0.25); setT(1, 0, CH_SLUMP, 0.3);
+        setT(2, 1, CH_SHAKE, 0.5); setT(2, 0, CH_SHAKE, 0.4); setT(2, 1, CH_SLUMP, 0.4); setT(2, 0, CH_LAUGH, 0.25);
+        setT(3, 1, CH_SHAKE, 0.4); setT(3, 0, CH_SHAKE, 0.4); break;
+      case 'bothbreak':   // both lances in splinters: everyone up, the biggest roar short of a fall
+        setT(0, 1, CH_CHEER, 1); setT(0, 1, CH_FIST, 0.9); setT(0, 1, CH_STAND, 1); setT(0, 1, CH_WILD, 0.8);
+        setT(1, 1, CH_CHEER, 1); setT(1, 1, CH_STAND, 1);
+        setT(2, 1, CH_STAND, 1); setT(2, 1, CH_POLITE, 1); setT(2, 1, CH_KERCH, 1);
+        setT(3, 1, CH_POLITE, 0.6); break;
+      case 'bothmiss':    // neither lance touches: laughter, the nobles shake their heads
+        setT(0, 1, CH_LAUGH, 1); setT(0, 1, CH_JEER, 0.35); setT(0, 1, CH_SLUMP, 0.3);
+        setT(1, 1, CH_LAUGH, 0.7); setT(1, 1, CH_SLUMP, 0.35);
+        setT(2, 1, CH_SHAKE, 1); setT(2, 1, CH_LAUGH, 0.3); setT(3, 1, CH_SHAKE, 0.6); break;
+      case 'near':        // the point goes by the helm: a sharp gasp, everyone flinches
+        setT(0, 1, CH_RECOIL, 0.8); setT(0, 0, CH_RECOIL, 0.8); setT(0, 1, CH_HEAD, 0.5); setT(0, 0, CH_HEAD, 0.5);
+        setT(1, 1, CH_RECOIL, 0.7); setT(1, 0, CH_RECOIL, 0.7);
+        setT(2, 1, CH_RECOIL, 1); setT(2, 0, CH_RECOIL, 1); setT(3, 1, CH_RECOIL, 0.5); setT(3, 0, CH_RECOIL, 0.5); break;
+      case 'tilt':        // a lance into the barrier: "oof", a wince and a recoil
+        setT(0, 1, CH_RECOIL, 1); setT(0, 0, CH_RECOIL, 1); setT(0, 1, CH_SLUMP, 0.4); setT(0, 0, CH_LAUGH, 0.4);
+        setT(1, 1, CH_RECOIL, 0.8); setT(1, 0, CH_RECOIL, 0.8);
+        setT(2, 1, CH_RECOIL, 0.7); setT(2, 0, CH_RECOIL, 0.7); setT(2, 0, CH_SHAKE, 0.4); break;
+      case 'foul':        // a blow on the horse: commons fists and boos, the gallery turns away
+        setT(0, 0, CH_ANGRY, 1); setT(0, 1, CH_ANGRY, 0.5); setT(0, 0, CH_JEER, 0.5); setT(0, 0, CH_FIST, 0.7); setT(0, 0, CH_STAND, 1);
         setT(1, 0, CH_ANGRY, 0.5); setT(1, 1, CH_ANGRY, 0.25);
         setT(2, 0, CH_RECOIL, 1); setT(2, 1, CH_RECOIL, 1);
-        setT(3, 0, CH_SHAKE, 1); setT(3, 1, CH_SHAKE, 1); break;
+        setT(3, 0, CH_SHAKE, 1); setT(3, 1, CH_SHAKE, 1); setT(2, 0, CH_SHAKE, 0.5); setT(2, 1, CH_SHAKE, 0.5); break;
+      case 'taunt':       // the player plays the fool: the commons laugh, the gallery raises its eyebrows
+        setT(0, 1, CH_LAUGH, 0.9); setT(0, 0, CH_LAUGH, 0.7); setT(0, 0, CH_JEER, 0.3);
+        setT(1, 1, CH_LAUGH, 0.6); setT(1, 0, CH_LAUGH, 0.5); setT(2, 1, CH_SHAKE, 0.5); setT(2, 0, CH_SHAKE, 0.6); setT(2, 0, CH_LAUGH, 0.3); break;
       case 'salute':
         setT(0, 1, CH_CHEER, 0.5); setT(1, 1, CH_CHEER, 0.3);
         setT(2, 0, CH_KERCH, 1); setT(2, 1, CH_KERCH, 1); setT(2, 0, CH_BOW, 1); setT(2, 1, CH_BOW, 1); break;
@@ -416,18 +451,24 @@ export function buildCrowd(group, spots, opts = {}) {
     if (k === 'loss') { k = 'win'; by = -by; } // `by` lost: the other side's supporters celebrate
     buildTable(k);
     evBy = by; evT = t; evOn = true;
-    evDur = (k === 'unhorse' || k === 'win') ? 4.0 : k === 'salute' ? 3.0 : 3.2;
+    evDur = EV_DUR[k] || 3.2;
+    const jmax = evDur < 2 ? 0.2 : 0.45;
+    for (let i = 0; i < n; i++) {
+      const u = rng();
+      evInt[i] = u < 0.12 ? 0.15 + rng() * 0.2 : 0.55 + 0.45 * rng();
+      evJit[i] = rng() * rng() * jmax; evArm[i] = rng() < 0.5 ? 0 : 1; evOne[i] = rng() < 0.35 ? 1 : 0;
+    }
     // hat / flower tossing
-    const hatP = k === 'unhorse' ? 0.5 : k === 'win' ? 0.5 : (k === 'break' || k === 'helm') ? 0.12 : 0;
-    const flow = k === 'win' || k === 'helm' || k === 'unhorse' ? (k === 'win' ? 0.9 : 0.25) : 0;
+    const hatP = k === 'unhorse' ? 0.5 : k === 'win' ? 0.5 : k === 'bothbreak' ? 0.3 : (k === 'break' || k === 'helm') ? 0.12 : 0;
+    const flow = k === 'win' || k === 'helm' || k === 'unhorse' || k === 'bothbreak' ? (k === 'win' ? 0.9 : k === 'bothbreak' ? 0.15 : 0.25) : 0;
     let hats = 0, flowers = 0;
     for (let i = 0; i < n; i++) {
       const cls = clsA[i];
       if (cls === 0 && hatP > 0 && capIdx[i] >= 0 && hats < HATS) {
         const sup = by === 0 || al[i] === by;
-        if (rng() < (sup ? hatP : hatP * 0.4)) { spawnHat(i, t + dly[i] + 0.2 + rng() * 0.3); hats++; }
+        if (rng() < (sup ? hatP : hatP * 0.4)) { spawnHat(i, t + dly[i] + evJit[i] + 0.2 + rng() * 0.3); hats++; }
       } else if (cls === 2 && kind[i] === 1 && flow > 0 && flowers < POOL - HATS) {
-        if (rng() < flow) { spawnFlower(i, t + dly[i] + 0.4 + rng() * 0.6); flowers++; }
+        if (rng() < flow) { spawnFlower(i, t + dly[i] + evJit[i] + 0.4 + rng() * 0.6); flowers++; }
       }
     }
   }
@@ -514,11 +555,11 @@ export function buildCrowd(group, spots, opts = {}) {
 
       // ---- event layer: envelope x class/supporter reaction table ----
       let eCheer = 0, eDis = 0, eFist = 0, eJeer = 0, eAngry = 0, ePol = 0, eKer = 0, eBow = 0, eBless = 0,
-        eCross = 0, eRec = 0, eStand = 0, eShake = 0, eWild = 0;
+        eCross = 0, eRec = 0, eStand = 0, eShake = 0, eWild = 0, eHead = 0, eSlump = 0, eLaugh = 0;
       if (evOn) {
-        const tt = t - evT - dly[i];
+        const tt = t - evT - dly[i] - evJit[i];
         if (tt > 0 && tt < evDur) {
-          const env = sstep(0, 0.3, tt) * (1 - sstep(evDur - 1.3, evDur, tt));
+          const env = sstep(0, cls === 0 ? 0.2 : 0.3, tt) * (1 - sstep(evDur - 1.3, evDur, tt)) * evInt[i];
           const tb = ((cls << 1) | ((evBy === 0 || a === evBy) ? 1 : 0)) * NCH;
           eCheer = tbl[tb] * env; eDis = tbl[tb + 1] * env; eFist = tbl[tb + 2] * env; eJeer = tbl[tb + 3] * env;
           eAngry = tbl[tb + 4] * env; ePol = tbl[tb + 5] * env;
@@ -526,6 +567,7 @@ export function buildCrowd(group, spots, opts = {}) {
           if (cls === 2 && !lady) eBow = tbl[tb + 7] * Math.sin(PI * clamp01(tt / 2.4));
           eBless = tbl[tb + 8] * env; eCross = tbl[tb + 9] * env; eRec = tbl[tb + 10] * env;
           eStand = tbl[tb + 11] * env; eShake = tbl[tb + 13] * env;
+          eHead = tbl[tb + 14] * env; eSlump = tbl[tb + 15] * env; eLaugh = tbl[tb + 16] * env;
           const wl = tbl[tb + 12];
           if (wl > 0) { // commons go wild for the first second regardless of side
             const wf = 1 - sstep(1.0, 1.7, tt);
@@ -598,17 +640,18 @@ export function buildCrowd(group, spots, opts = {}) {
 
       // ---- body transform ----
       const Hfull = 1.4 * hgi;
-      const bodyH = Hfull * (0.62 + 0.38 * standW) * (1 - 0.07 * dis);
+      const bodyH = Hfull * (0.62 + 0.38 * standW) * (1 - 0.07 * dis - 0.05 * eSlump);
       let yOff = 0;
       const jc = (sCheer[i] > eCheer ? sCheer[i] : eCheer) * JUMP[cls];
       if (jc > 0.02) yOff = jc * standW * Math.abs(Math.sin(t * (6.5 + 2.5 * kn) + phi)) * 0.2 * (0.55 + 0.45 * kn) * hgi;
       if (clap > 0.02 && cls < 2) yOff += clap * 0.012 * Math.sin(t * 15 + phi);
+      if (eLaugh > 0.02) yOff += eLaugh * 0.02 * Math.abs(Math.sin(t * 13 + phi)) * (cls < 2 ? 1 : 0.4);
       if (chant > 0.02) yOff += chant * 0.045 * Math.abs(Math.sin(t * 3.5));
 
       const upr = cls === 2 ? 0.5 : 1;
       let pitch = (cls > 0 ? 0.05 * (1 - standW) : 0) + 0.2 * lean * calm * upr + 0.36 * lean * hush * upr - 0.12 * cheer + 0.3 * dis +
         0.02 * chat * Math.sin(t * 5 + phi) + 0.4 * eAngry + 0.12 * eJeer + 0.5 * eBow - 0.25 * eRec - 0.2 * eCross +
-        0.12 * eBless * 0;
+        0.12 * eBless * 0 + 0.26 * eSlump - 0.12 * eHead + 0.07 * eLaugh * Math.sin(t * 15 + phi);
       let roll = Math.sin(t * 0.9 + phi * 1.3) * 0.035 * calm * (1 - cheer) * sway + Math.sin(t * (3 + kn) + phi) * 0.08 * cheer +
         Math.sin(t * 14 + phi) * 0.11 * eJeer + Math.sin(t * 8 + phi) * 0.08 * eAngry + Math.sin(t * 3.2 + phi) * 0.09 * eShake +
         Math.sin(t * 5 + phi * 0.2) * 0.2 * eWild + whisp * 0.1 * par;
@@ -619,7 +662,7 @@ export function buildCrowd(group, spots, opts = {}) {
       const base = hasYaw[i] ? yb[i] : -side[i] * HALF_PI;
       let dth = Math.atan2(-px[i], zAim - pz[i]) - base;
       if (dth > PI) dth -= TWO_PI; else if (dth < -PI) dth += TWO_PI;
-      let yaw = base + dth * (0.4 + 0.25 * lean) + eRec * 0.9 * par + whisp * 0.7 * par;
+      let yaw = base + dth * (0.4 + 0.25 * lean) + eRec * (cls === 2 ? 1.4 : 0.9) * par + whisp * 0.7 * par + (cls < 3 ? eShake * Math.sin(t * 5.5 + phi) * 0.28 : 0);
       if (cls === 3) yaw = base + dth * 0.2 + eShake * Math.sin(t * 3.2 + phi) * 0.25;
 
       const cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
@@ -673,6 +716,9 @@ export function buildCrowd(group, spots, opts = {}) {
         if (eBless > 0.001) { if (arm === 1) addDir(eBless, 0.35, 0.6, 0.7); else addDir(eBless, -0.15, -0.5, 0.85); }
         if (eCross > 0.001) addDir(eCross, -sx * 0.15, -0.4 + 0.5 * eCross, 0.85);
         if (eRec > 0.001) addDir(eRec, sx * 0.1, 0.55, 0.8);
+        if (eHead > 0.001) addDir(evOne[i] && arm !== evArm[i] ? eHead * 0.2 : eHead, -sx * 0.45, 0.8, 0.3);      // hands to the head (one hand only for some)
+        if (eSlump > 0.001) addDir(eSlump * 0.7, sx * 0.12, -1, 0.15);      // arms hang
+        if (eLaugh > 0.001 && arm === evArm[i]) { if (cls === 2) addDir(eLaugh * 0.9, sx * 0.05, 0.55, 0.85); else addDir(eLaugh * 0.8, sx * 0.25, 0.1 + 0.15 * Math.sin(t * 9 + phi), 0.95); }      // behind a hand / pointing
         if (clap > 0.001) addDir(clap, sx * (0.04 + 0.22 * cc * cAmp), cls === 2 ? -0.3 : -0.4, 0.9);
         // idle (sway, craning, occasional gesture; flag holders hold the pennant up)
         let ix = sx * 0.14 + Math.sin(t * 0.8 + phi + arm * 1.7) * 0.05 * calm * sway;

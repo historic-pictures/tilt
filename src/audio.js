@@ -267,16 +267,16 @@ export class GameAudio {
     this._run(() => {
       const e = clamp(st.excitement || 0, 0, 1), a = clamp(st.anticipation || 0, 0, 1), sp = clamp((st.speed || 0) / 9.5, 0, 1), t = this.ctx.currentTime;
       // Crowd, per docs/crowd-audio.md: idle murmur swelling with the mood (-8..+8 dB); an anticipation layer rising with S.antic (the closing riders, ~8-12 s);
-      // a held breath in the last ~1.2 s (bed -9 dB over ~0.6 s, build layer out, one lone shout); released by the strike; the bed ducks under big reactions.
+      // a held breath in the last ~0.6 s (bed -4 dB over ~0.25 s, build layer -9 dB, an optional 'crowd_hush' texture, one lone shout); released by the strike; the bed ducks under big reactions.
       const hold = clamp((a - 0.86) / 0.06, 0, 1), d = Math.min(dt, 0.1);
       this._hold += (hold - this._hold) * (1 - Math.exp(-d / (hold > this._hold ? 0.25 : 0.12)));
       this._duck.hold -= d; const dk = this._duck.hold > 0 ? -this._duck.db : 0; this._duck.now += (dk - this._duck.now) * (1 - Math.exp(-d / (dk < this._duck.now ? 0.1 : 0.5)));     // release over ~1.5 s
       if (this._duck.hold <= 0 && this._duck.now > -0.1) this._duck.db = 0;
       if (this.training) { if (this.beds.crowd) this.beds.crowd.g.gain.setTargetAtTime(0, t, 0.3); if (this.beds.build) this.beds.build.g.gain.setTargetAtTime(0, t, 0.3); }
-      else if (this.beds.crowd) this.beds.crowd.g.gain.setTargetAtTime(lin(lerp(-8, 8, Math.pow(e, 0.8)) - 9 * this._hold + this._duck.now), t, 0.35);
-      if (!this.training && this.beds.build) { const u = clamp((a - 0.1) / 0.8, 0, 1); this.beds.build.g.gain.setTargetAtTime(a < 0.1 ? 0 : lin(lerp(-30, 1, u * u * (3 - 2 * u)) - 14 * this._hold + this._duck.now), t, 0.5); }
+      else if (this.beds.crowd) this.beds.crowd.g.gain.setTargetAtTime(lin(lerp(-8, 8, Math.pow(e, 0.8)) - 4 * this._hold + this._duck.now), t, 0.35);
+      if (!this.training && this.beds.build) { const u = clamp((a - 0.1) / 0.8, 0, 1); this.beds.build.g.gain.setTargetAtTime(a < 0.1 ? 0 : lin(lerp(-30, 1, u * u * (3 - 2 * u)) - 9 * this._hold + this._duck.now), t, 0.5); }
       if (this.training) this._lone = true;
-      else if (hold > 0.5 && !this._lone) { this._lone = true; this._play('cheer_single', { stem: 'crowd', att: CROWD_ATT, dist: rand(22, 34), pan: rand(-1, 1), db: -12, delay: rand(0.2, 0.5), rate: rand(0.9, 1) }); }      // one lone shout in the hush
+      else if (hold > 0.5 && !this._lone) { this._lone = true; this._play('crowd_hush', { stem: 'crowd', att: CROWD_ATT, dist: rand(14, 22), pan: rand(-0.5, 0.5), db: -6 }); this._play('cheer_single', { stem: 'crowd', att: CROWD_ATT, dist: rand(22, 34), pan: rand(-1, 1), db: -12, delay: rand(0.2, 0.5), rate: rand(0.9, 1) }); }      // one lone shout in the hush
       else if (a < 0.5) this._lone = false;
       if (this.beds.wind) { this.beds.wind.g.gain.setTargetAtTime(lin(lerp(-40, 0, Math.pow(sp, 1.3))) * (sp > 0.05 ? 1 : 0), t, 0.25); this.windLP.frequency.setTargetAtTime(300 + 2600 * sp, t, 0.25); }
       // your own horse: working breaths at speed, the odd blow or nicker at rest
@@ -326,31 +326,62 @@ export class GameAudio {
   armourClank(intensity) { this._run(() => this._play('kit_rattle', { stem: 'hoof', dist: 1.5, db: lerp(-10, -2, clamp(intensity, 0, 1)) })); }
 
   /** Crowd reactions (docs/crowd-audio.md): layers of single voices and group beds, each with a gain envelope [attack, half-life], pitch/time scatter, and a duck of the bed under big ones.
-   *  kind: roar (eruption on a break, +9..12 dB, half-life ~3 s; stronger = helm/unhorse +12..15, half-life 3.5 s) | cheer | gasp | ooh (near miss / glance, short) | groan (a miss, "aww" then a few jeers) |
-   *  boo (a foul, long) | applause (rides the decay tail) | chant. strength 0.1..1. lead: seconds to hold the whole reaction (the gasp goes 0.2 s ahead of the roar).
-   *  STILL MISSING as samples (made from the nearest single voices for now): gasp_group, ooh_group, boo swell, hush texture (coughs, a baby), chant voices, polite/sparse applause for the gallery. */
-  crowd(kind, strength = 1, lead = 0) {
+   *  kind: roar (eruption on a break, +9..12 dB, half-life ~3 s; stronger = helm/unhorse +12..15, half-life 3.5 s) | cheer | gasp (sharp, short) | ooh (glance: long collective "ooh") |
+   *  groan (a clean miss: "aww" falling to a few jeers and laughs) | boo (a foul, long) | laugh (a double miss, a taunt) | whistle (derisive, commons) | wince (a lance into the tilt: "oof") |
+   *  polite (a touch: the gallery's sparse, restrained applause) | applause (rides the decay tail) | chant. strength 0.1..1. lead: seconds to hold the whole reaction (the gasp goes 0.2 s ahead of the roar).
+   *  o.fav -1..1: how far the house is with the one this reaction is about (a roar for a man they back is louder; a miss by a man they back is mostly "aww", a miss by one they don't draws jeers and laughs).
+   *  NEW CATEGORIES (optional, recordings come later, see docs/crowd-audio.md "Samples still needed"): crowd_gasp, crowd_ooh, crowd_groan, crowd_boo, crowd_laugh, crowd_whistle, crowd_hush.
+   *  Each falls back to the old category (groan_single / jeer_single) when absent, and is silent when neither exists (_play ignores a missing category). */
+  crowd(kind, strength = 1, lead = 0, o = {}) {
     if (this.training) return;      // nobody at the training ground
     this._run(() => {
-      const s = clamp(strength, 0.1, 1), RT = () => rand(0.94, 1.06);
-      const many = (cat, n, span, db, o = {}) => { for (let i = 0; i < n; i++) this._play(cat, Object.assign({ stem: 'crowd', att: CROWD_ATT, dist: rand(13, 34), pan: rand(-1, 1), db: db + rand(-4, 0), rate: RT(), delay: lead + Math.pow(Math.random(), 1.6) * span }, o)); };
+      const s = clamp(strength, 0.1, 1), RT = () => rand(0.94, 1.06), fav = clamp(o.fav || 0, -1, 1);
+      const has = (n) => !!(this.cat[n] && this.cat[n].buffers.length);
+      const pickCat = (n, old) => has(n) ? n : old;
+      const many = (cat, n, span, db, oo = {}) => { for (let i = 0; i < n; i++) this._play(cat, Object.assign({ stem: 'crowd', att: CROWD_ATT, dist: rand(13, 34), pan: rand(-1, 1), db: db + rand(-4, 0), rate: RT(), delay: lead + Math.pow(Math.random(), 1.6) * span }, oo)); };
       // group beds: near (never culled), several files at once, each swelling in and dying away
       const group = (n, db, at, hl, span = 0.3) => { for (let i = 0; i < n; i++) this._play('cheer_group', { stem: 'crowd', att: CROWD_ATT, dist: rand(11, 15), pan: rand(-0.8, 0.8), db: db - i * 1.5 + rand(-1, 0), rate: rand(0.95, 1.05), delay: lead + i * span * 0.5 + rand(0, span), env: [at * rand(0.85, 1.2), hl] }); };
       // singles with a decaying density: delays follow an exponential so the crowd thins out with the half-life
-      const tail = (cat, n, hl, db, o = {}) => { for (let i = 0; i < n; i++) this._play(cat, Object.assign({ stem: 'crowd', att: CROWD_ATT, dist: rand(13, 34), pan: rand(-1, 1), db: db + rand(-4, 0), rate: RT(), delay: lead + Math.min(hl * 4, -Math.log(1 - Math.random() * 0.98) * hl / 0.693) }, o)); };
+      const tail = (cat, n, hl, db, oo = {}) => { for (let i = 0; i < n; i++) this._play(cat, Object.assign({ stem: 'crowd', att: CROWD_ATT, dist: rand(13, 34), pan: rand(-1, 1), db: db + rand(-4, 0), rate: RT(), delay: lead + Math.min(hl * 4, -Math.log(1 - Math.random() * 0.98) * hl / 0.693) }, oo)); };
+      // a reaction from its own collective recording when we have one (a few near files, they carry their own shape), else many single voices of the old category
+      const vox = (cat, old, nGroup, nOld, span, db, oo = {}) => {
+        if (has(cat)) for (let i = 0; i < nGroup; i++) this._play(cat, { stem: 'crowd', att: CROWD_ATT, dist: rand(11, 17), pan: rand(-0.8, 0.8), db: db + 3 - i * 1.5 + rand(-1, 0), rate: rand(0.95, 1.05) * (oo.rate || 1), delay: lead + (i ? rand(0, span) : 0) });
+        else many(old, nOld, span, db, oo);
+      };
+      // the gallery's restrained applause: sparse claps, soft, a little behind the commons
+      const polite = (n, span, db) => { for (let i = 0; i < n; i++) { const u = Math.random(); this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(14, 24), pan: rand(-1, 1), db: db + rand(-5, 0) - 9 * Math.abs(u - 0.3), rate: rand(0.96, 1.1), delay: lead + 0.25 + u * span }); } };
       const duck = (db, hold) => { this._duck.db = Math.max(this._duck.db, db); this._duck.hold = Math.max(this._duck.hold, lead + hold); };
       if (kind === 'roar') {       // onset 0.3-0.6 s, half-life 3 s (3.5 s above strength 0.85), gone by ~8 s; claps take over on the tail
         const big = s > 0.85;
-        group(Math.round(2 + 2 * s), -12 + 5 * s, 0.4, big ? 3.5 : 3);
-        tail('cheer_single', Math.round(14 + 16 * s), big ? 3.5 : 3, -9);
+        group(Math.round(2 + 2 * s), -12 + 5 * s + 2.5 * fav, 0.4, big ? 3.5 : 3);
+        tail('cheer_single', Math.round(14 + 16 * s), big ? 3.5 : 3, -9 + 2 * fav);
         for (let i = 0; i < Math.round(30 * s); i++) { const u = Math.random(), d = 0.9 + u * 5.5; this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 26), pan: rand(-1, 1), db: 0 + rand(-4, 0) - 7 * Math.abs(u - 0.4), rate: RT(), delay: lead + d }); }
         duck(3 + 3 * s, 1.2);
       }
       else if (kind === 'cheer') { group(Math.round(1 + 2 * s), -12 + 5 * s, 0.3, 1.6, 0.2); many('cheer_single', Math.round(8 + 10 * s), 1.6, -9); duck(2, 0.6); }
-      else if (kind === 'gasp') { many('groan_single', Math.round(6 + 6 * s), 0.18, -4, { rate: 1.12, env: [0.05, 0.25] }); }
-      else if (kind === 'ooh') { many('groan_single', Math.round(7 + 8 * s), 0.35, -4, { rate: 0.86, env: [0.12, 0.5] }); many('jeer_single', Math.round(2 * s), 1.0, -9, { rate: 0.9, env: [0.1, 0.6] }); }       // +5..7 dB, ~1.5 s
-      else if (kind === 'groan') { many('groan_single', Math.round(8 + 8 * s), 0.9, -5, { rate: 0.8, env: [0.4, 1.2] }); tail('jeer_single', Math.round(2 + 3 * s), 1.3, -8, { rate: 0.95 }); }      // "aww" for ~2.5 s fading to a few jeers
-      else if (kind === 'boo') { many('jeer_single', Math.round(12 + 14 * s), 2.4, -6, { rate: 0.9, env: [0.4, 2.4] }); tail('jeer_single', Math.round(6 + 6 * s), 2.5, -9, { rate: 0.85 }); many('groan_single', Math.round(4 * s), 0.8, -6, { rate: 0.85 }); duck(3, 2.5); }     // +6..8 dB, 5-6 s
+      else if (kind === 'gasp') { vox('crowd_gasp', 'groan_single', 2, Math.round(6 + 6 * s), 0.18, -4, { rate: 1.12, env: [0.05, 0.25] }); }       // sharp intake, ~0.5 s
+      else if (kind === 'ooh') { vox('crowd_ooh', 'groan_single', 3, Math.round(7 + 8 * s), 0.35, -4, { rate: 0.86, env: [0.12, 0.5] }); duck(2, 0.8); }       // +5..7 dB, ~1.5 s: a long collective "ooh", no jeers
+      else if (kind === 'groan') {       // "aww" ~2.5 s falling to a few jeers and laughs; mostly "aww" when the house backs the man who missed
+        vox('crowd_groan', 'groan_single', 3, Math.round(8 + 8 * s), 0.9, -5, { rate: 0.8, env: [0.4, 1.2] });
+        const nj = fav > 0.3 ? 1 : Math.round(2 + 3 * s);
+        tail(pickCat('crowd_boo', 'jeer_single'), nj, 1.3, -8, { rate: 0.95 });
+        if (fav < 0.3) tail(pickCat('crowd_laugh', 'jeer_single'), Math.round(1 + 2 * s), 1.6, -9, { rate: 1.1 });
+      }
+      else if (kind === 'boo') {       // +6..8 dB, 5-6 s
+        if (has('crowd_boo')) { vox('crowd_boo', 'jeer_single', 4, 0, 0.6, -5); tail('jeer_single', Math.round(4 + 4 * s), 2.5, -9, { rate: 0.85 }); }
+        else { many('jeer_single', Math.round(12 + 14 * s), 2.4, -6, { rate: 0.9, env: [0.4, 2.4] }); tail('jeer_single', Math.round(6 + 6 * s), 2.5, -9, { rate: 0.85 }); }
+        vox('crowd_groan', 'groan_single', 2, Math.round(4 * s), 0.8, -6, { rate: 0.85 }); duck(3, 2.5);
+      }
+      else if (kind === 'laugh') {       // a double miss, a taunt: ripples of laughter, a few guffaws
+        vox('crowd_laugh', 'jeer_single', 3, Math.round(6 + 8 * s), 1.4, -6, { rate: 1.1, env: [0.2, 1.0] });
+        tail(pickCat('crowd_laugh', 'jeer_single'), Math.round(3 + 4 * s), 1.6, -8, { rate: rand(1.0, 1.25) });
+      }
+      else if (kind === 'whistle') { for (let i = 0; i < Math.round(3 + 5 * s); i++) this._play(pickCat('crowd_whistle', 'jeer_single'), { stem: 'crowd', att: CROWD_ATT, dist: rand(16, 34), pan: rand(-1, 1), db: -8 + rand(-4, 0), rate: rand(0.9, 1.15), delay: lead + 0.3 + Math.pow(Math.random(), 1.4) * 2.2 }); }
+      else if (kind === 'wince') {       // a lance into the barrier: a short "oof", dropping
+        vox('crowd_gasp', 'groan_single', 2, 6, 0.15, -3, { rate: 0.95, env: [0.04, 0.3] });
+        vox('crowd_groan', 'groan_single', 1, Math.round(4 + 4 * s), 0.4, -6, { rate: 0.75, env: [0.15, 0.6] });
+      }
+      else if (kind === 'polite') { polite(Math.round(16 + 26 * s), 2.6, -7); many('cheer_single', Math.round(2 * s), 1.6, -12); }       // a touch: sparse, short, the gallery
       else if (kind === 'applause') {
         for (let i = 0; i < Math.round(50 + 110 * s); i++) { const u = Math.random(); this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 26), pan: rand(-1, 1), db: 1 + rand(-4, 0) - 14 * Math.pow(Math.abs(u - 0.35) / 0.65, 1.5), rate: RT(), delay: lead + u * 4.5 }); }      // swells in over ~1.5 s, fades by ~4.5 s
         many('cheer_single', Math.round(3 * s), 2, -8);
