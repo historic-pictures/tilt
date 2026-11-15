@@ -287,19 +287,24 @@ function flushCall() {
   if (strikeCall && !strikeCall.fired && voice.t >= strikeCall.t0 + 0.09) { strikeCall.fired = true; flashCall(strikeCall.best[0], strikeCall.best[1]); }
 }
 // ---- notices wait their turn, and wait out the charge and the replay: each stays up for its own time (seconds), the next follows.
-const toastQ = []; let toastBusy = false, toastCur = null, toastTimer = 0;
+const toastQ = []; let toastBusy = false, toastCur = null, toastTimer = 0, toastAt = 0;
 const toastOk = () => !M || !C || S.mode === 'ready' || S.mode === 'intro' || (S.mode === 'after' && (C.verdict || C.carded));
 function toast(title, text, secs = 7, sound = false, seal = false) { toastQ.push([title, text, secs, sound, seal]); pumpToast(); }
 function showToast() {
-  const t = toastQ.shift(); toastCur = t; toastBusy = true;
+  const t = toastQ.shift(); toastCur = t; toastBusy = true; toastAt = performance.now();
   const el = $('toast'); el.querySelector('b').textContent = t[0]; el.querySelector('span').textContent = t[1];
   el.classList.toggle('seal', !!t[4]); el.style.animationDuration = `${t[2]}s`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   if (t[3]) audio.ui('select');
-  toastTimer = setTimeout(() => { toastCur = null; toastBusy = false; pumpToast(); }, t[2] * 1000 + 300);
+  toastTimer = setTimeout(() => { $('toast').classList.remove('show'); toastCur = null; toastBusy = false; pumpToast(); }, t[2] * 1000 + 300);
 }
 function pumpToast() {
   if (toastBusy) {      // the charge or a replay begins while a notice is up: it goes back to the head of the queue
-    if (toastCur && !toastOk()) { clearTimeout(toastTimer); $('toast').classList.remove('show'); toastQ.unshift(toastCur); toastCur = null; toastBusy = false; }
+    if (toastCur && !toastOk()) {      // it comes back for the time it had left (no second chime), or not at all if it was nearly done; never from the start, or a long notice returns every course
+      clearTimeout(toastTimer); $('toast').classList.remove('show');
+      const left = toastCur[2] - (performance.now() - toastAt) / 1000;
+      if (left > 2.5) toastQ.unshift([toastCur[0], toastCur[1], left, false, toastCur[4]]);
+      toastCur = null; toastBusy = false;
+    }
     return;
   }
   if (toastQ.length && toastOk()) showToast();
