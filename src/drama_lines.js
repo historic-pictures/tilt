@@ -35,7 +35,8 @@ export const HOSTS = {
 };
 export const hostOf = (venueId) => HOSTS[venueId] || { id: 'lord', name: 'the Lord of the Lists', label: 'THE LORD OF THE LISTS', real: false };
 
-// Host reactions, by who he is. approve (a good stroke), scorn (a foul), joke (a miss), delight (an unhorsing), open (the start). Each line <= 10 words.
+// Host reactions, by who he is. approve (a good stroke), scorn (a foul), joke (a miss), delight (an unhorsing), open (the start),
+// restless (you keep the lists waiting at your mark). Each line <= 10 words.
 export const HOST_LINES = {
   richard: {
     open: ['Begin, Master Clement. I came to see lances broken.', 'Let them ride. The day is short.'],
@@ -43,6 +44,7 @@ export const HOST_LINES = {
     scorn: ['That was not a joust. That was an accident.', 'In my lists, we strike fair.'],
     joke: ['He has missed the whole knight. Quite a feat.', 'Somebody tell him the other man is over there.'],
     delight: ['Ha! Put that in the chronicle, Clement.', 'Down he goes! Bring wine, the day is won.'],
+    restless: ['Start the damn joust before I piss myself!', 'Clement. Are they jousting, or praying?'],
   },
   charles: {
     open: ['Let it be worthy of my wedding. Begin.', 'Burgundy does nothing by halves. Let them ride.'],
@@ -50,6 +52,7 @@ export const HOST_LINES = {
     scorn: ['Not in my lists. Strike fair, or leave.', 'A foul blow at my wedding. Remarkable.'],
     joke: ['Even the horse looked embarrassed.', 'He rides like a man paid by the hour.'],
     delight: ['Magnificent! He shall dine at my table.', 'Down! The Golden Tree has seen a fall.'],
+    restless: ['Start the damn joust before I piss myself!', 'Burgundy is not getting any younger.'],
   },
   lord: {
     open: ['The lists are open. Let the best man win.', 'Ride well, both of you.'],
@@ -57,6 +60,7 @@ export const HOST_LINES = {
     scorn: ['That blow was foul. Ride fair.', 'I will not have that in my lists.'],
     joke: ['A miss. At least the horse looks well.', 'The grass has taken more damage than the knight.'],
     delight: ['Unhorsed! The field will talk of this.', 'A fall like that is worth the whole day.'],
+    restless: ['Start the damn joust before I piss myself!', 'Is he waiting for the harvest?'],
   },
   marshal: {
     open: ['The field is yours, gentlemen. Ride well.', 'Lists open. Let the day be honest.'],
@@ -64,6 +68,7 @@ export const HOST_LINES = {
     scorn: ['Foul. The marshals have seen it.', 'That will cost him in the count.'],
     joke: ['He missed. We all saw it.', 'Air again. The lance is not to blame.'],
     delight: ['Down! Help that man to his feet.', 'A great fall. The lists are quiet.'],
+    restless: ['Ride, sir, or leave my lists.', 'Any time today, gentlemen.'],
   },
 };
 

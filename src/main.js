@@ -381,11 +381,11 @@ function herald(key, delay = 0, o = {}) {
 }
 /** The host of the royal box speaks (a few lines a match): kind = approve | scorn | joke | delight. False when he is silent (budget, no herald). */
 const HOSTKIND = { royalPleased: 'approve', royalRise: 'delight', royalDispleased: 'scorn', royalJoke: 'joke' };
-function hostSay(kind, delay = 0) {
-  if (!M || !M.circuit || profile.herald === false) return false;
+function hostSay(kind, delay = 0, phases = 'after') {
+  if (!M || M.practice || (!M.circuit && kind !== 'restless') || profile.herald === false) return false;
   const host = hostOf(M.V.id), pool = (HOST_LINES[host.id] || HOST_LINES.lord)[kind]; if (!pool || (M.hostN || 0) >= 4) return false;
   const used = M.hostUsed || (M.hostUsed = new Set()), fresh = pool.filter(l => !used.has(l)), text = pick(fresh.length ? fresh : pool);
-  return say(text, host.label, 3, { delay, cat: 'host', phases: 'after', ttl: 6, speak: true, speaker: speakerOf.king, voice: 'king', onShown() { M.hostN = (M.hostN || 0) + 1; used.add(text); } });
+  return say(text, host.label, kind === 'restless' ? 2 : 3, { delay, cat: 'host', phases, ttl: 6, speak: true, speaker: speakerOf.king, voice: 'king', onShown() { M.hostN = (M.hostN || 0) + 1; used.add(text); } });
 }
 /** A lesson, once per match: it counts as taught only when it was really shown. */
 function teach(key, delay = 0, o = {}) { if (!M || M.taught[key]) return false; return herald(key, delay, Object.assign({}, o, { onShown() { M.taught[key] = true; } })); }
@@ -988,6 +988,11 @@ function updateRide(dt, dtReal) {
     const R = C.rd;
     if (G.auto && !R.p && !player.helmOff) { R.p = true; player.raiseT = 1; }
     stepBeat(dtReal);
+    // keep the lists waiting at your mark and the host loses patience (once a match): lance not up after 12 s, or not away 8 s after the signal
+    if (!C.beat && !M.practice && !G.auto) {
+      R.wait = (R.wait || 0) + dtReal; if (R.sig) R.sigWait = (R.sigWait || 0) + dtReal;
+      if (!M.restless && ((!R.p && R.wait > 12) || (R.sig && R.sigWait > 8)) && hostSay('restless', 0, 'ready')) M.restless = true;
+    }
     if (!R.o && C.t > R.oAt && !C.beat) { R.o = true; opp.raiseT = 1; if (opp.visor) opp.visorUp = false; }
     if (R.p && R.o && !R.sig) {
       R.w += dt;
