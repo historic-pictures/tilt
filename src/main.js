@@ -604,7 +604,7 @@ function newBridge(chosenId) {
 /** The state a knight takes from one bout of the bridge into the next: wind, horse, harness (with its dents), nerve and the gallery's mood. */
 function bridgeKeep() {
   return { stamina: M.stamina, horse: M.hp.horse, body: M.hp.body, agit: M.agit, focus: M.focus, fav: Object.assign({}, M.fav), favour: M.favour,
-    dmg: Object.assign({}, player.dmg), dlog: player.dlog.map(e => Object.assign({}, e, { key: -1 })), askew: player.askew, plumeGone: !!player._plumeGone };
+    dmg: Object.assign({}, player.dmg), dlog: player.dlog.map(e => Object.assign({}, e, { key: -1 })), askew: player.askew, plumeGone: !!player._plumeGone, bodyS: { arm: M.bodyS.p.arm, wind: M.bodyS.p.wind } };
 }
 /** Put the carried harness damage back on the fresh rider (rebuildPlayer made him new); the marks come first in the replay order (key -1). */
 function bridgeRestoreHarness(k) {
@@ -626,10 +626,10 @@ function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, cours
   TILT_TOP = mode.tilt ? 1.3 : 0; fx.tiltTop = TILT_TOP;
   lateMen = {}; lateRolled = false; const welcome = (man('pursuivant') ? man('pursuivant').welcome : 0) + crew('welcome');
   M = { V, vIdx, od, circuit, practice, mode, PT, courses: mode.fixedCourses ?? (mode.noExtra && !mode.pickCourses ? 4 : (!practice && courses) || COURSES_PER_MATCH), bridge: bridge || null, course: 0, score: [0, 0], marks: [[], []], favour: V.home * 0.8, fav: { commons: V.home + welcome, court: V.home * 0.6 + welcome }, stamina: 1,
-    agit: 0.15 + (1 - player.horseDef.nerve) * 0.3, focus: 1, fouls: 0, breaks: [0, 0], result: null, hp: { horse: 1, body: 1 }, taught: {}, lesson: practice ? Math.min(profile.lesson || 0, LESSONS.length - 1) : -1,
+    agit: 0.15 + (1 - player.horseDef.nerve) * 0.3, focus: 1, fouls: 0, breaks: [0, 0], result: null, hp: { horse: 1, body: 1 }, bodyS: { p: { arm: 0, wind: 0 }, o: { arm: 0, wind: 0 } }, taught: {}, lesson: practice ? Math.min(profile.lesson || 0, LESSONS.length - 1) : -1,
     sights: [0, 0], maxDef: 0, tilts: 0, usedFacts: new Set(), ladyPending: false, teachPick: null,
     stats: [0, 1].map(() => ({ broken: 0, attaint: 0, helm: 0, miss: 0, top: 0, best: 0 })), tech: { sight: 0, lance: 0, horse: 0, will: 0, n: 0 } };
-  if (bridge && bridge.keep) { const k = bridge.keep; M.stamina = k.stamina; M.hp.horse = k.horse; M.hp.body = k.body; M.agit = k.agit; M.focus = Math.min(k.focus, k.body); M.fav = Object.assign({}, k.fav); M.favour = k.favour; }      // the bridge: nothing is mended between bouts
+  if (bridge && bridge.keep) { const k = bridge.keep; M.stamina = k.stamina; M.hp.horse = k.horse; M.hp.body = k.body; M.agit = k.agit; M.focus = Math.min(k.focus, k.body); M.fav = Object.assign({}, k.fav); M.favour = k.favour; if (k.bodyS) Object.assign(M.bodyS.p, k.bodyS); }      // the bridge: nothing is mended between bouts
   M.retUsed = new Set(); field.setup(profile.retinue, profile.arms, practice, practice ? null : { name: od.short, arms: od.arms });
   $('nameP').textContent = profile.name; $('nameO').textContent = od.name.replace(/, ".*"/, '');
   drawCrest($('crestP'), profile.arms); drawCrest($('crestO'), od.arms);
@@ -681,6 +681,7 @@ function beginCourse(first = false) {
   lateRolled = false;
   const rs = restShare(M.courses);       // a long match gives a little more rest between courses (see REST in data.js)
   M.stamina = clamp(M.stamina + REST.stamina + REST.longStamina * rs + crew('rest') + (man('groom') ? man('groom').stamina : 0), 0, 1);
+  if (!first) for (const b of [M.bodyS.p, M.bodyS.o]) { b.wind *= PHYS.body.windRest; b.arm *= PHYS.body.armRest; }      // the breath comes back between courses; a jarred arm hardly
   if (!first) { M.hp.body = clamp(M.hp.body + REST.body * rs, 0, 1); M.agit = clamp(M.agit - crew('calm'), 0, 1); if (man('groom')) M.agit = clamp(M.agit - man('groom').calm, 0, 1); if (man('armourer')) M.hp.body = clamp(M.hp.body + man('armourer').mend, 0, 1); if (man('farrier')) M.hp.horse = clamp(M.hp.horse + man('farrier').heal, 0, 1); player.mend(man('armourer') ? PHYS.damage.mend : 0, man('squire') ? PHYS.damage.squireShield : 0); } M.focus = clamp(M.focus + 0.35 + (sk('nerve') ? SKILLS.nerve.refill : 0) + 0.3 * Math.max(0, M.fav.commons), 0, M.hp.body); M.agit = clamp(M.agit - 0.1, 0, 1);
   S.mode = 'ready'; S.slowT = 0; bobHist.y = bobHist.v = bobHist.a = 0;
   $('banner').classList.add('hidden'); $('hud').classList.remove('hidden'); $('card').classList.add('hidden');
@@ -869,11 +870,10 @@ function shaftBlow(Aj, Bj, st, isP) {
 // begin, and a broken lance is handed to the squire (F) or thrown down (hold T). The scripted ride-back stays as the "Ride back: auto" assist and for the autopilot.
 const MARK_R = 2.0, OVER_HERE = ['Sir, over here!', 'My lord, over here!', 'Here, sir! Over here!'], NAG = ['Sir knight, the lists are waiting. To your mark.', 'The court grows restless, sir. Take your mark.', 'Come, sir. The next course waits on you.'];
 const _sq = new THREE.Vector3(), wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-/** True when the scripted ride-back should run: the autopilot, the menu setting, or (unset) the circuit until you have earned "Knows His Mark". */
+/** True when the scripted ride-back should run: always, unless the menu setting says by hand. */
 function autoRide() {
   if (G.auto || touchMode) return true;      // touch: no horse steering, the scripted ride-back
-  if (profile.autoRide === true || profile.autoRide === false) return profile.autoRide;
-  return !!M.circuit && !(profile.achievements && profile.achievements.knowsmark);
+  return profile.autoRide !== false;      // the horse takes you back unless you chose to ride back by hand (Danilo, 15 Nov: auto is the default)
 }
 /** Turn rate (rad/s) of the horse at speed v: nearly on the spot when halted, tight at a walk, wide at a canter. */
 function turnRate(v) { return 0.9 * (1 - smoothstep(0, 2.5, v)) + v / lerp(1.6, 14, smoothstep(1.5, 9, v)); }
@@ -939,30 +939,81 @@ function rideBack(j, T, dt) {
   if (T.stage === 'hand' || B.nearSq) { B.tHold = keys.throw ? B.tHold + dt : 0; if (B.tHold > 0.45) handLance('throw'); } else B.tHold = 0;
 }
 
-/** After the pass: ride on to the end of the lists, wheel about onto the other side of the tilt, and stand ready. */
+/** After the pass: ride on to the end of the lists, wheel about onto the other side of the tilt, and stand ready.
+ *  A small kinematic driver (position, heading, speed) with the same steering physics as the manual ride-back (turnRate): the gait eases canter, trot, walk; the horse drifts
+ *  out from the tilt, swings round at a walk (radius set by the speed, so it is never a perfect ellipse) and is steered onto the mark; the last few centimetres are blended. */
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+/** Walking speed at which the turning circle has radius R (turnRate is monotone enough over this range for a bisection). */
+function speedForRadius(R) { let lo = 1.2, hi = 4.5; for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; if (m / turnRate(m) < R) lo = m; else hi = m; } return (lo + hi) / 2; }
+function rideInit(j, T) {
+  const d = j.dir, r = mulberry((Math.random() * 4294967296) >>> 0);
+  T.d = d; T.base = d > 0 ? 0 : Math.PI; T.ph = wrapA(j.root.rotation.y - T.base); T.sv = 0; T.yr = 0; T.rz = j.root.rotation.z; T.t = 0; T.tt = 0; T.sub = 'run'; T.init = true;
+  T.wOut = Math.min(d * j.root.position.x, -(2.9 + r() * 1.5));      // how far out from the tilt he drifts (local frame: w = d*x, u = d*z, tilt at w = 0)
+  T.uTurn = 39.6 + r() * 1.6; T.rK = 0.9 + r() * 0.25; T.vWalk = 1.7 + r() * 0.5; T.drift = 0.8 + r() * 0.5;
+  j.manualPos = true;
+}
 function rideOut(j, T, dt) {
   if (j.unhorsed || !j.root || j === opp && M.practice) { T.stage = 'done'; return; }
   if (j === player && (T.stage === 'free' || T.stage === 'settle' || T.stage === 'hand')) return rideBack(j, T, dt);
-  if (T.stage === 'run') {
-    if (j === player && C.replayed && !M.result && !autoRide()) { rideBackStart(j, T); return rideBack(j, T, dt); }      // your horse is yours again
-    const tgt = START_Z - j.z * j.dir > 11 ? 9 : 4.6; j.speed = j.speed < tgt ? Math.min(tgt, j.speed + 3 * dt) : Math.max(tgt, j.speed - 3.4 * dt);
-    if (j.z * j.dir >= START_Z) { T.stage = 'turn'; T.th = 0; T.d = j.dir; T.x0 = j.root.position.x; j.manualPos = true; }
-  } else if (T.stage === 'turn') {
-    T.th = Math.min(Math.PI, T.th + dt * 1.25); j.speed = 2.0;
-    const d = T.d, base = d > 0 ? 0 : Math.PI;
-    j.root.position.x = T.x0 * Math.cos(T.th); j.root.position.z = d * START_Z + d * Math.abs(T.x0) * 1.6 * Math.sin(T.th);
-    j.root.rotation.y = base + T.th; j.root.rotation.z = 0;
-    if (T.th >= Math.PI) {
-      j.face(-d); j.root.position.set(-j.dir * j.lane, 0, d * START_Z); j.manualPos = false; j.speed = 0; T.stage = 'done';
-      // broken: he throws the stump down beside his horse; his squire walks up, hands a fresh lance (the swap happens as it reaches his hand), then fetches the stump. Whole: he keeps it.
-      const broken = j.lanceBroken, isP = j === player, who = isP ? 'you' : 'opp';
-      const swap = () => { j.lance.visible = true; if (j.lanceBroken) { j._mendLance(); j.lanceLower = 0; if (isP) { audio.ui('click'); if (!C.retSpoke) say('A fresh lance, my lord.', 'YOUR SQUIRE', 4, { cat: 'squire' }); } } };
-      if (isP) rollLate();
-      j.lance.visible = true;
-      if (broken) { j.lanceStump.visible = false; if (j.lanceKept) j.lanceKept.visible = false; field.throwStump(who); if (isP) audio.ui('click'); if (!field.serve(true, swap, who)) swap(); } else field.serve(false, null, who);
-      if (isP && !C.retSpoke && !M.result) { C.retSpoke = true; retinueSpeak(retSituation(C), 0.6, 0.6); }
+  if (T.stage === 'run' || T.stage === 'turn') {
+    if (j === player && T.stage === 'run' && C.replayed && !M.result && !autoRide()) { rideBackStart(j, T); return rideBack(j, T, dt); }      // your horse is yours again
+    if (!T.init) rideInit(j, T);
+    const d = T.d, r = j.root, mw = j.lane, mu = START_Z; T.t += dt;
+    let w = d * r.position.x, u = d * r.position.z, v = j.speed, svT = 0, vT, acc = 2.6, dec = 2.8;
+    if (T.sub === 'run' && (u >= T.uTurn || T.t > 14)) {      // wheel round: the speed chosen so the turning circle just reaches the far side of the tilt
+      T.sub = 'turn'; const Rn = Math.max(1.4, (mw - w) / 2 * T.rK * 0.95); T.vTurn = clamp(speedForRadius(Rn), 1.6, 3.4);
     }
+    if (T.sub === 'run') {
+      vT = u < 25 ? 9 : u < T.uTurn - 5 ? 6 : lerp(6, T.vWalk + 0.7, smoothstep(T.uTurn - 5, T.uTurn - 0.5, u));
+      dec = 3;
+      // drift out from the tilt, slowly, once the pass is behind him
+      const he = clamp(-(w - T.wOut) * 0.3 * smoothstep(3, 18, u), -0.24, 0.1) * T.drift - T.ph;
+      svT = clamp(he * 1.6, -1, 1);
+    } else if (T.sub === 'turn') {
+      T.tT = (T.tT || 0) + dt;
+      if (T.ph < Math.PI - 0.55 && !T.lined && T.tT < 5) { vT = T.vTurn; svT = 1; }      // commit to the turn, round to the right (across the tilt's end)
+      else {
+        T.lined = true;      // lined up on the lane out from the mark: he heads back down it, steering out the lateral error gently, and walks onto the mark
+        const du = u - mu, hd = Math.PI - clamp(0.9 * (mw - w), -0.6, 0.6);
+        svT = clamp(wrapA(hd - T.ph) * 1.8, -1, 1);
+        vT = clamp(Math.min(T.vWalk, 0.5 + 0.9 * Math.max(du, 0)), 0, 2.6);
+        // arrival: the tolerance grows with the time spent in the turn, and after 7 s (or if he has walked past the mark) he is blended on regardless, so it always ends
+        const grow = Math.max(0, T.tT - 3.5);
+        if (du < 0.6 + grow * 0.6 && v < 1.0 + grow * 0.5 && Math.abs(w - mw) < 0.45 + grow * 0.5 && Math.abs(wrapA(T.ph - Math.PI)) < 0.2 + grow * 0.25 || T.tT > 7 || du < -0.8 || T.t > 20) {
+          T.sub = 'blend'; T.tt = 0; T.b0 = [r.position.x, r.position.z, T.ph, r.rotation.z]; T.bd = clamp(0.5 + 0.4 * Math.hypot(r.position.x - d * mw, r.position.z - d * mu), 0.5, 2.2);
+        }
+      }
+      if (u > 46.4 && svT < 0.4) svT = 0.4;
+    }
+    if (T.sub === 'blend') {
+      T.tt += dt; const k = smoothstep(0, 1, T.tt / T.bd), fx = d * mw, fz = d * mu, fph = Math.PI;
+      const nx = lerp(T.b0[0], fx, k), nz = lerp(T.b0[1], fz, k), px = r.position.x, pz = r.position.z;
+      T.ph = lerp(T.b0[2], T.b0[2] + wrapA(fph - T.b0[2]), k); j.speed = damp(j.speed, Math.min(1.2, Math.hypot(nx - px, nz - pz) / Math.max(dt, 1e-4) * 1.1), 16, dt);
+      r.position.x = nx; r.position.z = nz; r.rotation.set(0, T.base + T.ph, lerp(T.b0[3], 0, k));
+      if (T.tt < T.bd) return;
+      return rideArrive(j, T);
+    }
+    // gait: speed follows the target with ease in, ease out
+    v = v < vT ? Math.min(vT, v + acc * dt) : Math.max(vT, v - dec * dt); j.speed = v;
+    // steering: the stick value is damped, the yaw rate follows it with its own lag (no sudden angular velocity)
+    T.sv = damp(T.sv, svT, 4.5, dt); const yrT = T.sv * turnRate(v); T.yr = damp(T.yr, yrT, 7, dt); T.ph += T.yr * dt;
+    w += Math.sin(T.ph) * v * dt; u += Math.cos(T.ph) * v * dt;
+    if (Math.abs(w) > 6.6) { w = Math.sign(w) * 6.6; }
+    r.position.x = d * w; r.position.z = d * u; r.rotation.y = T.base + T.ph;
+    T.rz = damp(T.rz, -clamp(0.03 * v * T.yr, -0.09, 0.09), 5, dt); r.rotation.z = T.rz;      // banks into the turn (a positive yaw rate is a left turn: roll to the left is negative)
   } else j.speed = Math.max(0, j.speed - 4 * dt);
+}
+function rideArrive(j, T) {
+  const d = T.d;
+  j.face(-d); j.root.position.set(-j.dir * j.lane, 0, d * START_Z); j.manualPos = false; j.speed = 0; T.stage = 'done';
+  if (M.result) return;      // the match ended under the ride: just stand there
+  // broken: he throws the stump down beside his horse; his squire walks up, hands a fresh lance (the swap happens as it reaches his hand), then fetches the stump. Whole: he keeps it.
+  const broken = j.lanceBroken, isP = j === player, who = isP ? 'you' : 'opp';
+  const swap = () => { j.lance.visible = true; if (j.lanceBroken) { j._mendLance(); j.lanceLower = 0; if (isP) { audio.ui('click'); if (!C.retSpoke) say('A fresh lance, my lord.', 'YOUR SQUIRE', 4, { cat: 'squire' }); } } };
+  if (isP) rollLate();
+  j.lance.visible = true;
+  if (broken) { j.lanceStump.visible = false; if (j.lanceKept) j.lanceKept.visible = false; field.throwStump(who); if (isP) audio.ui('click'); if (!field.serve(true, swap, who)) swap(); } else field.serve(false, null, who);
+  if (isP && !C.retSpoke && !M.result) { C.retSpoke = true; retinueSpeak(retSituation(C), 0.6, 0.6); }
 }
 
 function updateRide(dt, dtReal) {
@@ -976,7 +1027,7 @@ function updateRide(dt, dtReal) {
   if (G.auto && S.mode === 'charge') autoPilot(gap); else if (G.auto && S.mode === 'after' && G.autoKeepLow !== true) C.couchHeld = false;
   else if (touchMode && !G.auto) C.couchHeld = S.mode === 'charge' && gap < 36 && !C.pL.done;      // touch: the lance lowers by itself, and rises the moment the stroke is done (the quick-raise credit)
   if (live && keys.rein) { C.reinT += dtReal; if (C.reinT > 0.28) { C.reinT = 0; C.tier = Math.max(0, C.tier - 1); if (gap < 28 && C.tier < 3) C.checked = true; } } else C.reinT = 0.2;
-  if (after && !M.result) rideOut(player, C.turn.p, dt);
+  if (after && (!M.result || C.turn.p.init && C.turn.p.stage === 'run')) rideOut(player, C.turn.p, dt);      // (once begun, the ride-out is finished even if the match ends under it)
   else {
     let target;
     if (after || C.pL.done) target = player.z * D > START_Z - 5 ? 0 : M.practice && C.hitT !== null && C.t - C.hitT < 1.3 ? player.speed : 4.5;
@@ -1019,11 +1070,11 @@ function updateRide(dt, dtReal) {
   // ---------------- lance, seat, shield, glance over the shoulder
   if (live) {
     if (C.couchHeld && C.couch === 0) C.ev.couch = C.t; else if (!C.couchHeld && C.couch === 0) C.ev.couch = null;
-    C.couch = clamp(C.couch + (C.couchHeld ? dt / 0.85 : -dt / 0.55), 0, 1);
+    C.couch = clamp(C.couch + (C.couchHeld ? dt / (0.85 * (1 + PHYS.body.armCouch * M.bodyS.p.arm)) : -dt / 0.55), 0, 1);      // a jarred arm brings the lance down slower
     if (C.couch > 0.5) C.flags.couch = true;
     C.setT = C.couch >= 0.999 ? C.setT + dt : 0;
     if (C.setT > 0.25) C.flags.set = true;
-    C.fatigue = clamp(C.fatigue + (C.couch > 0.6 ? (C.setT > 2.4 * (sk('arm') ? SKILLS.arm.hold : 1) / LANCES[profile.lance || 'standard'].fatigue ? 0.3 * LANCES[profile.lance || 'standard'].fatigue : 0) : -0.4) * dt, 0, 1);
+    C.fatigue = clamp(C.fatigue + (C.couch > 0.6 ? (C.setT > 2.4 * (sk('arm') ? SKILLS.arm.hold : 1) / LANCES[profile.lance || 'standard'].fatigue ? 0.3 * LANCES[profile.lance || 'standard'].fatigue * (1 + PHYS.body.armBuild * M.bodyS.p.arm) : 0) : -0.4) * dt, 0, 1);
     player.lanceLower = C.couch;
     C.braceCd -= dt; C.braceT -= dt; C.braceAge += dt; C.guardAge += dt;
     player.brace = damp(player.brace, C.braceT > 0 ? 1 : 0, 14, dt);
@@ -1081,7 +1132,7 @@ function updateRide(dt, dtReal) {
     opp.brace = damp(opp.brace, O.brace && gap < 5 ? 1 : 0, 10, dt);
     opp.guard = damp(opp.guard, O.guard && gap < 24 ? 1 : 0, 5 * (1 - PHYS.damage.guardSlow * opp.dmg.pauldronL), dt);
     if (!O.retarget && gap < 14) { O.retarget = true; if (player.guard > 0.5 && O.zone === 'helm') O.zone = 'body'; else if (player.guard > 0.5 && O.zone === 'shield' && Math.random() < od.skill) O.zone = 'body'; }
-  } else if (after && !M.result && !M.practice) { rideOut(opp, C.turn.o, dt); opp.brace = damp(opp.brace, 0, 6, dt); opp.guard = damp(opp.guard, 0, 5, dt); opp.lanceLower = damp(opp.lanceLower, 0, 11, dt); }
+  } else if (after && (!M.result || C.turn.o.init && C.turn.o.stage === 'run') && !M.practice) { rideOut(opp, C.turn.o, dt); opp.brace = damp(opp.brace, 0, 6, dt); opp.guard = damp(opp.guard, 0, 5, dt); opp.lanceLower = damp(opp.lanceLower, 0, 11, dt); }
   else {
     const tgt = S.mode === 'ready' || M.practice ? 0 : (opp.z * opp.dir > START_Z - 5 ? 0 : 4.5);
     opp.speed = opp.speed < tgt ? Math.min(tgt, opp.speed + 3 * dt) : Math.max(tgt, opp.speed - 3.2 * dt);
@@ -1110,7 +1161,7 @@ function updateRide(dt, dtReal) {
     if (dt > 0) { const y = player.bob || 0, w = TAU * (0.78 + 0.12 * player.speed); bobHist.y = damp(bobHist.y, y, 1.5, dt); bobHist.a = -w * w * (y - bobHist.y) * clamp(player.speed / 3, 0, 1); }
     // the arm state is the point's offset from where you mean it to be: the target sweeping past is followed, the bounce is not
     if (!C.armLive) { C.armLive = true; arm.reset(0, 0); }
-    arm.step(dt, 0, 0, { set: clamp(C.setT / 0.45, 0, 1) * (C.couch >= 0.999 ? 1 : 0), lanceKg: PHYS.lance[profile.lance || 'standard'].kg, fatigue: C.fatigue, agit: M.agit,
+    arm.step(dt, 0, 0, { set: clamp(C.setT / 0.45, 0, 1) * (C.couch >= 0.999 ? 1 : 0), lanceKg: PHYS.lance[profile.lance || 'standard'].kg, fatigue: clamp(C.fatigue + PHYS.body.armFatigue * M.bodyS.p.arm, 0, 1), agit: clamp(M.agit + PHYS.body.windAgit * M.bodyS.p.wind, 0, 1),
       aVert: bobHist.a, aLat: -C.latV * 2.4, absorb: clamp(0.25 + 0.45 * C.collected + 0.3 * (H.steady - 0.5), 0, 0.85), focus: S.focusOn, scale: armScale(), t: S.time });
     C.sway = arm.err;
     const yaw = cmdYaw + arm.yaw, pitch = cmdPitch + arm.pitch;
@@ -1119,7 +1170,7 @@ function updateRide(dt, dtReal) {
   }
   if (S.mode === 'charge' && !C.oL.done && gap2 > 0.5) {
     player.zoneWorld(O.zone, _a);
-    const amp = lerp(0.5, 0.11, clamp(od.skill + DIFFICULTY[profile.difficulty ?? 1].ai, 0, 1)) * (1 + 0.5 * clamp(M.fav.commons, 0, 1)) * O.rattled;
+    const amp = lerp(0.5, 0.11, clamp(od.skill + DIFFICULTY[profile.difficulty ?? 1].ai, 0, 1)) * (1 + 0.5 * clamp(M.fav.commons, 0, 1)) * O.rattled * (1 + PHYS.body.oppArm * M.bodyS.o.arm + PHYS.body.oppWind * M.bodyS.o.wind);
     _a.x += amp * (wobble(S.time * 1.7, O.seed) * 0.7 + O.bias.x * 0.9) + O.knock.x;
     _a.y += amp * (wobble(S.time * 2.1, O.seed + 9) * 0.7 + O.bias.y * 0.9) + O.knock.y;
     O.knock.multiplyScalar(Math.exp(-5 * dt));
@@ -1265,8 +1316,9 @@ function beatSkip(dtReal) {
   ceremony.skipUI(true, S.skipHold / SKIP_HOLD);
   if (S.skipHold >= SKIP_HOLD) { S.skipHold = 0; skipKey = false; if (C.mont) endMontage(); else endBeat(true); }
 }
-/** The judges raise their flags (src/judges.js has the system), then Hugh's combined call follows. A camera cut to the table runs 1.2 s (we are not in a replay here). */
-const FLAG_HOLD = 2.0, FLAG_CUT = 1.2;
+/** The judges raise their flags (src/judges.js has the system), then Hugh's combined call follows. A camera cut to the table runs 3.2 s (we are not in a replay here),
+ *  long enough to read the caption (Danilo, 15 Nov: at 1.2 s he never saw what it said). */
+const FLAG_HOLD = 3.4, FLAG_CUT = 3.2;
 function raiseJudges() {
   if (!judges.has()) { releaseCall(C); return; }
   const p = C.pL.res, o = C.oL.res, cy = strokeCat(p), ch = strokeCat(o);
@@ -1549,6 +1601,7 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   }
   const broke = hit.broke;
   armourBlow(Aj, Bj, zone, st, geo, hit, glanced, isP);
+  bodyBlow(Bj, zone, st, hit, glanced, isP);
   if (isP && broke) C.flags.broke = true;
   if (!broke && !M.practice) { if (isP) C.kickUp = PHYS.shaft.kick; else opp.lanceLower = Math.min(opp.lanceLower, 1 - PHYS.shaft.kick); }
   const unhorse = hit.unhorse || (broke && G.forceUnhorse === (isP ? 'opp' : 'player'));
@@ -1602,6 +1655,15 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
 
 // ---- armour damage: which region a hit volume belongs to, how hard it marks, and the marks on the model (jouster.js damage())
 const regionOf = (zone, part) => zone === 'shield' ? 'shield' : zone === 'helm' ? 'helm' : /^(breast|back|gorget)$/.test(part || '') ? 'breast' : /^(pauldron|upperArm|foreArm)L$/.test(part || '') ? 'pauldronL' : zone === 'body' && !part ? 'breast' : null;
+/** What a stroke does to the two men's bodies (PHYS.body): the striker's lance arm takes the shock back through the hand; the struck man loses his wind and is jolted. */
+function bodyBlow(Bj, zone, st, hit, glanced, isP) {
+  if (M.practice || zone === 'horse' || zone === 'miss' || zone === 'none') return;
+  const K = PHYS.body, A = M.bodyS[isP ? 'p' : 'o'], B = M.bodyS[isP ? 'o' : 'p'], P = clamp(hit.power, 0, 1.6), soft = glanced || st.skid ? 0.4 : 1;
+  A.arm = clamp(A.arm + K.armShock * P * (hit.broke ? 0.45 : 1) * soft, 0, 1);
+  const w = zone === 'body' ? 1 : zone === 'shield' ? 0.55 : zone === 'helm' ? 0.3 : 0, prot = Bj.armourDef.protection ?? 0.7, dent = Bj.dmg ? Bj.dmg.breast || 0 : 0;
+  B.wind = clamp(B.wind + K.wind * P * w * (1.3 - 0.6 * prot) * (1 + K.dentWind * dent) * (glanced ? 0.5 : 1), 0, 1);
+  B.arm = clamp(B.arm + K.armJolt * P * w, 0, 1);
+}
 function armourBlow(Aj, Bj, zone, st, geo, hit, glanced, isP) {
   if (!Bj.dmg || M.practice || zone === 'horse') return;
   const D = PHYS.damage, part = st.skid ? null : geo && geo.part, region = regionOf(zone, part); if (!region) return;
@@ -2082,11 +2144,12 @@ function updateHud(force) {
   $('stamBar').style.width = `${M.stamina * 100}%`; $('stamBar').style.background = M.stamina < 0.25 ? 'var(--red)' : 'var(--gold)';
   $('calmBar').style.width = `${(1 - M.agit) * 100}%`; $('calmBar').style.background = M.agit > 0.6 ? 'var(--red)' : 'var(--green)';
   $('horseBar').style.width = `${M.hp.horse * 100}%`; $('horseBar').style.background = M.hp.horse < 0.4 ? 'var(--red)' : 'var(--green)';
+  { const w = 1 - M.bodyS.p.wind; $('breathBar').style.width = `${w * 100}%`; $('breathBar').style.background = w < 0.5 ? 'var(--red)' : 'var(--gold)'; }
   $('bodyBar').style.width = `${M.hp.body * 100}%`; $('bodyBar').style.background = M.hp.body < 0.4 ? 'var(--red)' : 'var(--green)';
   const steady = clamp(1 - C.sway / 0.07, 0, 1);
   $('armBar').style.width = `${steady * 100}%`; $('armBar').style.background = steady < 0.4 ? 'var(--red)' : 'var(--gold)';
   $('focusBar').style.width = `${M.focus * 100}%`;
-  $('couchTxt').textContent = player.lanceBroken ? 'LANCE BROKEN' : C.couch >= 0.999 ? (C.setT > 0.4 ? (C.fatigue > 0.35 ? 'ARM TIRING' : 'COUCHED · SET') : 'COUCHED · SETTLING') : C.couch > 0.05 ? 'LOWERING…' : 'LANCE UPRIGHT';
+  $('couchTxt').textContent = player.lanceBroken ? 'LANCE BROKEN' : C.couch >= 0.999 ? (C.setT > 0.4 ? (C.fatigue > 0.35 ? 'ARM TIRING' : M.bodyS.p.arm > 0.3 ? 'COUCHED · ARM JARRED' : 'COUCHED · SET') : 'COUCHED · SETTLING') : C.couch > 0.05 ? 'LOWERING…' : 'LANCE UPRIGHT';
   const br = $('braceTxt'); br.textContent = C.braceT > 0 ? 'THRUSTING' : C.braceCd > 0 ? 'THRUST: RECOVERING' : 'THRUST READY (SPACE)'; br.classList.toggle('on', C.braceT > 0);
   const sh = $('shieldTxt'); sh.textContent = player.guard > 0.5 ? 'SHIELD: HIGH (guards the helm)' : 'SHIELD: LOW (guards the body)'; sh.classList.toggle('on', player.guard > 0.5);
   const ph = player.phase % 1, pulse = C.tier === 4 ? Math.max(0, 1 - Math.min(ph, 1 - ph) / 0.2) : 0;
@@ -2159,10 +2222,22 @@ function updateMask() {
 // ------------------------------------------------------------------ camera
 const camPos = new THREE.Vector3(0, 6, -50), camLook = new THREE.Vector3(0, 2, 0), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
 let fov = 58;
+/** State of the lazy follow cam used while the scripted ride-back runs: its yaw lags the horse's heading (about 1.7 s), and it is eased in over the first second or two.
+ *  Runs every frame (also under a cut) so it is current when the cut ends. Returns true when the follow cam is the active one. */
+const FC = { yaw: 0, hd: 0, b: 0 };
+function followCam(dtReal) {
+  if (!player || !C) return false;
+  const T = C.turn.p, on = S.mode === 'after' && !C.rb && !S.fp && (player.manualPos || T.stage === 'done') && T.stage !== 'free';
+  const hd = player.root.rotation.y; FC.hd = hd;
+  if (!on) { FC.yaw = hd; FC.b = 0; return false; }
+  FC.yaw += wrapA(hd - FC.yaw) * (1 - Math.exp(-dtReal / 1.7)); FC.b = Math.min(1, FC.b + dtReal / 1.4);
+  return true;
+}
 function updateCamera(dtReal) {
   if (G.cam) { camera.position.set(...G.cam.p); camera.lookAt(...G.cam.l); if (G.cam.fov) { camera.fov = G.cam.fov; camera.updateProjectionMatrix(); } if (player) player.helm.visible = true; return; }
   let rate = 7, wantFov = 58, snap = false, own = false;
   const D = dirP();
+  const autoCam = followCam(dtReal);
   if (S.mode === 'menu') {
     S.menuAng += dtReal * 0.08;
     const c = player ? player.root.position : _a.set(0, 0, 0);
@@ -2245,7 +2320,15 @@ function updateCamera(dtReal) {
   } else {
     const p = player.root.position, hs = player.hs, lk = player.look, bob = (player.bob || 0);
     const fwd = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion);
-    if (player.manualPos) { want.set(p.x - fwd.x * 4.2 + fwd.z * 0.6, 2.9 * hs, p.z - fwd.z * 4.2 - fwd.x * 0.6); wantLook.set(p.x + fwd.x * 12, 1.9, p.z + fwd.z * 12); rate = 3.2; }
+    if (autoCam) {      // the scripted ride-back: a lazy follow cam with its own damped yaw, looking a little ahead of where the horse is going
+      const cx = Math.sin(FC.yaw), cz = Math.cos(FC.yaw), lag = Math.abs(wrapA(FC.hd - FC.yaw)), la = clamp(player.speed * 1.1, 0, 4.5) + 1.5 * FC.b, t = S.time, dist = 4.4 + 0.9 * Math.min(lag, 1.5);
+      // handheld: a few centimetres and a fraction of a degree, very slow
+      const hx = Math.sin(t * 0.37) * 0.04 + Math.sin(t * 0.91 + 1.3) * 0.02, hy = Math.sin(t * 0.29 + 2) * 0.03 + Math.sin(t * 0.77) * 0.015, hz = Math.sin(t * 0.43 + 4) * 0.04;
+      _b.set(p.x - cx * dist + cz * 0.6 + hx, 2.8 * hs + bob * 0.6 + hy, p.z - cz * dist - cx * 0.6 + hz);
+      _c.set(p.x + Math.sin(FC.hd) * la - hz * 0.5, 1.8 + hy, p.z + Math.cos(FC.hd) * la + hx * 0.5);
+      // eased in from the charge cam
+      want.set(p.x + D * 0.72, 2.72 * hs + bob * 1.1, p.z - D * 3.5).lerp(_b, FC.b); wantLook.set(p.x + D * 1.25, 1.95, p.z + D * 30).lerp(_c, FC.b); rate = lerp(9, 4.5, FC.b);
+    } else if (player.manualPos) { want.set(p.x - fwd.x * 4.2 + fwd.z * 0.6, 2.9 * hs, p.z - fwd.z * 4.2 - fwd.x * 0.6); wantLook.set(p.x + fwd.x * 12, 1.9, p.z + fwd.z * 12); rate = 3.2; }
     else {
       const th = player.brace;      // thrusting: the camera closes in and swings a little wide, so the body going forward is seen
       want.set(p.x + D * (0.72 + 0.55 * th), 2.72 * hs + bob * 1.1 - 0.28 * th, p.z - D * (3.5 - 0.8 * th));
@@ -2287,7 +2370,7 @@ function frame(dtReal) {
   if (S.paused) { post.render(0); return; }
   S.time += dtReal; frameId++;
   S.focusOn = focusHeld && M && M.focus > 0 && S.mode === 'charge' && C && !C.pL.done;
-  if (S.focusOn) M.focus = Math.max(0, M.focus - dtReal * (sk('nerve') ? SKILLS.nerve.drain : 0.42));
+  if (S.focusOn) M.focus = Math.max(0, M.focus - dtReal * (sk('nerve') ? SKILLS.nerve.drain : 0.42) * (1 + PHYS.body.windFocus * M.bodyS.p.wind));      // winded, he cannot hold his breath for long
   let ts = 1;
   if (S.slowT > 0) { S.slowT -= dtReal; ts = S.slowT > 0.3 ? 0.16 : lerp(1, 0.16, S.slowT / 0.3); }
   else if (S.focusOn) ts = 0.4;

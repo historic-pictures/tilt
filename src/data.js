@@ -391,6 +391,13 @@ export const PHYS = {
   // mend: share of the worst region the armourer takes out between courses; squireShield: share of the shield's askew the squire straightens.
   damage: { perPower: 0.17, broke: 1.5, helm: 1.3, glance: 0.4, turned: 0.5, shieldPass: 0.15, shieldGlance: 8, helmView: 0.12, helmWobble: 0.1, guardSlow: 0.25,
     crackAt: 0.5, cornerAt: 0.65, askewAt: 0.8, askew: 0.12, plumeAt: 0.5, mend: 0.3, squireShield: 0.5, badAt: 0.6, radius: 0.07, depth: 0.015 },
+  // The rider's own body through a match (Danilo, 15 Nov: "as ultrarealistic as possible"). arm: the lance arm jarred by the shock of
+  // your own strokes coming back through the hand and the rest (most when the lance holds and the energy has nowhere else to go, little
+  // when it breaks or glances) and by the jolt of blows you take; it makes the arm slower and shakier and tires sooner. wind: the breath
+  // driven out of you by a blow to the body or shield (worse through a dented breastplate, less in heavier harness); a winded man shakes
+  // and his nerve runs out sooner. Between courses the breath mostly comes back, a jarred arm hardly.
+  body: { armShock: 0.16, armJolt: 0.05, wind: 0.42, dentWind: 0.8, windRest: 0.35, armRest: 0.9,
+    armFatigue: 0.55, armBuild: 1.2, armCouch: 0.5, windAgit: 0.6, windFocus: 1.0, oppArm: 0.9, oppWind: 0.45 },
   // The unhorsed rider as one rigid body: mass (kg), moment of inertia (kg m2), bounce, grip of the sand.
   fall: { kg: 105, inertia: 13, bounce: 0.18, friction: 0.65 },
   quintainKg: 250,      // the board, its arm and sandbag, and the reaction of the post

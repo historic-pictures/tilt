@@ -22,6 +22,8 @@ export function initMenus(api) {
   let exVenue = 0, exOpp = KNIGHTS[0].id, exMode = 'planken', exCourses = 5, dismissArm = null;
   const EX_COURSES = [3, 5, 7, 10, 15, 20], CIRC_COURSES = [3, 5, 7, 10, 15];
   /** The number of courses a rule set fixes (0 = you choose): Castile four by its statutes, Judged Tilt six, the Bridge three a bout. */
+  // the circuit's rules: chosen on the circuit screen (Danilo, 15 Nov), Standard by default; Keep the Bridge is its own kind of match, not a circuit bout
+  const circMode = (p) => MODES[p.circMode] && !MODES[p.circMode].bridge ? p.circMode : 'planken';
   const fixedCourses = (id) => { const m = MODES[id]; return m.fixedCourses || (m.noExtra && !m.pickCourses ? 4 : 0); };
   let stableCap = null;      // the caparison shown on the Stable's horse (previewed; yours is profile.caparison)
   const crests = () => root.querySelectorAll('canvas[data-arms]').forEach(c => drawCrest(c, JSON.parse(c.dataset.arms)));
@@ -44,7 +46,7 @@ export function initMenus(api) {
       ${api.touch ? `<button data-act="fullscreen">Full screen<small>Hide the browser bars and lock the screen sideways</small></button>` : ''}
       <div class="standing"><span>${rank.name}</span><span>${purseText(p.gold)}</span></div>
       ${rankBar(p.renown)}
-      <div class="toggles"><span class="chip" data-act="diff">Difficulty: ${DIFFICULTY[p.difficulty ?? 1].name}</span><span class="chip" data-act="herald">Herald: ${p.herald === false ? 'silent' : 'speaks'}</span><span class="chip" data-act="voices" title="The robot voice for the herald, the king, your men and the sellers (needs sound on)">Voices: ${api.voicesOn && !api.voicesOn() ? 'off' : 'on'}</span><span class="chip" data-act="view">View: ${p.firstPerson ? 'first person' : 'third person'}</span><span class="chip" data-act="autoride" title="After a pass: ride back to your mark yourself (W/S gait, A/D steer), or let the horse take you">Ride back: ${p.autoRide === true ? 'auto' : p.autoRide === false ? 'by hand' : 'auto until learned'}</span><label class="chip vol">Music <input type="range" id="musicVol" min="0" max="100" step="5" value="${api.musicVol ? api.musicVol() : 60}"> <span id="musicPct">${api.musicVol ? api.musicVol() : 60}%</span></label>${SFX_HAS_OLD ? `<span class="chip" data-act="sfxpack" title="Switch between the original and the royalty-free sound pack (reloads the page)">Sound pack: ${sfxPack() === 'new' ? 'New' : 'Old'}</span>` : ''}</div>
+      <div class="toggles"><span class="chip" data-act="diff">Difficulty: ${DIFFICULTY[p.difficulty ?? 1].name}</span><span class="chip" data-act="herald">Herald: ${p.herald === false ? 'silent' : 'speaks'}</span><span class="chip" data-act="voices" title="The robot voice for the herald, the king, your men and the sellers (needs sound on)">Voices: ${api.voicesOn && !api.voicesOn() ? 'off' : 'on'}</span><span class="chip" data-act="view">View: ${p.firstPerson ? 'first person' : 'third person'}</span><span class="chip" data-act="autoride" title="After a pass: ride back to your mark yourself (W/S gait, A/D steer), or let the horse take you">Ride back: ${p.autoRide === false ? 'by hand' : 'auto'}</span><label class="chip vol">Music <input type="range" id="musicVol" min="0" max="100" step="5" value="${api.musicVol ? api.musicVol() : 60}"> <span id="musicPct">${api.musicVol ? api.musicVol() : 60}%</span></label>${SFX_HAS_OLD ? `<span class="chip" data-act="sfxpack" title="Switch between the original and the royalty-free sound pack (reloads the page)">Sound pack: ${sfxPack() === 'new' ? 'New' : 'Old'}</span>` : ''}</div>
       <div class="foot">Sound is on. The speaker button at the top, or M, mutes it.</div>`);
   }
 
@@ -82,7 +84,7 @@ export function initMenus(api) {
       <p>${circuitOpening(T.round, place, done)} ${done ? (place === 1 ? `<b>${p.name} is champion of the circuit!</b> The heralds will shout your name from London to Nuremberg.` : `The circuit is run. You finish ${['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][place - 1]}.`)
         : `Next: <b>${V.name}</b>, ${V.city}, ${V.year}. ${V.blurb} You meet the champion of the lists, <b>${host.name}</b>.<br>Entry costs ${marks(entryFee(vi))}; the winner's purse is ${marks(purse(vi, 'win', true))}. ${purseText(p.gold)}.`}</p></div></div></div>
       <div class="actions"><button class="btn" data-go="main">Back</button>${done ? '<button class="btn primary" data-act="reset">New Circuit</button>' : '<button class="btn primary" data-act="ride">Ride to the Lists</button>'}</div></div>
-      <h5>Courses per match <small>level scores run up to two extra courses; long matches cost less per lance</small></h5><div class="swatches">${CIRC_COURSES.map(n => `<div class="chip ${n === (p.courses || 5) ? 'sel' : ''}" data-cc="${n}">${n}</div>`).join('')}</div>
+      <h5>Rules and courses <small>${MODES[circMode(p)].sub}${fixedCourses(circMode(p)) ? ' · courses fixed by the rules' : MODES[circMode(p)].firstBreak ? ' · void if no lance breaks' : ' · level scores run up to two extra courses'}</small></h5><div class="swatches circrules"><span class="lbl">Rules</span>${Object.values(MODES).filter(m => !m.bridge).map(m => `<div class="chip ${m.id === circMode(p) ? 'sel' : ''}" data-cm="${m.id}" title="${m.blurb.replace(/"/g, '&quot;')}">${m.name}</div>`).join('')}<i class="brk"></i><span class="lbl">Courses</span>${fixedCourses(circMode(p)) ? `<div class="chip sel">${fixedCourses(circMode(p))}</div>` : CIRC_COURSES.map(n => `<div class="chip ${n === (p.courses || 5) ? 'sel' : ''}" data-cc="${n}">${n}</div>`).join('')}</div>
       <h5>The Road</h5><div class="venues">${VENUES.map((v, i) => { const r = T.results[i]; return `<div class="venue ${i === T.round ? 'now' : i < T.round ? 'done' : ''}"><b>${v.name}</b><i>${v.city} · ${v.year}</i><div class="r">${r ? `${r.res.startsWith('win') ? 'Won' : r.res === 'draw' ? 'Drew' : 'Lost'} ${r.score[0]}–${r.score[1]}` : `against ${KNIGHTS.find(k => k.id === v.host).short}`}</div>${r ? '' : `<div class="fee">purse ${purse(i, 'win', true)} · entry ${entryFee(i)}</div>`}</div>`; }).join('')}</div>
       <h5>Standings</h5><table class="tbl"><tr><th>#</th><th>Knight</th><th>Land</th><th>W</th><th>D</th><th>L</th><th>Lances broken</th><th>Points</th></tr>
       ${rows.map((r, i) => { const k = info(r.id); return `<tr class="${r.id === 'you' ? 'me' : ''}"><td>${i + 1}</td><td>${crest(k.arms)}${k.name}</td><td>${k.land}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.sp}</td><td><b>${r.p}</b></td></tr>`; }).join('')}</table>`);
@@ -249,7 +251,7 @@ export function initMenus(api) {
     const v = +e.target.value; el('musicPct').textContent = v + '%'; if (api.setMusic) api.setMusic(v);
   });
   root.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-go],[data-cc],[data-act],[data-col],[data-pat],[data-chg],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-stcap],[data-stcapset],[data-skill]');
+    const t = e.target.closest('[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-stcap],[data-stcapset],[data-skill]');
     if (!t) return;
     const p = api.profile, d = t.dataset;
     api.ui(d.go || d.act ? 'select' : 'click');
@@ -257,7 +259,7 @@ export function initMenus(api) {
     if (d.go) { dismissArm = null; return show(d.go); }
     if (d.act === 'welcome') { p.name = cleanName(wDraft); p.named = true; wDraft = null; api.saveProfile(); api.rebuildPlayer(); return show('main'); }
     if (root.dataset.name === 'welcome' && (d.col || d.pat)) { if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; } else p.arms.pattern = d.pat; api.saveProfile(); api.rebuildPlayer(); return show('welcome'); }
-    if (d.act === 'ride') { const T = p.table; return api.startMatch(T.round, VENUES[T.round].host, true, false, null, p.courses || 5); }
+    if (d.act === 'ride') { const T = p.table, cm = circMode(p); return api.startMatch(T.round, VENUES[T.round].host, true, false, cm, fixedCourses(cm) || p.courses || 5); }
     if (d.act === 'reset') { api.resetCircuit(); return show('circuit'); }
     if (d.act === 'exride') return api.startMatch(exVenue, exOpp, false, false, exMode, fixedCourses(exMode) || exCourses);
     if (d.act === 'practice') return api.startPractice((p.lesson || 0) >= LESSONS.length);
@@ -265,7 +267,7 @@ export function initMenus(api) {
     if (d.act === 'voices') { api.setVoices(!(api.voicesOn ? api.voicesOn() : true)); return show('main'); }
     if (d.act === 'diff') { p.difficulty = ((p.difficulty ?? 1) + 1) % DIFFICULTY.length; api.saveProfile(); return show('main'); }
     if (d.act === 'sfxpack') { setSfxPack(sfxPack() === 'new' ? 'old' : 'new'); return location.reload(); }
-    if (d.act === 'autoride') { p.autoRide = p.autoRide == null ? false : p.autoRide === false ? true : null; if (p.autoRide === null) delete p.autoRide; api.saveProfile(); return show('main'); }
+    if (d.act === 'autoride') { if (p.autoRide === false) delete p.autoRide; else p.autoRide = false; api.saveProfile(); return show('main'); }
     if (d.act === 'view') { p.firstPerson = !p.firstPerson; api.S.fp = p.firstPerson; api.saveProfile(); return show('main'); }
     if (d.act) return;
     if (d.skill) { if (skillPoints(p) > 0 && SKILLS[d.skill] && !(p.skills || (p.skills = {}))[d.skill]) { p.skills[d.skill] = 1; api.ui('select'); api.saveProfile(); } return show('skills'); }
@@ -273,6 +275,7 @@ export function initMenus(api) {
     if (d.exo) { exOpp = d.exo; return show('exhibition'); }
     if (d.exm) { exMode = d.exm; return show('exhibition'); }
     if (d.cc) { p.courses = +d.cc; api.saveProfile(); return show('circuit'); }
+    if (d.cm) { p.circMode = d.cm; api.saveProfile(); return show('circuit'); }
     if (d.exc) { exCourses = +d.exc; return show('exhibition'); }
     if (d.stcap) { stableCap = d.stcap; return show('stable'); }
     if (d.stcapset) {

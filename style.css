@@ -494,3 +494,4 @@ body.touch.compact #card:has(#cardFacts > *) .page { display: grid; grid-templat
 body.touch.compact #card:has(#cardFacts > *) .page > :not(#cardFacts) { grid-column: 1; }
 body.touch.compact #card:has(#cardFacts > *) #cardFacts { grid-column: 2; grid-row: 1 / span 7; }
 body.touch.compact #card #cardTitle { font-size: 36px; } body.touch.compact #card #cardSub { font-size: 17px; margin-bottom: 8px; padding-bottom: 6px; }
+.swatches.circrules .brk { flex-basis: 100%; height: 0; }
