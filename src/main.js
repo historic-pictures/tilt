@@ -9,6 +9,7 @@ import { reckon, settle } from './economy.js';
 import { createPreviews } from './previews.js';
 import { createStable } from './stable.js';
 import { createPost } from './post.js';
+import { touchMode, initTouch, goFullscreen } from './touch.js';
 import { Quintain } from './quintain.js';
 import { drawHitMap, drawDoll } from './verdict.js';
 import { preloadScans } from './scans.js';
@@ -109,14 +110,14 @@ function speechVolume(at) {
 // ------------------------------------------------------------------ renderer
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+renderer.setPixelRatio(touchMode ? (window.devicePixelRatio > 2.5 ? 1 : Math.min(window.devicePixelRatio, 1.25)) : Math.min(window.devicePixelRatio, 1.75));      // phones: a lighter frame
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.72;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.08, 4000);
 const fx = new FX(scene);
-const post = createPost(renderer, scene, camera);
+const post = createPost(renderer, scene, camera, { lite: touchMode });
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -870,7 +871,7 @@ const MARK_R = 2.0, OVER_HERE = ['Sir, over here!', 'My lord, over here!', 'Here
 const _sq = new THREE.Vector3(), wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 /** True when the scripted ride-back should run: the autopilot, the menu setting, or (unset) the circuit until you have earned "Knows His Mark". */
 function autoRide() {
-  if (G.auto) return true;
+  if (G.auto || touchMode) return true;      // touch: no horse steering, the scripted ride-back
   if (profile.autoRide === true || profile.autoRide === false) return profile.autoRide;
   return !!M.circuit && !(profile.achievements && profile.achievements.knowsmark);
 }
@@ -973,6 +974,7 @@ function updateRide(dt, dtReal) {
 
   // ---------------- your horse: tap to climb the gaits, rhythm at the gallop, rein to slow
   if (G.auto && S.mode === 'charge') autoPilot(gap); else if (G.auto && S.mode === 'after' && G.autoKeepLow !== true) C.couchHeld = false;
+  else if (touchMode && !G.auto) C.couchHeld = S.mode === 'charge' && gap < 36 && !C.pL.done;      // touch: the lance lowers by itself, and rises the moment the stroke is done (the quick-raise credit)
   if (live && keys.rein) { C.reinT += dtReal; if (C.reinT > 0.28) { C.reinT = 0; C.tier = Math.max(0, C.tier - 1); if (gap < 28 && C.tier < 3) C.checked = true; } } else C.reinT = 0.2;
   if (after && !M.result) rideOut(player, C.turn.p, dt);
   else {
@@ -1808,7 +1810,7 @@ function showCard() {
   const nextOd = B && !final ? KNIGHTS.find(k => k.id === B.queue[B.bout]) : null;
   $('cardTitle').textContent = B ? (final ? (B.held ? 'THE BRIDGE IS HELD' : 'THE BRIDGE IS LOST') : M.result.startsWith('win') ? 'BOUT WON' : M.result === 'draw' ? 'BOUT DRAWN' : 'BOUT LOST')
     : M.void ? 'THE JOUST IS VOID' : { 'win': 'VICTORY', 'win-unhorse': 'VICTORY BY UNHORSING', 'loss': 'DEFEAT', 'loss-unhorse': 'UNHORSED', 'loss-dq': 'DISQUALIFIED', 'win-dq': 'VICTORY — HE IS DISQUALIFIED', 'loss-yield': 'YOU YIELD — TOO BATTERED TO RIDE', 'draw': 'HONOURS EVEN', 'practice': 'YOU ARE READY FOR THE LISTS' }[M.result];
-  $('cardHint').textContent = nextOd ? `The next challenger is ${nextOd.short} · SPACE / CLICK to meet him` : 'SPACE / CLICK to continue';
+  $('cardHint').textContent = nextOd ? `The next challenger is ${nextOd.short} · ${touchMode ? 'TAP' : 'SPACE / CLICK'} to meet him` : touchMode ? 'TAP to continue' : 'SPACE / CLICK to continue';
   if (M.how) voice.later(0.4, () => say(`The prize is given for ${M.how}.`, 'THE JUDGES', 1, { ttl: 8 }));
   const base = `${profile.name} ${M.score[0]} — ${M.score[1]} ${M.od.short}`;
   $('cardSub').textContent = M.result === 'practice' ? 'The master of horse has nothing more to teach you here. Ride the circuit.'
@@ -2030,22 +2032,24 @@ window.addEventListener('keyup', (e) => {
   else if (k === 'KeyF') focusHeld = false; else if (k === 'KeyT') keys.throw = false; else if (k === 'KeyQ') keys.guard = false; else if (k === 'KeyC') keys.look = false;
 });
 window.addEventListener('mousemove', (e) => {
+  if (touchMode) return;      // a finger moves the aim by dragging (src/touch.js); the synthetic mouse move must not jump it
   if (G.auto && S.mode === 'charge') return;
   mouse.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
 });
 canvas.addEventListener('mousedown', (e) => {
   initAudio();
+  if (touchMode) return;
   if (e.button === 0) { if (S.mode === 'charge' || S.mode === 'ready') { if (C) C.couchHeld = true; } else advance(); }
   if (e.button === 2) focusHeld = true;
 });
-window.addEventListener('mouseup', (e) => { if (e.button === 0 && C) C.couchHeld = false; if (e.button === 2) focusHeld = false; });
+window.addEventListener('mouseup', (e) => { if (touchMode) return; if (e.button === 0 && C) C.couchHeld = false; if (e.button === 2) focusHeld = false; });
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 $('card').addEventListener('click', advance);
 window.addEventListener('blur', () => { skipKey = false; keys.rein = keys.left = keys.right = keys.guard = keys.look = keys.throw = false; focusHeld = false; if (M && S.mode === 'charge' && !G.manual) setPaused(true); });
 
 function setPaused(v) {
   S.paused = v; const b = $('banner');
-  if (v) { $('bannerTop').textContent = 'THE LISTS ARE STILL'; $('bannerMain').textContent = 'Paused'; $('bannerSub').innerHTML = '<b>Esc</b> to ride on &nbsp;·&nbsp; <b>Backspace</b> to leave the lists'; b.classList.remove('hidden'); if (window.speechSynthesis) window.speechSynthesis.pause(); }
+  if (v) { $('bannerTop').textContent = 'THE LISTS ARE STILL'; $('bannerMain').textContent = 'Paused'; $('bannerSub').innerHTML = touchMode ? '' : '<b>Esc</b> to ride on &nbsp;·&nbsp; <b>Backspace</b> to leave the lists'; b.classList.remove('hidden'); if (window.speechSynthesis) window.speechSynthesis.pause(); }
   else { if (S.mode !== 'intro') b.classList.add('hidden'); if (window.speechSynthesis) window.speechSynthesis.resume(); }
   if (!S.muted) audio.setMuted(v);
 }
@@ -2098,8 +2102,19 @@ function updateHud(force) {
   else if (S.mode === 'after' && !M.result && C.rb && C.turn.p.stage === 'free') pr = C.rb.nearSq ? `<kbd>F</kbd> Hand the lance to your squire &nbsp;·&nbsp; hold <kbd>T</kbd> Throw it down` : `Ride to the marker &nbsp;·&nbsp; <kbd>W</kbd> faster · <kbd>S</kbd> slower · <kbd>A</kbd> <kbd>D</kbd> steer${C.rb.onMark ? ' &nbsp;·&nbsp; hold still' : ''}`;
   else if (S.mode === 'after' && !M.result && C.rb && C.turn.p.stage === 'hand' && player.lanceBroken && !C.rb.handed) pr = `<kbd>F</kbd> Hand the lance to your squire &nbsp;·&nbsp; hold <kbd>T</kbd> Throw it down`;
   else if (S.mode === 'after' && !M.result && C.verdict) pr = `Wheeling about… <kbd>C</kbd> look behind`;
+  if (touchMode) pr = touchPrompt(tti);
   $('prompt').innerHTML = pr;
   if (M.practice) updateLesson();
+}
+/** The in-match prompt in touch words (the keyboard prompt above is computed, then replaced). */
+function touchPrompt(tti) {
+  if (S.mode === 'ready') return C.rd.sig ? `Tap <kbd>SPUR</kbd> — ride!` : C.rd.p ? `Your lance is up. Wait for the marshal…` : `Tap <kbd>SPUR</kbd> to raise your lance &nbsp;·&nbsp; drag to aim`;
+  if (S.mode === 'charge' && !C.pL.done) {
+    if (C.tier < 3 && C.t > 1.2) return `Tap <kbd>SPUR</kbd> again — walk, trot, canter, gallop`;
+    if (C.couch > 0.9 && tti < 0.45 && C.braceT <= 0 && C.braceCd <= 0) return `Tap <kbd>BRACE</kbd> — thrust!`;
+    if (C.t < 5) return `Drag to aim`;
+  }
+  return '';
 }
 function updateLesson() {
   const L = LESSONS[M.lesson];
@@ -2268,6 +2283,7 @@ G.physLog = [];
 G.hitboxes = (on = true) => { G._hbDebug = !!on; if (!on) { if (player) player.dbgUpdate(frameId, false); if (opp && opp.dbgUpdate) opp.dbgUpdate(frameId, false); } return G._hbDebug; };
 G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) frame(dt); };
 function frame(dtReal) {
+  touch.update();
   if (S.paused) { post.render(0); return; }
   S.time += dtReal; frameId++;
   S.focusOn = focusHeld && M && M.focus > 0 && S.mode === 'charge' && C && !C.pL.done;
@@ -2328,7 +2344,9 @@ function frame(dtReal) {
 // ------------------------------------------------------------------ boot
 const previews = createPreviews();
 const stable = createStable();
-const menus = initMenus({
+const touch = initTouch({ S, mouse, inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
+  leave() { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } } });
+const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
   get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, newTable,
   resetCircuit() { profile.table = newTable(); profile.venue = 0; saveProfile(); },
   startPractice(restart) { if (restart) { profile.lesson = 0; saveProfile(); } startMatch(Math.max(0, venueIdx), null, false, true); },

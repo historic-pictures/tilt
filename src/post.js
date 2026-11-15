@@ -105,7 +105,8 @@ const GradeShader = {
     }`,
 };
 
-export function createPost(renderer, scene, camera) {
+export function createPost(renderer, scene, camera, opts = {}) {
+  const lite = !!opts.lite;      // phones: no bloom, no ambient occlusion, lighter MSAA
   const state = {
     enabled: true,
     composer: null,
@@ -127,7 +128,7 @@ export function createPost(renderer, scene, camera) {
     // HalfFloat + MSAA target so HDR values survive and edges stay anti-aliased.
     const target = new THREE.WebGLRenderTarget(size.x * pr, size.y * pr, {
       type: THREE.HalfFloatType,
-      samples: 4,
+      samples: lite ? 2 : 4,
     });
     const composer = new EffectComposer(renderer, target);
     composer.setPixelRatio(pr);
@@ -136,10 +137,10 @@ export function createPost(renderer, scene, camera) {
     composer.addPass(new RenderPass(scene, camera));
 
     // Bloom at half res; high threshold so only real highlights glow.
-    const bloom = new UnrealBloomPass(
+    const bloom = lite ? null : new UnrealBloomPass(
       new THREE.Vector2(Math.max(1, size.x * pr * 0.5), Math.max(1, size.y * pr * 0.5)),
       0.22, 0.6, 0.9);
-    composer.addPass(bloom);
+    if (bloom) composer.addPass(bloom);
 
     const grade = new ShaderPass(GradeShader);
     composer.addPass(grade);
@@ -151,7 +152,7 @@ export function createPost(renderer, scene, camera) {
     composer.addPass(smaa);
 
     // Ambient occlusion (grounds horses, stands and figures). Loaded lazily; skipped if unavailable.
-    import('three/addons/postprocessing/GTAOPass.js').then(({ GTAOPass }) => {
+    if (!lite) import('three/addons/postprocessing/GTAOPass.js').then(({ GTAOPass }) => {
       const gtao = new GTAOPass(scene, camera, size.x * pr, size.y * pr);
       gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.6, thickness: 1.2, scale: 1.25, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
       gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
@@ -211,7 +212,7 @@ export function createPost(renderer, scene, camera) {
       const pr = state.pr;
       state.composer.setPixelRatio(pr);
       state.composer.setSize(w, h);
-      state.bloom.setSize(Math.max(1, w * pr * 0.5), Math.max(1, h * pr * 0.5));
+      if (state.bloom) state.bloom.setSize(Math.max(1, w * pr * 0.5), Math.max(1, h * pr * 0.5));
       state.smaa.setSize(w * pr, h * pr);
     },
 

@@ -41,6 +41,7 @@ export function initMenus(api) {
       <button data-go="skills">${pts > 0 ? `<em>${pts} to learn</em>` : ''}Renown &amp; Skills<small>${rank.name} · ${p.renown || 0} renown</small></button>
       <button data-go="feats">Feats &amp; Honours<small>${featCount(p).have} of ${featCount(p).total} earned · seals for deeds in the lists</small></button>
       <button data-go="how">The Art of the Joust<small>Controls, technique, the purse</small></button>
+      ${api.touch ? `<button data-act="fullscreen">Full screen<small>Hide the browser bars and lock the screen sideways</small></button>` : ''}
       <div class="standing"><span>${rank.name}</span><span>${purseText(p.gold)}</span></div>
       ${rankBar(p.renown)}
       <div class="toggles"><span class="chip" data-act="diff">Difficulty: ${DIFFICULTY[p.difficulty ?? 1].name}</span><span class="chip" data-act="herald">Herald: ${p.herald === false ? 'silent' : 'speaks'}</span><span class="chip" data-act="voices" title="The robot voice for the herald, the king, your men and the sellers (needs sound on)">Voices: ${api.voicesOn && !api.voicesOn() ? 'off' : 'on'}</span><span class="chip" data-act="view">View: ${p.firstPerson ? 'first person' : 'third person'}</span><span class="chip" data-act="autoride" title="After a pass: ride back to your mark yourself (W/S gait, A/D steer), or let the horse take you">Ride back: ${p.autoRide === true ? 'auto' : p.autoRide === false ? 'by hand' : 'auto until learned'}</span><label class="chip vol">Music <input type="range" id="musicVol" min="0" max="100" step="5" value="${api.musicVol ? api.musicVol() : 60}"> <span id="musicPct">${api.musicVol ? api.musicVol() : 60}%</span></label>${SFX_HAS_OLD ? `<span class="chip" data-act="sfxpack" title="Switch between the original and the royalty-free sound pack (reloads the page)">Sound pack: ${sfxPack() === 'new' ? 'New' : 'Old'}</span>` : ''}</div>
@@ -252,6 +253,7 @@ export function initMenus(api) {
     if (!t) return;
     const p = api.profile, d = t.dataset;
     api.ui(d.go || d.act ? 'select' : 'click');
+    if (d.act === 'fullscreen') { if (api.fullscreen) api.fullscreen(); return; }
     if (d.go) { dismissArm = null; return show(d.go); }
     if (d.act === 'welcome') { p.name = cleanName(wDraft); p.named = true; wDraft = null; api.saveProfile(); api.rebuildPlayer(); return show('main'); }
     if (root.dataset.name === 'welcome' && (d.col || d.pat)) { if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; } else p.arms.pattern = d.pat; api.saveProfile(); api.rebuildPlayer(); return show('welcome'); }

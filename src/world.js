@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildFlora } from './flora.js';
+import { touchMode } from './touch.js';
 import { buildCrowd } from './crowd.js';
 import { makePBR } from './texgen.js';
 import { buildProps } from './props.js';
@@ -83,7 +84,7 @@ export function buildWorld(scene, renderer, venue = {}) {
   const low = 1 - Math.min(1, Math.max(0, (sunDir.y - 0.25) / 0.5));
   const sun = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).lerp(new THREE.Color(0xffb070), low * 0.8), 3.1 - low * 0.5);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  sun.shadow.mapSize.set(touchMode ? 2048 : 4096, touchMode ? 2048 : 4096);
   const sc = sun.shadow.camera;
   sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 220;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
