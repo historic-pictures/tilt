@@ -1118,7 +1118,8 @@ function updateRide(dt, dtReal) {
   }
   // lateral: steer + shying
   if (live) {
-    const steer = ((keys.left ? -1 : 0) + (keys.right ? 1 : 0)) * (M.kit.blind ? PHYS.kit.blindSteer : 1);          // left = toward the tilt; a blinkered horse keeps his line and is slow to be turned
+    let steer = ((keys.left ? -1 : 0) + (keys.right ? 1 : 0)) * (M.kit.blind ? PHYS.kit.blindSteer : 1);
+    if (touchMode && !G.auto) steer = clamp(-(C.lat - LANE_X) * 1.2 - C.latV * 0.4, -1, 1) * 0.85 * (M.kit.blind ? PHYS.kit.blindSteer : 1);      // phone: no reins, so the rider keeps his own line (a fretful horse still wavers)          // left = toward the tilt; a blinkered horse keeps his line and is slow to be turned
     let shy = M.kit.blind ? 0 : Math.max(0, M.agit - 0.45) * 1.6 * (0.4 + wobble(S.time * 0.9, 3) * 0.6);      // (a blinkered horse cannot shy)
     // open eyes: a nervous horse may shy from the oncoming lance in the last strides, once, losing a little pace and veering away
     if (M.kit.shy && S.mode === 'charge' && !C.shyRolled && gap < PHYS.kit.shyGap && gap > 4) {
@@ -1126,6 +1127,7 @@ function updateRide(dt, dtReal) {
       if (Math.random() < M.kit.shy * clamp((M.agit - PHYS.kit.shyAt) * PHYS.kit.shyGain, 0, PHYS.kit.shyMax) * (1.3 - player.horseDef.nerve)) { C.latV += PHYS.kit.shyKick; player.speed *= PHYS.kit.shyPace; M.shyN[0]++; callout('YOUR HORSE SHIES', 'bad'); }
     }
     C.latV += (steer * 3.2 + shy) * dt * clamp(player.speed / 5, 0.15, 1);
+    if (!touchMode && !G.auto && !M.taught.drift && shy > 0.05 && C.lat > LANE_X + 0.15 && !keys.left) { M.taught.drift = true; callout('YOUR HORSE PULLS WIDE · HOLD A', 'bad'); }      // the nervous horse's drift is a mechanic: say how to answer it, once a match
     C.latV *= Math.exp(-2.4 * dt);
     C.lat += C.latV * dt;
     if (C.lat < 0.7 && !M.mode.tilt) { C.lat = 0.7; C.latV = Math.max(C.latV, 0.4); }       // open field: nothing to strike, the horses simply will not close further
@@ -2955,11 +2957,19 @@ function updateCamera(dtReal) {
 
 // ------------------------------------------------------------------ main loop
 const clock = new THREE.Clock();
-function tick() {
+// frame cap: a 120-165 Hz screen would otherwise draw the lists that many times a second (heavy on the GPU and fans for no gain);
+// a match draws at most 60 a second, the menus 30
+let lastDraw = 0;
+function tick(now) {
   requestAnimationFrame(tick);
   if (G.manual) return;
+  if (!(now > 0)) now = performance.now();      // (the first call comes without a timestamp)
+  const cap = S.mode === 'menu' ? 30 : 60;
+  const iv = 1000 / cap, el = now - lastDraw;
+  if (el < iv - 0.5) return;
+  lastDraw = el > iv * 2 ? now : lastDraw + iv;      // keep the beat (a fixed step) so 144 Hz gives 60, not 48; after a stall, start afresh
   const dt = clock.getDelta();
-  frameTime(dt * 1000, S.paused || document.hidden);      // the live safety net (src/gfx.js)
+  frameTime(dt * 1000, S.paused || document.hidden || S.mode === 'menu');      // the live safety net (src/gfx.js); the capped menus would read as slow
   frame(Math.min(dt, 0.05));
 }
 // the safety net lowered the pixel ratio or a tier: apply what can change on the fly (trees and crowd change with the next venue build)
