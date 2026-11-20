@@ -530,3 +530,22 @@ body.touch.compact #card #cardTitle { font-size: 36px; } body.touch.compact #car
 body.rpl-open #tPauseMenu { display: none !important; }
 body.touch #pmenu .rt { font-size: 17px; } body.touch #pmList .ra button { font-size: 13px; padding: 7px 10px; }
 body.touch #hlBack { top: 12px; right: 12px; padding: 10px 18px; font-size: 16px; background: rgba(24, 14, 6, .7); color: var(--vellum3); border-color: var(--gold2); z-index: 40; }
+
+/* ---- Joust a friend (the online screen; src/menus.js online()) */
+.online .onrow { display: flex; gap: 18px; margin: 18px 0 10px; flex-wrap: wrap; }
+.online .btn.big { font-size: 22px; padding: 12px 22px; text-align: left; }
+.online .btn.big small { display: block; font-size: 14px; font-style: italic; text-transform: none; letter-spacing: 0; opacity: .8; margin-top: 2px; }
+.online .roomcode { text-align: center; margin: 10px 0 2px; }
+.online .roomcode span { display: block; font-family: var(--caps); font-size: 14px; letter-spacing: .2em; color: var(--red2); }
+.online .roomcode b { font-family: var(--caps); font-size: 60px; letter-spacing: .32em; padding-left: .32em; color: var(--red); user-select: all; font-weight: 400; }
+.online .wait { text-align: center; font-style: italic; color: var(--ink2); margin: 2px 0 6px; }
+.online .err { color: var(--red); }
+.online .joinrow { display: flex; gap: 16px; align-items: center; margin: 20px 0 6px; }
+.online input.name.code { width: 210px; text-transform: uppercase; letter-spacing: .3em; font-size: 34px; text-align: center; }
+.online .friend { display: flex; align-items: center; gap: 12px; justify-content: center; font-size: 22px; margin: 6px 0; }
+.online .friend i { color: var(--ink2); font-size: 16px; }
+body.online #pmRpl, body.online #tRpl, body.online #cardReplays { display: none !important; }
+body.touch.compact .online .roomcode b { font-size: 38px; }
+body.touch.compact .online .onrow, body.touch.compact .online .joinrow { margin: 8px 0 4px; }
+body.touch.compact .online .btn.big { font-size: 17px; padding: 8px 14px; }
+body.touch.compact .online input.name.code { font-size: 24px; width: 150px; }

@@ -1227,7 +1227,7 @@ export class Jouster {
       this.lance.position.z = 0.25 + this.brace * 0.2;       // the thrust: the arm drives the lance forward as the body goes in
       this.lance.position.y = 0.13 + 0.25 * this.raise;      // lifted in the hand when he shows he is ready
       this.zones[1].o.position.y = 0.3 + 0.21 * gd; this.zones[0].r = 0.17 * (1 - 0.55 * gd);
-    } else if (!this.replaying) this._updateFall(dt);
+    } else if (!this.replaying && !this.remote) this._updateFall(dt);      // (online, the friend's fallen rider is placed from his own stream: see online.js applyRider)
     this.plume.rotation.x = -0.15 - 0.5 * g * amp + Math.sin(t * 7) * 0.05 * (0.3 + amp);
     // raised lance, visor swing and helm on/off
     if (!this.replaying) this.raise = damp(this.raise, this.raiseT, 7, dt);

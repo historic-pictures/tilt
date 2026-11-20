@@ -41,6 +41,7 @@ export function initMenus(api) {
       <h1>Tilt</h1><h2>The Jousting Circuit</h2>
       <button data-go="circuit">${round > 0 && round < VENUES.length ? 'Continue the Circuit' : 'Ride the Circuit'}<small>Five great lists across Europe, a herald and the royal gallery</small></button>
       <button data-go="exhibition">Exhibition Joust<small>Any lists, any opponent</small></button>
+      <button data-go="online">Joust a friend<small>Make a room, share the code, ride against a friend online</small></button>
       <button data-act="practice">${(p.lesson || 0) >= LESSONS.length ? 'Tiltyard Practice' : (p.lesson || 0) > 0 ? 'Continue your Training' : 'Learn to Joust'}<small>${(p.lesson || 0) >= LESSONS.length ? 'Run at the quintain again' : `Lesson ${Math.min(LESSONS.length, (p.lesson || 0) + 1)} of ${LESSONS.length}: ${LESSONS[Math.min(LESSONS.length - 1, p.lesson || 0)].title}`}</small></button>
       <button data-go="armoury">Armoury &amp; Retinue<small>${p.name} · ${HORSES[p.horse].name} · ${HELMS[p.helm].name}, ${ARMOURS[p.armour].name}</small></button>
       <button data-go="stable">The Stable<small>See every horse, turn it round, and choose your mount</small></button>
@@ -105,6 +106,53 @@ export function initMenus(api) {
       <h5>Your Opponent${MODES[exMode].bridge ? ' <small>one of the three challengers, in order of skill; the rest are drawn</small>' : ''}</h5><div class="grid">${KNIGHTS.map(k => `<div class="pick ${k.id === exOpp ? 'sel' : ''}" data-exo="${k.id}">${crest(k.arms, 30, 36)} <span class="ovr">${ovr(k)}</span><b>${k.short}</b><em>${k.land}</em><p>${k.name} — ${HORSES[k.horse].name}, ${HELMS[ARMOURS[k.armour].helm].name}, ${ARMOURS[k.armour].name}</p>${stat('Aim', k.skill)}${stat('Seat', k.seat)}${stat('Drive', k.drive)}</div>`).join('')}</div>`);
     crests(); api.setVenue(exVenue);
   }
+
+  // ---- Joust a friend: make a room (the host picks the lists, the rules and the courses) or join one by its code. The state lives in main.js (api.online.lobby).
+  let joinDraft = '';
+  function online() {
+    const O = api.online, L = O.lobby, ph = L.phase, host = ph === 'hostWait' || ph === 'hostReady', room = L.room, fr = L.friend;
+    const modes = O.modeIds(), fixed = fixedCourses(room.m), V = VENUES[room.v];
+    const chips = () => `<h5>The Lists</h5><div class="swatches">${VENUES.map((v, i) => `<span class="chip ${i === room.v ? 'sel' : ''}" data-onv="${i}">${v.name}</span>`).join('')}</div>
+      <h5>Rules <small>${MODES[room.m].sub}</small></h5><div class="swatches">${modes.map(id => `<span class="chip ${id === room.m ? 'sel' : ''}" data-onm="${id}">${MODES[id].name}</span>`).join('')}</div>
+      <h5>Courses${fixed ? ' <small>fixed by the rules</small>' : ''}</h5><div class="swatches">${fixed ? `<span class="chip sel">${fixed}</span>` : EX_COURSES.map(n => `<span class="chip ${n === room.c ? 'sel' : ''}" data-onc="${n}">${n}</span>`).join('')}</div>`;
+    const summary = () => `<p class="dimtxt">${V.name}, ${V.city} · ${MODES[room.m].name} · ${fixed || room.c} courses &nbsp;(the host chooses)</p>`;
+    const friendRow = () => fr ? `<div class="friend">${crest(fr.arms, 30, 36)}<span><b>${fr.name}</b> <i>${fr.land ? '· ' + fr.land : ''}</i></span></div>` : '';
+    let head = 'Make a room, share its code, and ride against a friend. No account needed.', actions = '<button class="btn" data-on="leave">Back</button>', body = '';
+    if (ph === 'choose') {
+      body = `<div class="onrow"><button class="btn primary big" data-on="create">Create a room<small>You get a code to share</small></button><button class="btn big" data-on="joinmode">Join a room<small>Type your friend's code</small></button></div>
+        <p class="dimtxt">Both of you need this page open. You ride with your own arms, horse and harness; nothing is paid, and no renown is won.</p>`;
+    } else if (host) {
+      head = ph === 'hostReady' ? `${fr.name} has joined. Choose the lists and the rules, then ride.` : 'Share this code with your friend.';
+      actions = `<button class="btn" data-on="leave">Back</button>${ph === 'hostReady' ? '<button class="btn primary" data-on="ride">Ride!</button>' : ''}`;
+      body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code || '·····'}</b></div>
+        ${ph === 'hostReady' ? friendRow() : `<p class="wait">${L.code ? 'Waiting for your friend…' : 'Opening the room…'}</p>`}
+        ${chips()}`;
+    } else if (ph === 'joinInput') {
+      head = 'Type the five letters your friend gives you.';
+      body = `<div class="joinrow"><input class="name code" id="joinCode" maxlength="5" placeholder="CODE" value="${joinDraft}" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="btn primary" data-on="join">Join</button></div>
+        ${L.err ? `<p class="err">${L.err}</p>` : ''}`;
+    } else if (ph === 'joining') {
+      head = 'Connecting…'; actions = '<button class="btn" data-on="leave">Cancel</button>';
+      body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code}</b></div><p class="wait">Looking for your friend… this can take a few seconds.</p>`;
+    } else if (ph === 'joined') {
+      head = fr ? `You are in ${fr.name}'s room.` : 'Connected…';
+      body = `${friendRow()}<p class="wait">Waiting for ${fr ? fr.name : 'the host'} to start the joust…</p>${summary()}`;
+    } else {      // failed
+      head = 'The room could not be opened.';
+      body = `<p class="err">${L.err}</p><div class="onrow"><button class="btn primary" data-on="create">Try again</button></div>`;
+    }
+    root.innerHTML = scroll('sheet online', `<div class="top"><div><h3>Joust a Friend</h3><p>${head}</p></div><div class="actions">${actions}</div></div>${body}`);
+    crests();
+    if (host || ph === 'joined') api.setVenue(room.v);
+    const inp = el('joinCode');
+    if (inp) {
+      inp.addEventListener('input', () => { inp.value = joinDraft = cleanCode(inp.value); });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); root.querySelector('[data-on="join"]').click(); } });
+      setTimeout(() => { try { inp.focus(); } catch (e) { /* ignore */ } }, 50);
+    }
+  }
+  /** What a person typed, made into a room code: letters only, upper case (the codes have no I or O). */
+  const cleanCode = (v) => String(v || '').toUpperCase().replace(/[^A-HJ-NP-Z]/g, '').slice(0, 5);
 
   /** One retinue card: a man you can hire, or one in your service with his face, temper, training and a way to let him go. */
   function manCard(p, id) {
@@ -239,7 +287,7 @@ export function initMenus(api) {
       ${ACH_GROUPS.map(g => { const list = ACHIEVEMENTS.filter(a => a.group === g); return list.length ? `<h5>${g} <small>${list.filter(a => got[a.id]).length}/${list.length}</small></h5><div class="feats">${list.map(seal).join('')}</div>` : ''; }).join('')}`);
   }
 
-  const screens = { main, circuit, exhibition, armoury, skills, how, stable, feats, welcome };
+  const screens = { main, circuit, exhibition, online, armoury, skills, how, stable, feats, welcome };
   function show(name) {
     if (name === 'main' && api.profile.named === false) name = 'welcome';      // first visit: your name before anything else
     // re-drawing the screen you are on keeps your place on the page
@@ -255,12 +303,24 @@ export function initMenus(api) {
     const v = +e.target.value; el('musicPct').textContent = v + '%'; if (api.setMusic) api.setMusic(v);
   });
   root.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-stcap],[data-stcapset],[data-skill]');
+    const t = e.target.closest('[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-on],[data-onv],[data-onm],[data-onc],[data-stcap],[data-stcapset],[data-skill]');
     if (!t) return;
     const p = api.profile, d = t.dataset;
     api.ui(d.go || d.act ? 'select' : 'click');
     if (d.act === 'fullscreen') { if (api.fullscreen) api.fullscreen(); return; }
-    if (d.go) { dismissArm = null; return show(d.go); }
+    if (d.go) { dismissArm = null; if (d.go === 'online') api.online.open(); return show(d.go); }
+    if (d.on) {
+      const O = api.online;
+      if (d.on === 'create') return O.create();
+      if (d.on === 'joinmode') { O.lobby.phase = 'joinInput'; O.lobby.err = ''; return show('online'); }
+      if (d.on === 'join') return O.join(joinDraft);
+      if (d.on === 'ride') return O.ride();
+      if (d.on === 'leave') { joinDraft = ''; return O.leave(); }
+      return;
+    }
+    if (d.onv !== undefined) return api.online.setRoom('v', +d.onv);
+    if (d.onm) return api.online.setRoom('m', d.onm);
+    if (d.onc) return api.online.setRoom('c', +d.onc);
     if (d.act === 'welcome') { p.name = cleanName(wDraft); p.named = true; wDraft = null; api.saveProfile(); api.rebuildPlayer(); return show('main'); }
     if (root.dataset.name === 'welcome' && (d.col || d.pat)) { if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; } else p.arms.pattern = d.pat; api.saveProfile(); api.rebuildPlayer(); return show('welcome'); }
     if (d.act === 'ride') { const T = p.table, cm = circMode(p); return api.startMatch(T.round, VENUES[T.round].host, true, false, cm, fixedCourses(cm) || p.courses || 5); }
