@@ -10,6 +10,8 @@
 //
 // STUN only unless src/netcfg.js has a TURN credentials URL: some networks block direct connections, and then join() fails with 'timeout' after JOIN_TIMEOUT.
 import { iceServers } from './netcfg.js';
+// ?relay=1 forces every connection through the TURN relay (testing what players behind strict networks get)
+const rtcConfig = (list) => { let relay = false; try { relay = new URLSearchParams(location.search).get('relay') === '1'; } catch (e) { /* ignore */ } return relay ? { iceServers: list, iceTransportPolicy: 'relay' } : { iceServers: list }; };
 
 export const JOIN_TIMEOUT = 15000;
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';      // no I and O (and no digits: 0 and 1 look like O and I)
@@ -66,7 +68,7 @@ function watchIce(c, who) {
 class PeerNet extends Base {
   constructor() { super(); this.kind = 'peer'; this.peer = null; this.conn = null; this.code = ''; this.cfg = null; this.Peer = null; this._vis = null; }
   async host(code) {
-    this.Peer = await loadPeerJS(); this.code = code; this.cfg = { iceServers: await iceServers() };
+    this.Peer = await loadPeerJS(); this.code = code; this.cfg = rtcConfig(await iceServers());
     await this._hostPeer();
     // phones: the page was asleep and the signalling link dropped (or the peer was destroyed): when it is seen again, reconnect, or take the same code again
     this._vis = () => {
@@ -99,7 +101,7 @@ class PeerNet extends Base {
     });
   }
   async join(code) {
-    const Peer = await loadPeerJS(), cfg = { iceServers: await iceServers() };
+    const Peer = await loadPeerJS(), cfg = rtcConfig(await iceServers());
     return new Promise((resolve, reject) => {
       let done = false, t1 = 0, t2 = 0, c = null;
       const peer = this.peer = new Peer(undefined, { config: cfg });

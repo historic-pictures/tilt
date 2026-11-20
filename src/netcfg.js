@@ -7,7 +7,7 @@ export const ICE_SERVERS = [
   { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
   { urls: 'stun:stun.cloudflare.com:3478' },
 ];
-export const TURN_CREDENTIALS_URL = '';
+export const TURN_CREDENTIALS_URL = 'https://tilt-turn.tilt-joust.workers.dev/';
 
 export async function iceServers() {
   const list = ICE_SERVERS.slice();
