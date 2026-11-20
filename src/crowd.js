@@ -26,6 +26,7 @@
 //   capGone/capBack: time window in which a person's hat is in the air (their own cap instance is hidden).
 
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 
 function mulberry32(a) {
   return function () {
@@ -39,16 +40,14 @@ const sstep = (a, b, x) => { x = (x - a) / (b - a); x = x < 0 ? 0 : x > 1 ? 1 : 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const PI = Math.PI, HALF_PI = Math.PI / 2, TWO_PI = Math.PI * 2;
 
-// ---- palettes ----
-const MUTED = ['#8a4b2d', '#9b3a2e', '#3f5f8a', '#c9a23c', '#d8ceb4', '#3e5b3a', '#5b4332', '#77736b',
-  '#a0613a', '#6d7a4a', '#4a4f66', '#b58b52', '#8c6a5a', '#cdbf9a'];
-const JEWEL = ['#7a1f3d', '#1c3f94', '#0f6b4a', '#b8860b', '#5a2a82', '#a3161c', '#0e6e7a'];
-const EARTH = ['#8a4b2d', '#6b4a32', '#777268', '#5c6b3f', '#b08a3a', '#9a8a6a', '#4e4a40', '#a0613a'];
-const RICH = ['#b01616', '#1a3fa0', '#5a2a82', '#0f7a4f', '#c9a227', '#8a1a46', '#0e6e8a', '#d63a1e'];
-const HABIT = ['#1c1a18', '#3a2a1c', '#4a3a2a', '#e0d8c4', '#2b2622'];
-const SKIN = ['#f0c8a4', '#e0ac84', '#c68e63', '#a8704a', '#7c4f33', '#f4d6bb'];
-const LINEN = ['#e6dfcb', '#d9d0b6', '#cfc6aa'];
-const STRAW = ['#cfa95c', '#c19a4e', '#d8b86e'];
+// ---- palettes: 15th-century dyes. Mostly undyed / cheap wool; richer cloth for the gallery and a few burghers. Saturated colour is left to heralds and liveries. ----
+const WOOL = ['#b9ab8f', '#7d715f', '#8f7a5a', '#8a4b2e', '#3f5233', '#4a5f7a', '#8e3b2f', '#2a2622', '#a89a7e', '#6e6451', '#9c8566', '#5b4a38'];
+const RICHD = ['#7a1c2c', '#213f78', '#1f5a43', '#5a2a52', '#8a1d2b', '#2c4f8a', '#a07a2a', '#4a2a6a'];
+const BLACKS = ['#2a2622', '#2e2a26', '#24211f'];
+const HABIT = ['#1c1a18', '#3a2a1c', '#4a3a2a', '#d8d0bc', '#2b2622'];
+const SKIN = ['#f0c8a4', '#e0ac84', '#c68e63', '#a8704a', '#7c4f33', '#f4d6bb', '#d9a37c', '#b98059', '#e8b890', '#946040'];
+const LINEN = ['#e0d9c3', '#d0c7ac', '#c4baa0', '#b9ab8f'];
+const STRAW = ['#c4a45e', '#b5954c', '#cbb070', '#a98a4a'];
 const FLOWERS = ['#d8222a', '#f2efe6', '#e87aa0', '#f0c040'];
 
 // ---- event reaction channels ----
@@ -81,7 +80,7 @@ function wm(arr, o, ax, ay, az, bx, by, bz, cx, cy, cz, tx, ty, tz) {
   arr[o + 8] = cx; arr[o + 9] = cy; arr[o + 10] = cz; arr[o + 11] = 0;
   arr[o + 12] = tx; arr[o + 13] = ty; arr[o + 14] = tz; arr[o + 15] = 1;
 }
-function putCol(arr, idx, rgb, o) { arr[idx * 3] = rgb[o]; arr[idx * 3 + 1] = rgb[o + 1]; arr[idx * 3 + 2] = rgb[o + 2]; }
+function putCol(arr, idx, rgb, o, k = 1) { arr[idx * 3] = rgb[o] * k; arr[idx * 3 + 1] = rgb[o + 1] * k; arr[idx * 3 + 2] = rgb[o + 2] * k; }
 
 function makeMesh(geo, mat, count, group, name) {
   const m = new THREE.InstancedMesh(geo, mat, Math.max(1, count));
@@ -121,6 +120,7 @@ export function buildCrowd(group, spots, opts = {}) {
   const gown = new Uint8Array(n), bodyIdx = new Int32Array(n);
   const hw = new Uint8Array(n), dv = new Uint8Array(n), hasYaw = new Uint8Array(n);
   const thr = new Float32Array(n), keen = new Float32Array(n), ph = new Float32Array(n), yb = new Float32Array(n);
+  const shd = new Float32Array(n), hs = new Float32Array(n), stP = new Float32Array(n), stR = new Float32Array(n), stY = new Float32Array(n), bodyLiv = new Uint8Array(n);
   const hg = new Float32Array(n), bw = new Float32Array(n), jz = new Float32Array(n), dly = new Float32Array(n);
   const capIdx = new Int32Array(n).fill(-1), brimIdx = new Int32Array(n).fill(-1), tallIdx = new Int32Array(n).fill(-1);
   const veilIdx = new Int32Array(n).fill(-1), flagIdx = new Int32Array(n).fill(-1), kerchIdx = new Int32Array(n).fill(-1);
@@ -161,11 +161,21 @@ export function buildCrowd(group, spots, opts = {}) {
     else if (cls === 2) kd = rng() < 0.5 ? 1 : 0;
     else kd = 0;
     kind[i] = kd;
-    const adultH = cls === 2 ? 1.0 + rng() * 0.08 : 0.96 + rng() * 0.1;
-    hg[i] = kd === 2 ? 0.62 + rng() * 0.12 : kd === 1 ? 0.92 + rng() * 0.08 + (cls === 2 ? 0.04 : 0) : adultH;
+    const adultH = cls === 2 ? 1.0 + rng() * 0.04 : 1.0;
+    hg[i] = (kd === 2 ? 0.66 + rng() * 0.08 : kd === 1 ? 0.95 + (cls === 2 ? 0.03 : 0) : adultH) * (0.92 + rng() * 0.16);   // +-8% height
     let w = 1.0;
     if (cls === 0) w *= 1.1; else if (cls === 2) w *= kd === 1 ? 0.92 : 0.88; else if (cls === 3) w *= 1.08;
-    bw[i] = w * (0.92 + rng() * 0.16);
+    bw[i] = w * (0.9 + rng() * 0.2);                                                                                      // +-10% shoulders
+    hs[i] = 0.94 + rng() * 0.12;                                                                                          // +-6% head
+    // stance: a standing figure never stands like his neighbour (lean, cant, turn of the shoulders)
+    const stm = cls === 0 ? 1 : cls === 1 ? 0.5 : 0.2;
+    stP[i] = (rng() - 0.4) * 0.09 * stm; stR[i] = (rng() - 0.5) * 0.12 * stm; stY[i] = (rng() - 0.5) * 0.5 * stm;
+    // light: the back rows sit under the stand roofs (darker), the front is open to the sky; the ground-level commons are lit but low in the shadow of the stands
+    const ax = Math.abs(sp[0]);
+    let sh = 1;
+    if (sp[1] > 0.3 && ax >= 12.4) { const tr = Math.min(6, Math.max(0, (ax - 13.05) / 1.35)) / 6; sh = 1 - 0.3 * Math.pow(tr, 1.25); }
+    else if (ax > 10.2 && ax < 12.4) sh = 0.82;
+    shd[i] = sh * (0.94 + rng() * 0.1);
 
     gown[i] = (kd === 1 || cls === 3 || (cls === 2 && rng() < 0.35) || (kd === 2 && rng() < 0.5)) ? 1 : 0;
     bodyIdx[i] = gown[i] ? nG++ : nM++;
@@ -200,27 +210,32 @@ export function buildCrowd(group, spots, opts = {}) {
     if (cls <= 1 && kd !== 2 && rng() < 0.105) flagIdx[i] = nFlag++;
     if (cls === 2 && kd === 1) kerchIdx[i] = nKerch++;
 
-    // colours by class
+    // colours by class (about 70% muted, 30% richer cloth)
     const bi = i * 3;
-    if (cls === 0) lin(pick(EARTH), 0.22, bodyCol, bi);
-    else if (cls === 1) lin(rng() < 0.08 ? pick(JEWEL) : pick(MUTED), 0.16, bodyCol, bi);
-    else if (cls === 2) lin(pick(RICH), 0.12, bodyCol, bi);
-    else lin(h === 8 ? '#5a2a82' : pick(HABIT), 0.1, bodyCol, bi);
+    const wool = () => (rng() < 0.12 ? pick(BLACKS) : pick(WOOL));
+    if (cls === 0) lin(rng() < 0.2 ? pick(RICHD) : pick(WOOL), 0.22, bodyCol, bi);
+    else if (cls === 1) { const q = rng(); lin(q < 0.16 ? pick(BLACKS) : q < 0.6 ? pick(WOOL) : q < 0.72 ? pick(WOOL) : pick(RICHD), 0.16, bodyCol, bi); }
+    else if (cls === 2) lin(rng() < 0.55 ? pick(RICHD) : wool(), 0.12, bodyCol, bi);
+    else lin(h === 8 ? '#4a2a6a' : pick(HABIT), 0.1, bodyCol, bi);
+    // front-row "knights' men": livery tabards in a dark muted tone (follows allegiance), off-white sleeves
+    const liveried = cls === 0 && sp[1] < 0.3 && ax > 10.2 && ax < 12.4 && rng() < 0.4;
+    bodyLiv[i] = liveried ? 1 : 0;
     const sl = rng();
-    if (cls >= 2 ? sl < 0.9 : sl < 0.65) { armCol[bi] = bodyCol[bi]; armCol[bi + 1] = bodyCol[bi + 1]; armCol[bi + 2] = bodyCol[bi + 2]; }
+    if (liveried) lin(pick(LINEN), 0.08, armCol, bi);
+    else if (cls >= 2 ? sl < 0.9 : sl < 0.65) { armCol[bi] = bodyCol[bi]; armCol[bi + 1] = bodyCol[bi + 1]; armCol[bi + 2] = bodyCol[bi + 2]; }
     else if (sl < 0.85) lin(pick(LINEN), 0.1, armCol, bi);
     else lin(pick(SKIN), 0.1, armCol, bi);
-    lin(pick(SKIN), 0.12, headCol, bi);
+    lin(pick(SKIN), 0.2, headCol, bi);
     if (h === 1 || h === 4) lin(pick(LINEN), 0.1, capCol, bi);
     else if (h === 2) {
       if (cls === 3) { capCol[bi] = bodyCol[bi]; capCol[bi + 1] = bodyCol[bi + 1]; capCol[bi + 2] = bodyCol[bi + 2]; }
-      else lin(rng() < 0.2 && cls === 1 ? pick(JEWEL) : pick(cls === 0 ? EARTH : MUTED), 0.2, capCol, bi);
+      else lin(rng() < 0.2 && cls === 1 ? pick(RICHD) : wool(), 0.2, capCol, bi);
     } else if (h === 3) lin(pick(STRAW), 0.12, capCol, bi);
-    else if (h === 5) lin(pick(JEWEL), 0.15, capCol, bi);
-    else if (h === 6) { lin(pick(RICH), 0.1, capCol, bi); lin(pick(LINEN), 0.08, veilCol, bi); }
-    else if (h === 7) lin(rng() < 0.5 ? '#c9a227' : pick(RICH), 0.1, capCol, bi);
-    else if (h === 8) lin('#e8e0c8', 0.06, capCol, bi);
-    if ((h === 1 || h === 2 || h === 5) && cls !== 3 && rng() < 0.3) capLiv[i] = h === 5 ? 2 : 1;
+    else if (h === 5) lin(pick(RICHD), 0.15, capCol, bi);
+    else if (h === 6) { lin(rng() < 0.6 ? pick(RICHD) : pick(WOOL), 0.1, capCol, bi); lin(pick(LINEN), 0.08, veilCol, bi); }
+    else if (h === 7) lin(rng() < 0.4 ? '#a07a2a' : pick(RICHD), 0.1, capCol, bi);
+    else if (h === 8) lin('#e0d8c0', 0.06, capCol, bi);
+    if ((h === 1 || h === 2 || h === 5) && cls !== 3 && cls !== 0 && rng() < 0.18) capLiv[i] = h === 5 ? 2 : 1;
     sStand[i] = (cls === 0 || (special[i] === 1 && cls === 1)) ? 1 : 0;
   }
 
@@ -251,18 +266,18 @@ export function buildCrowd(group, spots, opts = {}) {
   }
   const lathe = (pr) => new THREE.LatheGeometry(pr.map((q) => new THREE.Vector2(q[0], q[1])), 8);
   // tunic to mid-thigh + two legs (men, commons, boys)
-  const tunicShade = (y) => (y > 0.96 && y < 1.04 ? 0.55 : y < 0.68 ? 0.75 : 0.95);
+  const tunicShade = (y) => (0.4 + 0.6 * sstep(0.2, 1.25, y)) * (y > 0.96 && y < 1.04 ? 0.62 : 1);      // soft vertical gradient: dark at the feet, belt line darker
   const bodyGeo = mergeParts([
     { g: lathe([[0, 0.62], [0.2, 0.62], [0.19, 0.72], [0.18, 0.85], [0.15, 0.99], [0.17, 1.1], [0.2, 1.25],
       [0.215, 1.32], [0.17, 1.37], [0.07, 1.4], [0, 1.4]]), f: tunicShade, sz: 0.72 },
-    { g: new THREE.CylinderGeometry(0.07, 0.05, 0.64, 6).translate(-0.085, 0.32, 0), f: 0.62 },
-    { g: new THREE.CylinderGeometry(0.07, 0.05, 0.64, 6).translate(0.085, 0.32, 0), f: 0.62 },
+    { g: new THREE.CylinderGeometry(0.07, 0.05, 0.64, 6).translate(-0.085, 0.32, 0), f: 0.5 },
+    { g: new THREE.CylinderGeometry(0.07, 0.05, 0.64, 6).translate(0.085, 0.32, 0), f: 0.5 },
   ], 1 / BH);
   // long gown flaring to the ground (women, nobles, clergy habits)
   const gownGeo = mergeParts([
     { g: lathe([[0, 0], [0.34, 0], [0.33, 0.1], [0.29, 0.3], [0.23, 0.55], [0.17, 0.85], [0.135, 1.0], [0.17, 1.13],
       [0.19, 1.27], [0.205, 1.33], [0.16, 1.37], [0.07, 1.4], [0, 1.4]]),
-      f: (y) => (y < 0.14 ? 0.7 : y > 0.97 && y < 1.05 ? 0.6 : 0.95), sz: 0.85 },
+      f: (y) => (0.4 + 0.6 * sstep(0.0, 1.1, y)) * (y > 0.97 && y < 1.05 ? 0.62 : 1), sz: 0.85 },
   ], 1 / BH);
   // head with short neck; darker upper cap reads as hair
   const headGeo = mergeParts([
@@ -323,21 +338,23 @@ export function buildCrowd(group, spots, opts = {}) {
   const cFA = mFlagA.instanceColor.array, cFB = mFlagB.instanceColor.array;
   const cK = mKerch.instanceColor.array, cP = mToss.instanceColor.array;
   for (let i = 0; i < n; i++) {
-    putCol(gown[i] ? cG : cB, bodyIdx[i], bodyCol, i * 3); putCol(cH, i, headCol, i * 3);
-    putCol(cL, i, armCol, i * 3); putCol(cR, i, armCol, i * 3);
-    if (capIdx[i] >= 0) putCol(cC, capIdx[i], capCol, i * 3);
-    if (brimIdx[i] >= 0) putCol(cBr, brimIdx[i], capCol, i * 3);
-    if (tallIdx[i] >= 0) putCol(cT, tallIdx[i], capCol, i * 3);
-    if (veilIdx[i] >= 0) putCol(cT, veilIdx[i], veilCol, i * 3);
-    if (kerchIdx[i] >= 0) { const k = kerchIdx[i] * 3; const v = rng() < 0.7 ? 0.95 : 0.8; cK[k] = v; cK[k + 1] = rng() < 0.7 ? v : 0.55; cK[k + 2] = cK[k + 1]; }
+    const k = shd[i];
+    putCol(gown[i] ? cG : cB, bodyIdx[i], bodyCol, i * 3, k); putCol(cH, i, headCol, i * 3, 0.5 + 0.5 * k);
+    putCol(cL, i, armCol, i * 3, k); putCol(cR, i, armCol, i * 3, k);
+    if (capIdx[i] >= 0) putCol(cC, capIdx[i], capCol, i * 3, k);
+    if (brimIdx[i] >= 0) putCol(cBr, brimIdx[i], capCol, i * 3, k);
+    if (tallIdx[i] >= 0) putCol(cT, tallIdx[i], capCol, i * 3, k);
+    if (veilIdx[i] >= 0) putCol(cT, veilIdx[i], veilCol, i * 3, k);
+    if (kerchIdx[i] >= 0) { const k = kerchIdx[i] * 3; const v = (rng() < 0.7 ? 0.9 : 0.75) * shd[i]; cK[k] = v; cK[k + 1] = rng() < 0.7 ? v : 0.55; cK[k + 2] = cK[k + 1]; }
   }
 
   // ---- event layer ----
   const tbl = new Float32Array(4 * 2 * NCH); // [(cls<<1 | supportsDoer) * NCH + channel]
   const setT = (c, s, ch, v) => { tbl[((c << 1) | s) * NCH + ch] = v; };
-  let lastEvId = null, evOn = false, evT = -1e9, evDur = 3.2, evBy = 0;
+  let evMag = 1, lastEvId = null, evOn = false, evT = -1e9, evDur = 3.2, evBy = 0;
   // per-person variation, redrawn for every event so no two reactions look alike: extra delay, strength (a few barely react), which arm leads, one hand or two
   const evJit = new Float32Array(n), evInt = new Float32Array(n), evArm = new Uint8Array(n), evOne = new Uint8Array(n);
+  const EV_MAG = { break: 1.3, helm: 1.5, unhorse: 1.7, win: 1.5, bothbreak: 1.5, salute: 1.1 };      // how much bigger the cheer gets with the size of the hit
   const EV_DUR = { unhorse: 4.0, win: 4.0, bothbreak: 3.8, salute: 3.0, foul: 3.6, bothmiss: 3.0, miss: 2.6, attaint: 2.4, taunt: 2.4, glance: 1.9, near: 1.6, tilt: 1.8 };
 
   // pooled tossed items: slots [0,HATS) hats, [HATS,POOL) flowers / favours
@@ -452,6 +469,7 @@ export function buildCrowd(group, spots, opts = {}) {
     buildTable(k);
     evBy = by; evT = t; evOn = true;
     evDur = EV_DUR[k] || 3.2;
+    evMag = EV_MAG[k] || 1;
     const jmax = evDur < 2 ? 0.2 : 0.45;
     for (let i = 0; i < n; i++) {
       const u = rng();
@@ -459,7 +477,7 @@ export function buildCrowd(group, spots, opts = {}) {
       evJit[i] = rng() * rng() * jmax; evArm[i] = rng() < 0.5 ? 0 : 1; evOne[i] = rng() < 0.35 ? 1 : 0;
     }
     // hat / flower tossing
-    const hatP = k === 'unhorse' ? 0.5 : k === 'win' ? 0.5 : k === 'bothbreak' ? 0.3 : (k === 'break' || k === 'helm') ? 0.12 : 0;
+    const hatP = k === 'unhorse' ? 0.5 : k === 'win' ? 0.5 : k === 'bothbreak' ? 0.3 : (k === 'break' || k === 'helm') ? 0.2 : 0;
     const flow = k === 'win' || k === 'helm' || k === 'unhorse' || k === 'bothbreak' ? (k === 'win' ? 0.9 : k === 'bothbreak' ? 0.15 : 0.25) : 0;
     let hats = 0, flowers = 0;
     for (let i = 0; i < n; i++) {
@@ -516,6 +534,7 @@ export function buildCrowd(group, spots, opts = {}) {
     }
     if (evOn && t - evT > evDur + 1.5) evOn = false;
 
+    const live = GFX.tier !== 'low';      // the extra idle life (breathing, raised hands) is only for medium and high
     const hush = clamp01((ant - 0.5) * 2) * (1 - clamp01((ex - 0.55) * 3));
     const calm = 1 - hush * 0.85;
     const kC = 1 - Math.exp(-7 * dtc), kD = 1 - Math.exp(-4.5 * dtc), kK = 1 - Math.exp(-5 * dtc);
@@ -525,7 +544,7 @@ export function buildCrowd(group, spots, opts = {}) {
     const waveOn = wt > -1 && wt < 72 / 28 + 2;
     const chantOn = Math.abs(favC) > 0.5 ? sstep(0.5, 0.8, Math.abs(favC)) * (1 - hush) : 0;
     const chantSign = favC > 0 ? 1 : -1;
-    let colDirty = false;
+    let colDirty = false, bodyDirty = false;
 
     for (let i = 0; i < n; i++) {
       const kn = keen[i], phi = ph[i], hgi = hg[i], spc = special[i], cls = clsA[i], kd = kind[i];
@@ -536,14 +555,16 @@ export function buildCrowd(group, spots, opts = {}) {
       if (a !== al[i]) {
         al[i] = a;
         const o1 = a > 0 ? 0 : 6;
-        if (flagIdx[i] >= 0) { putCol(cFA, flagIdx[i], livery, o1); putCol(cFB, flagIdx[i], livery, o1 + 3); colDirty = true; }
+        const ks = shd[i];
+        if (flagIdx[i] >= 0) { putCol(cFA, flagIdx[i], livery, o1, ks); putCol(cFB, flagIdx[i], livery, o1 + 3, ks); colDirty = true; }
         const cl = capLiv[i];
         if (cl) {
           const o = o1 + (cl === 2 ? 3 : 0);
-          putCol(cC, capIdx[i], livery, o);
-          if (brimIdx[i] >= 0) putCol(cBr, brimIdx[i], livery, o);
+          putCol(cC, capIdx[i], livery, o, ks * 0.8);
+          if (brimIdx[i] >= 0) putCol(cBr, brimIdx[i], livery, o, ks * 0.8);
           colDirty = true;
         }
+        if (bodyLiv[i]) { putCol(gown[i] ? cG : cB, bodyIdx[i], livery, o1, ks * 0.62); bodyDirty = true; }
       }
 
       // ---- wave (commons and burghers join in) ----
@@ -637,22 +658,25 @@ export function buildCrowd(group, spots, opts = {}) {
       let whisp = 0;
       if (cls === 2) whisp = sstep(0.55, 0.85, Math.sin(t * 0.31 + phi * 2.3) * Math.sin(t * 0.13 + phi * 5) + 0.45) * calm * (1 - eStand) * (1 - eRec);
       const par = (i & 1) ? 1 : -1;
+      const rz = live ? sstep(0.9, 0.97, Math.sin(t * 0.37 + phi * 7.1)) * (kn > 0.25 ? 1 : 0.5) * calm * (1 - wCheer) * (1 - dis) * (cls === 2 ? 0.5 : cls === 3 ? 0 : 1) : 0;
 
       // ---- body transform ----
       const Hfull = 1.4 * hgi;
       const bodyH = Hfull * (0.62 + 0.38 * standW) * (1 - 0.07 * dis - 0.05 * eSlump);
       let yOff = 0;
-      const jc = (sCheer[i] > eCheer ? sCheer[i] : eCheer) * JUMP[cls];
-      if (jc > 0.02) yOff = jc * standW * Math.abs(Math.sin(t * (6.5 + 2.5 * kn) + phi)) * 0.2 * (0.55 + 0.45 * kn) * hgi;
+      const big = eCheer > sCheer[i] ? evMag : 1;
+      const jc = (sCheer[i] > eCheer ? sCheer[i] : eCheer) * JUMP[cls] * big;
+      if (live && standW > 0.5) yOff = 0.008 * standW * Math.sin(t * 1.3 + phi);      // breathing, shifting weight
+      if (jc > 0.02) yOff += jc * standW * Math.abs(Math.sin(t * (6.5 + 2.5 * kn) + phi)) * 0.2 * (0.55 + 0.45 * kn) * hgi;
       if (clap > 0.02 && cls < 2) yOff += clap * 0.012 * Math.sin(t * 15 + phi);
       if (eLaugh > 0.02) yOff += eLaugh * 0.02 * Math.abs(Math.sin(t * 13 + phi)) * (cls < 2 ? 1 : 0.4);
       if (chant > 0.02) yOff += chant * 0.045 * Math.abs(Math.sin(t * 3.5));
 
       const upr = cls === 2 ? 0.5 : 1;
-      let pitch = (cls > 0 ? 0.05 * (1 - standW) : 0) + 0.2 * lean * calm * upr + 0.36 * lean * hush * upr - 0.12 * cheer + 0.3 * dis +
+      let pitch = stP[i] * standW + (cls > 0 ? 0.05 * (1 - standW) : 0) + 0.2 * lean * calm * upr + 0.36 * lean * hush * upr - 0.12 * cheer + 0.3 * dis +
         0.02 * chat * Math.sin(t * 5 + phi) + 0.4 * eAngry + 0.12 * eJeer + 0.5 * eBow - 0.25 * eRec - 0.2 * eCross +
         0.12 * eBless * 0 + 0.26 * eSlump - 0.12 * eHead + 0.07 * eLaugh * Math.sin(t * 15 + phi);
-      let roll = Math.sin(t * 0.9 + phi * 1.3) * 0.035 * calm * (1 - cheer) * sway + Math.sin(t * (3 + kn) + phi) * 0.08 * cheer +
+      let roll = stR[i] * (1 - 0.6 * cheer) + Math.sin(t * 0.9 + phi * 1.3) * 0.035 * calm * (1 - cheer) * sway + Math.sin(t * (3 + kn) + phi) * 0.08 * cheer +
         Math.sin(t * 14 + phi) * 0.11 * eJeer + Math.sin(t * 8 + phi) * 0.08 * eAngry + Math.sin(t * 3.2 + phi) * 0.09 * eShake +
         Math.sin(t * 5 + phi * 0.2) * 0.2 * eWild + whisp * 0.1 * par;
       if (cls === 0) roll += Math.sin(t * 1.9 + phi) * 0.035 * (1 - cheer); // restless shuffling
@@ -662,7 +686,7 @@ export function buildCrowd(group, spots, opts = {}) {
       const base = hasYaw[i] ? yb[i] : -side[i] * HALF_PI;
       let dth = Math.atan2(-px[i], zAim - pz[i]) - base;
       if (dth > PI) dth -= TWO_PI; else if (dth < -PI) dth += TWO_PI;
-      let yaw = base + dth * (0.4 + 0.25 * lean) + eRec * (cls === 2 ? 1.4 : 0.9) * par + whisp * 0.7 * par + (cls < 3 ? eShake * Math.sin(t * 5.5 + phi) * 0.28 : 0);
+      let yaw = base + stY[i] * (1 - 0.5 * lean) + dth * (0.4 + 0.25 * lean) + eRec * (cls === 2 ? 1.4 : 0.9) * par + whisp * 0.7 * par + (cls < 3 ? eShake * Math.sin(t * 5.5 + phi) * 0.28 : 0);
       if (cls === 3) yaw = base + dth * 0.2 + eShake * Math.sin(t * 3.2 + phi) * 0.25;
 
       const cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
@@ -681,7 +705,7 @@ export function buildCrowd(group, spots, opts = {}) {
       wm(gown[i] ? mG : mB, bodyIdx[i] * 16, r0 * sw, r1 * sw, r2 * sw, r3 * bodyH, r4 * bodyH, r5 * bodyH, r6 * sw, r7 * sw, r8 * sw, bx, by, bz);
 
       // ---- head ----
-      const hr = 0.105 * hgi * (kd === 2 ? 1.3 : 1);
+      const hr = 0.105 * hgi * hs[i] * (kd === 2 ? 1.3 : 1);
       xf(0, bodyH + hr * 1.05 + 0.012 * chat * Math.sin(t * 11 + phi), 0.035 * lean);
       const hx = bx + ox, hY = by + oy, hZ = bz + oz;
       wm(mH, o, hr, 0, 0, 0, hr * 1.12, 0, 0, 0, hr, hx, hY, hZ);
@@ -700,7 +724,7 @@ export function buildCrowd(group, spots, opts = {}) {
         rem_ = 1; ax_ = 0; ay_ = 0; az_ = 0;
         if (wCheer > 0.001) {
           const pump = Math.sin(t * (7 + 2 * kn) + phi + arm * 2.1);
-          addDir(wCheer, sx * (0.3 + 0.25 * pump * cheer + 0.1 * Math.sin(t * 4 + phi) * wv), 0.92, 0.12 + 0.12 * pump * cheer);
+          addDir(wCheer, sx * (0.3 + 0.25 * pump * cheer * big + 0.1 * Math.sin(t * 4 + phi) * wv), 0.92, 0.12 + 0.12 * pump * cheer * big);
         }
         if (dis > 0.001) {
           if (dv[i] === 0) addDir(dis, sx * 0.22, 0.6, 0.55);
@@ -720,6 +744,7 @@ export function buildCrowd(group, spots, opts = {}) {
         if (eSlump > 0.001) addDir(eSlump * 0.7, sx * 0.12, -1, 0.15);      // arms hang
         if (eLaugh > 0.001 && arm === evArm[i]) { if (cls === 2) addDir(eLaugh * 0.9, sx * 0.05, 0.55, 0.85); else addDir(eLaugh * 0.8, sx * 0.25, 0.1 + 0.15 * Math.sin(t * 9 + phi), 0.95); }      // behind a hand / pointing
         if (clap > 0.001) addDir(clap, sx * (0.04 + 0.22 * cc * cAmp), cls === 2 ? -0.3 : -0.4, 0.9);
+        if (live && arm === (i & 1) && rz > 0.01) addDir(rz, sx * 0.3 + 0.25 * Math.sin(t * 7 + phi), 0.85, 0.2);      // a hand up: to a friend, to the knight
         // idle (sway, craning, occasional gesture; flag holders hold the pennant up)
         let ix = sx * 0.14 + Math.sin(t * 0.8 + phi + arm * 1.7) * 0.05 * calm * sway;
         let iy = -1, iz = 0.04 + lean * 0.7;
@@ -842,6 +867,7 @@ export function buildCrowd(group, spots, opts = {}) {
     if (anyPool || poolWas) mToss.instanceMatrix.needsUpdate = true;
     poolWas = anyPool;
     if (poolColDirty) { mToss.instanceColor.needsUpdate = true; poolColDirty = false; }
+    if (bodyDirty) { mBody.instanceColor.needsUpdate = true; mGown.instanceColor.needsUpdate = true; }
     if (colDirty) {
       mFlagA.instanceColor.needsUpdate = true; mFlagB.instanceColor.needsUpdate = true;
       mCap.instanceColor.needsUpdate = true; mBrim.instanceColor.needsUpdate = true;

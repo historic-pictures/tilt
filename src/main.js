@@ -260,14 +260,14 @@ function hookRider(j, isPlayer) {
   j.onHoof = (i, leg) => {
     leg.hoof.getWorldPosition(hp); hp.y = 0.05;
     const sp = j.speed / 9;
-    if (j.speed > 3) fx.dust(hp, 1 + (sp > 0.6 ? 1 : 0), 0.25, 0.9 * sp, 0.35 + sp * 0.4);
+    fx.hoof(hp, j.speed, j.dir, leg.hind);
     if (j.speed > 6 && leg.hind) fx.clods(hp, 3, j.dir * j.speed);
     if (S.mode === 'replay') return;
     const [d, pan] = hear(hp);
     audio.hoof(sp, pan, d);
     if (isPlayer && i === 0 && j.speed > 5) audio.armourClank(0.4 + sp * 0.5);
   };
-  j.onLand = (p, v) => { audio.bodyFall(clamp(v / 6, 0.4, 1), hear(p)[0]); fx.dust(p, 16, 1.2, 1.6, 0.9); S.shake = Math.max(S.shake, 0.35); };
+  j.onLand = (p, v) => { audio.bodyFall(clamp(v / 6, 0.4, 1), hear(p)[0]); fx.landBurst(p, v); S.shake = Math.max(S.shake, 0.35); };
 }
 function makeRider(def, dir, isPlayer) {
   const j = new Jouster(scene, Object.assign({}, def.arms, def.armourTint ? { armourTint: def.armourTint } : {}, def.lance ? { lanceScale: LANCES[def.lance].scale } : {}), dir, LANE_X, def.horseDef || HORSES[def.horse], def.armourDef || harness(def.armour));
@@ -641,13 +641,19 @@ function bridgeRestoreHarness(k) {
 let preparing = false;
 /** Start a match. If the trees and props are still arriving in the background, wait for them behind "Preparing the lists…" rather than build the venue without them. */
 function startMatch(...args) {
-  if (SCANS.ready) return startMatchNow(...args);
+  const sky = args[3] ? null : (VENUES[args[0]] || {}).sky;      // (the practice meadow has no photographed sky)
+  const skyIn = !sky || !SCANS.skies[sky] || (SCANS.sky.get(sky) && SCANS.sky.get(sky).tex) || SCANS.sky.get(sky) === null;      // this venue's sky is in memory (or it has none / failed to load)
+  if (SCANS.ready && skyIn) return startMatchNow(...args);
   if (preparing) return;
   preparing = true; const el = $('preparing'), txt = $('prepTxt'); el.classList.remove('hidden');
   const paint = () => { const st = loadStats('bg'); txt.textContent = `${Math.round(st.frac * 100)}%  ·  ${mb(st.loaded)} of ${mb(st.total)} MB`; };
   paint(); const iv = setInterval(paint, 150);
-  Promise.race([SCANS.pending || preloadScans(), new Promise(r => setTimeout(r, 45000))]).catch(() => {}).then(() => {      // (after 45 s it goes ahead without them)
+  // the venue's photographed sky is waited for too: built without it the lists show a murky, dark half-lit scene until it arrives (the sky and the lighting come from it)
+  const skyP = sky ? loadSky(sky, 'bg') : Promise.resolve(null);
+  Promise.race([Promise.all([SCANS.pending || preloadScans(), skyP]), new Promise(r => setTimeout(r, 45000))]).catch(() => {}).then(() => {      // (after 45 s it goes ahead without them)
     clearInterval(iv); preparing = false; el.classList.add('hidden');
+    const s = sky && SCANS.sky.get(sky);
+    if (s && s.tex && world && !world.photoSky && worldKey === args[0]) worldKey = -99;      // a world built earlier without this sky: build it again with it
     if (!SCANS.ready) return startMatchNow(...args);
     refreshWorldWithScans(); startMatchNow(...args);
   });
@@ -2922,6 +2928,24 @@ function followCam(dtReal) {
   FC.yaw += wrapA(hd - FC.yaw) * (1 - Math.exp(-dtReal / 1.7)); FC.b = Math.min(1, FC.b + dtReal / 1.4);
   return true;
 }
+/** Depth of field for the cinematic cameras only (replays, the judges, close-ups, the intro): focus on the knights in shot, never in live play. */
+const _dv = new THREE.Vector3(), _df = new THREE.Vector3();
+function dofDepth(x, y, z) { camera.getWorldDirection(_df); return _dv.set(x, y, z).sub(camera.position).dot(_df); }
+function dofAim() {
+  let f = null, r = 2, am = 1;
+  if (S.mode === 'replay' && R && R.sp && R.so) {
+    if (R.shot === 5 && R.fall) { f = dofDepth(R.fall.x, Math.max(0.5, R.fall.y), R.fall.z); r = 2.2; }
+    else { const a = dofDepth(R.sp.px, 1.5, R.sp.pz), b = dofDepth(R.so.px, 1.5, R.so.pz); f = (a + b) / 2; r = Math.abs(a - b) / 2 + 3.2; }
+    am = R.shot === 3 ? 0.3 : 0.85;      // the crane is a wide shot: hardly any
+  } else if (S.mode === 'intro') { f = camPos.distanceTo(camLook); r = Math.max(4, f * 0.4); }
+  else if (C && C.cut && !(C.cut.ots > 0)) {
+    const k = C.cut.kind;
+    if (k === 'judges' || k === 'royal' || k === 'opp' || k === 'lady' || (k === 'react' && (C.cut.sub === 'squire' || C.cut.sub === 'lady'))) { f = camPos.distanceTo(camLook); r = Math.max(3.5, f * 0.35); }
+  } else if (C && C.cut && C.cut.ots > 0 && C.cut.kind !== 'visor') { f = dofDepth(player.root.position.x, 1.8, player.root.position.z); r = 2; }
+  if (f != null && !(f > 0.5)) f = null;
+  am *= clamp((54 - camera.fov) / 22, 0, 1);      // wide lenses (establishing shots, the stands) get little or none; long lenses on the knights get it all
+  post.setDOF(f, r, am);
+}
 function updateCamera(dtReal) {
   if (G.cam) { camera.position.set(...G.cam.p); camera.lookAt(...G.cam.l); if (G.cam.fov) { camera.fov = G.cam.fov; camera.updateProjectionMatrix(); } if (player) player.helm.visible = true; return; }
   let rate = 7, wantFov = 58, snap = false, own = false;
@@ -3029,6 +3053,7 @@ function updateCamera(dtReal) {
   if (S.shake > 0.005) { camera.position.x += (Math.random() - 0.5) * S.shake * 0.25; camera.position.y += (Math.random() - 0.5) * S.shake * 0.25; S.shake *= Math.exp(-5 * dtReal); }
   camera.position.y = Math.max(0.3, camera.position.y);
   camera.lookAt(camLook);
+  dofAim();
   if (own && player && M) camera.rotation.z += Math.sin(player.phase * TAU + 1) * 0.006 * clamp(player.speed / 11, 0, 1);   // the roll of the gallop
   const fpNow = (own && S.fp) || !!(C && C.cut && C.cut.kind === 'visor');
   if (player) player.helm.visible = !fpNow;

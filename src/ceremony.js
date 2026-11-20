@@ -26,20 +26,23 @@ export const mesh = (g, c, parent, x = 0, y = 0, z = 0, dbl) => { const m = new 
 export const grp = (parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 
 /** A person facing local +z: legs, a tabard torso, head, two arms; hat: a colour for the toque, or null for none. */
-export function person(parent, { hose, coat, tab, skin = '#e0ac84', hat = '#1d3f8a' }) {
+export function person(parent, { hose, coat, tab, skin = '#e0ac84', hat = '#1d3f8a', plume = '#d8222a' }) {
   const g = grp(parent), body = grp(g), legL = grp(body, -0.09, 0.85), legR = grp(body, 0.09, 0.85), torso = grp(body, 0, 0.85), head = grp(torso, 0, 0.66);
   mesh(GEO.leg, hose, legL); mesh(GEO.leg, hose, legR); mesh(GEO.torso, coat, torso); mesh(GEO.head, skin, head, 0, 0.12, 0);
   if (tab) { mesh(GEO.tab, tab, torso, 0, 0.3, 0.22); mesh(GEO.tab, tab, torso, 0, 0.3, -0.22); }
-  if (hat) { mesh(GEO.toque, hat, head, 0, 0.27, 0); mesh(GEO.feather, '#d8222a', head, 0.1, 0.4, 0); }
+  if (hat) { mesh(GEO.toque, hat, head, 0, 0.27, 0); mesh(GEO.feather, plume, head, 0.1, 0.4, 0); }
   const armL = grp(torso, -0.27, 0.57), armR = grp(torso, 0.27, 0.57); mesh(GEO.arm, coat, armL); mesh(GEO.arm, coat, armR);
   return { g, body, legL, legR, torso, head, armL, armR, ph: Math.random() * 6 };
 }
 
 /** A trumpeter in the colours c1 / c2, facing local +z, with his horn in the right hand (p.trumpet); animate with blowTrumpeter(). Used on the dais and along the barrier. */
-export function trumpeter(parent, c1, c2) {
-  const p = person(parent, { hose: c1, coat: c2, tab: c1 });
+const _mc = new THREE.Color(), _mg = new THREE.Color('#6b6254');
+/** A period-dye version of a livery colour: pulled toward undyed wool and darkened (the barrier men are not heralds). */
+export function mute(c, k = 0.72) { return '#' + _mc.set(c).lerp(_mg, 0.38).multiplyScalar(k).getHexString(); }
+export function trumpeter(parent, c1, c2, muted = false) {
+  const p = person(parent, muted ? { hose: mute(c1, 0.6), coat: mute(c2, 0.8), tab: mute(c1, 0.72), hat: mute(c1, 0.55), plume: '#8a6a4a' } : { hose: c1, coat: c2, tab: c1 });
   p.trumpet = grp(p.armR, 0, -0.6, 0); mesh(GEO.tube, '#d9b23c', p.trumpet); mesh(GEO.bell, '#d9b23c', p.trumpet, 0, -1.15, 0).rotation.x = Math.PI;
-  mesh(GEO.pennon, c1, p.trumpet, 0.0, -0.8, 0.12, true).rotation.y = Math.PI / 2;
+  mesh(GEO.pennon, muted ? mute(c1, 0.9) : c1, p.trumpet, 0.0, -0.8, 0.12, true).rotation.y = Math.PI / 2;
   p.k = 0; p.delay = 0; return p;
 }
 /** One frame of a trumpeter: arm and horn come up together when up is true (after his delay), a little breath sway. */
@@ -63,7 +66,7 @@ export function createCeremony(scene) {
       const p = trumpeter(root, c1, c2); p.g.position.set(11.0, 0.3, z); p.g.rotation.y = -Math.PI / 2; T.trumpets.push(p);
     }
     // six more along the barrier on the judges' side, three each side of the judges' stand: they blow before the flags drop on the first and the last course
-    for (const z of [-7.6, -5.6, -3.6, 3.6, 5.6, 7.6]) { const p = trumpeter(root, c1, c2); p.g.position.set(8.9, 0, z); p.g.rotation.y = -Math.PI / 2; p.ph += z; T.line.push(p); }
+    for (const z of [-7.6, -5.6, -3.6, 3.6, 5.6, 7.6]) { const p = trumpeter(root, c1, c2, true); p.g.position.set(8.9, 0, z); p.g.rotation.y = -Math.PI / 2; p.ph += z; T.line.push(p); }
     T.lineUp = false; T.lineT = 0;
     const h = T.H = person(root, { hose: '#1d3f8a', coat: '#8a1d2b', tab: '#d9b23c', skin: '#e0b896', hat: '#8a1d2b' });
     h.staff = grp(h.armL, 0, -0.6, 0); mesh(GEO.staff, '#e8e0c8', h.staff);

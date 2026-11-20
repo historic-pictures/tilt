@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { softDot } from './util.js';
+import { GFX } from './gfx.js';
 
 class Puffs {
   constructor(scene, max, additive) {
@@ -47,7 +48,7 @@ export class FX {
     this.scene = scene;
     this.dustP = new Puffs(scene, 500, false);
     this.sparkP = new Puffs(scene, 200, true); this.petalP = new Puffs(scene, 220, false);      // petalP: ribbons and petals thrown from the stands
-    this.dustCol = new THREE.Color(0xb9a37c); this.sparkCol = new THREE.Color(0xffd28a); this.chipCol = new THREE.Color(0xd8c7a0); this.clodCol = new THREE.Color(0x6a5234);
+    this.dustCol = new THREE.Color(0xb9a37c); this.sparkCol = new THREE.Color(0xffd28a); this.chipCol = new THREE.Color(0xd8c7a0); this.clodCol = new THREE.Color(0x6a5234); this.hoofCol = new THREE.Color(0xb8a27a);
     // splinters
     this.maxS = 220;
     const g = new THREE.BoxGeometry(1, 1, 1);
@@ -74,7 +75,39 @@ export class FX {
         0.9 + Math.random() * 1.1, size * (0.6 + Math.random() * 0.8), 0.9 + Math.random() * 0.8, 0.22 + Math.random() * 0.16, this.dustCol, 0, 1.6);
     }
   }
+  /**
+   * A hoof strikes the sand at p (world, y ignored). speed m/s (walk 1.8: nothing, trot 4.2: a small puff now and then, gallop 7+: clear puffs),
+   * dir = +/-1 along z, hind = hind hoof (kicks more back). Soft sand-coloured puffs that are thrown back, rise a little, drift and fade over ~0.8-1.2 s.
+   * Low tier: a token puff at a hard gallop only. Medium: about two thirds of high.
+   */
+  hoof(p, speed, dir = 1, hind = false) {
+    if (speed < 2.8) return;
+    const tier = GFX.tier, r = Math.random();
+    if (tier === 'low' && (speed < 6 || !hind || r > 0.5)) return;
+    const k = Math.min(1, Math.max(0, (speed - 2.5) / 5.5));      // 0.05 at a walk's edge .. 1 at a flat-out gallop
+    let n = speed < 5 ? (r < 0.55 ? 1 : 0) : speed < 6.5 ? 1 + (r < 0.4 ? 1 : 0) : 2 + (r < 0.6 ? 1 : 0);
+    if (hind) n += speed > 6 ? 1 : 0;
+    if (tier === 'medium' && n > 1 && Math.random() < 0.35) n--;
+    if (tier === 'low') n = 1;
+    for (let i = 0; i < n; i++) {
+      const sz = (0.36 + 0.5 * k) * (0.7 + Math.random() * 0.6);
+      this.dustP.emit(p.x + (Math.random() - 0.5) * 0.18, 0.07 + Math.random() * 0.08, p.z - dir * (0.05 + Math.random() * 0.12) + (Math.random() - 0.5) * 0.1,
+        (Math.random() - 0.5) * (0.5 + k * 0.9), 0.45 + k * 0.9 + Math.random() * 0.4, dir * speed * ((hind ? 0.1 : 0.04) + Math.random() * 0.08) - dir * (0.6 + k * 1.2 + Math.random() * 0.6) * (hind ? 1.2 : 0.6),
+        0.8 + Math.random() * 0.4, sz, 0.5 + k * 0.8, 0.2 + 0.26 * k, this.hoofCol, 0, 2.4);
+    }
+  }
+  /** A rider hits the ground at p, falling at v m/s: a big ring of sand thrown outward, some clods. */
+  landBurst(p, v = 6) {
+    const k = Math.min(1, Math.max(0.4, v / 7)), n = GFX.tier === 'low' ? 8 : GFX.tier === 'medium' ? 22 : 34;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = (1.2 + Math.random() * 2.6) * k;
+      this.dustP.emit(p.x + Math.cos(a) * 0.25, 0.08 + Math.random() * 0.2, p.z + Math.sin(a) * 0.25, Math.cos(a) * sp, 0.6 + Math.random() * 1.6 * k, Math.sin(a) * sp,
+        0.9 + Math.random() * 0.4, (0.5 + Math.random() * 0.6) * (0.8 + 0.5 * k), 0.9 + Math.random() * 0.9, 0.2 + Math.random() * 0.16, this.hoofCol, 0, 2.0);
+    }
+    if (GFX.tier !== 'low') this.clods(p, 6, 0);
+  }
   clods(p, n = 4, vz = 0) {
+    if (GFX.tier === 'low') n = Math.ceil(n / 3);
     for (let i = 0; i < n; i++) {
       this.dustP.emit(p.x + (Math.random() - 0.5) * 0.15, 0.06, p.z + (Math.random() - 0.5) * 0.15, (Math.random() - 0.5) * 2.2, 1.2 + Math.random() * 2.4, -vz * (0.15 + Math.random() * 0.3) + (Math.random() - 0.5), 0.5 + Math.random() * 0.5, 0.05 + Math.random() * 0.06, 0, 0.95, this.clodCol, 9.8, 0.3);
     }

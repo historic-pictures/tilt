@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { GFX } from './gfx.js';
 
-export const KINDS = ['steel', 'mail', 'cloth', 'velvet', 'leather', 'wood', 'stone', 'sand', 'coat', 'grass'];
+export const KINDS = ['steel', 'mail', 'cloth', 'velvet', 'leather', 'wood', 'stone', 'sand', 'coat', 'mane', 'grass'];
 
 // ---------------------------------------------------------------------------
 // Small utilities
@@ -347,21 +347,36 @@ function genSand({ n, S, rnd, seed }) {
   return { h, r, a: null, bump: 4.5 };
 }
 
-/** Short horse hair: strands flowing along V with gentle swirls. */
+/** Short horse hair: strands flowing along V with gentle swirls. Albedo = faint tonal mottling and streaks (multiplies the coat colour, mean ~0.9). */
 function genCoat({ n, seed }) {
-  const h = new Float32Array(n * n), r = new Float32Array(n * n);
+  const h = new Float32Array(n * n), r = new Float32Array(n * n), a = new Float32Array(n * n);
   const s1 = makeNoise(180, 6, seed + 1), s2 = makeNoise(90, 3, seed + 2), s3 = makeNoise(256, 16, seed + 3);
-  const sw = makeFbm(3, 3, seed + 4), sheen = makeFbm(5, 3, seed + 5);
+  const sw = makeFbm(3, 3, seed + 4), sheen = makeFbm(5, 3, seed + 5), mott = makeFbm(4, 4, seed + 6), band = makeNoise(40, 3, seed + 7), flow = makeNoise(26, 3, seed + 8);
   for (let y = 0, i = 0; y < n; y++) {
     for (let x = 0; x < n; x++, i++) {
       const u0 = (x + 0.5) / n, v = (y + 0.5) / n;
       const u = u0 + 0.05 * (sw(u0, v) - 0.5);                // lateral swirl
       const p = 0.5 * s1(u, v) + 0.32 * s2(u, v) + 0.18 * s3(u, v);
-      h[i] = p;
-      r[i] = Math.min(1, 0.62 + 0.22 * sheen(u0, v) + 0.15 * (1 - p));
+      h[i] = p * 0.7 + 0.5 * flow(u, v);
+      r[i] = Math.min(0.7, 0.55 + 0.1 * sheen(u0, v) + 0.06 * (1 - p));      // 0.55-0.7: hair is never glossy, never chalky
+      a[i] = 0.72 + 0.36 * mott(u0, v) + 0.1 * (p - 0.5) + 0.12 * (flow(u, v) - 0.5) + 0.06 * (band(u, v) - 0.5);      // colour noise: tonal patches plus single hairs a shade off
     }
   }
-  return { h, r, a: null, bump: 3 };
+  return { h, r, a, bump: 3 };
+}
+
+/** Mane and tail hair: long glossy strands running along V, clumped into locks. */
+function genMane({ n, seed }) {
+  const h = new Float32Array(n * n), r = new Float32Array(n * n), a = new Float32Array(n * n);
+  const s1 = makeNoise(220, 4, seed + 11), s2 = makeNoise(70, 2, seed + 12), s3 = makeNoise(24, 2, seed + 13), sw = makeFbm(3, 3, seed + 14);
+  for (let y = 0, i = 0; y < n; y++) {
+    for (let x = 0; x < n; x++, i++) {
+      const u0 = (x + 0.5) / n, v = (y + 0.5) / n, u = u0 + 0.06 * (sw(u0, v) - 0.5);
+      const lock = s3(u, v), p = 0.42 * s1(u, v) + 0.33 * s2(u, v) + 0.25 * lock;
+      h[i] = p; r[i] = 0.42 + 0.16 * (1 - lock) + 0.08 * s1(u, v); a[i] = 0.78 + 0.3 * lock * (0.7 + 0.3 * s1(u, v));
+    }
+  }
+  return { h, r, a, bump: 4 };
 }
 
 /** Low clumpy turf. */
@@ -384,7 +399,7 @@ function genGrass({ n, seed, rnd }) {
 
 const GENERATORS = {
   steel: genSteel, mail: genMail, cloth: genCloth, velvet: genVelvet, leather: genLeather,
-  wood: genWood, stone: genStone, sand: genSand, coat: genCoat, grass: genGrass,
+  wood: genWood, stone: genStone, sand: genSand, coat: genCoat, mane: genMane, grass: genGrass,
 };
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import { lanceRadius } from './physics.js';
 import { Cap, Obb, Hit, capCapGap, capObbGap, closestSegSeg, SS } from './collide.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { touchMode } from './touch.js';
+import { GFX } from './gfx.js';
 import { expect, progress, done } from './loadmeter.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -66,20 +67,50 @@ const BY = 1.22;                 // barrel centre height (body pivot)
 export const LANCE_REACH = 2.8;  // grip -> tip
 const LANCE_SPLIT = 1.0;         // where the lance snaps
 
-const pbr = (kind, repeat, strength = 1) => { try { return makePBR(kind, { repeat, strength }); } catch (e) { return {}; } };
+const TEXN = GFX.halfTex ? 256 : 512;      // the tier's texture size (low: half)
+const pbr = (kind, repeat, strength = 1, size = 512) => { try { return makePBR(kind, { repeat, strength, size }); } catch (e) { return {}; } };
 const nScale = (m, s) => { if (m.normalMap) m.normalScale = new THREE.Vector2(s, s); return m; };
-const T_STEEL = pbr('steel', [3, 3]), T_LEATHER = pbr('leather', [3, 3]), T_MAIL = pbr('mail', [7, 9]), T_COAT = pbr('coat', [3, 4]), T_CLOTH = pbr('cloth', [10, 10]), T_WOOD = pbr('wood', [1, 4]);
+const T_STEEL = pbr('steel', [3, 3]), T_LEATHER = pbr('leather', [3, 3]), T_MAIL = pbr('mail', [7, 9]), T_WOOD = pbr('wood', [1, 4]);
+// Horse coat, mane/tail hair and caparison weave: generated once (texgen caches the canvases), only where the tier can afford them. Low keeps plain materials.
+const FANCY = GFX.tier !== 'low';
+const T_COAT = FANCY ? pbr('coat', [3, 4], 1, TEXN) : {}, T_MANE = FANCY ? pbr('mane', [2, 2], 1, TEXN) : {}, T_CLOTH = FANCY ? pbr('cloth', [9, 9], 1, TEXN) : {};
 
 // The rigged horse has no UVs: project them from its own bind-pose positions (dominant normal axis), ~7 repeats nose to tail.
 const HORSE_UV = new WeakMap();      // source geometry -> geometry with uv
 let HORSE_UV_SCALE = 0;              // uv units per model unit
 const COAT_TEX = {};                 // repeat-1 copies of the coat maps (the uv already carries the repeats)
-function coatTex(key) {
-  if (COAT_TEX[key] === undefined) {
-    const t = T_COAT[key]; COAT_TEX[key] = t ? t.clone() : null;
-    if (t) { COAT_TEX[key].repeat.set(1, 1); COAT_TEX[key].wrapS = COAT_TEX[key].wrapT = THREE.RepeatWrapping; COAT_TEX[key].needsUpdate = true; }
+function coatTex(key, set = T_COAT, name = 'coat') {
+  const k = name + key;
+  if (COAT_TEX[k] === undefined) {
+    const t = set[key]; COAT_TEX[k] = t ? t.clone() : null;
+    if (t) { COAT_TEX[k].repeat.set(1, 1); COAT_TEX[k].wrapS = COAT_TEX[k].wrapT = THREE.RepeatWrapping; COAT_TEX[k].needsUpdate = true; }
   }
-  return COAT_TEX[key];
+  return COAT_TEX[k];
+}
+// Points: a vertex-colour multiplier on the coat (bind pose, model units: y up, z forward, hooves at y 0, belly ~y 1.9, ears ~y 4.5).
+// Lower legs darken to the mane colour (black points on a bay), ear tips and the face a little; with `socks` the hind pasterns go pale.
+const POINTS = new WeakMap();
+function pointsGeo(geo, H) {
+  const key = (H.coat ?? 0x5a3620) + '|' + (H.mane ?? 0x15110e) + '|' + !!H.socks;
+  let m = POINTS.get(geo); if (!m) POINTS.set(geo, m = new Map());
+  let g = m.get(key); if (g) return g;
+  g = new THREE.BufferGeometry(); for (const k in geo.attributes) g.setAttribute(k, geo.attributes[k]);
+  g.setIndex(geo.index); geo.groups.forEach(gr => g.addGroup(gr.start, gr.count, gr.materialIndex));
+  const c = new THREE.Color(H.coat ?? 0x5a3620), mn = new THREE.Color(H.mane ?? 0x15110e), sock = new THREE.Color(0xe8e2d6);
+  const pt = [Math.min(1.1, mn.r / Math.max(c.r, 0.02)), Math.min(1.1, mn.g / Math.max(c.g, 0.02)), Math.min(1.1, mn.b / Math.max(c.b, 0.02))];
+  const pw = [Math.min(4.5, sock.r / Math.max(c.r, 0.02)), Math.min(4.5, sock.g / Math.max(c.g, 0.02)), Math.min(4.5, sock.b / Math.max(c.b, 0.02))];
+  const P = geo.attributes.position, col = new Float32Array(P.count * 3), ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), ax = Math.abs(x);
+    let leg = ss(1.75, 1.05, y);                                              // 0 at the belly line, 1 below the knee / hock
+    let ear = ss(4.28, 4.55, y) * ss(3.0, 3.5, z) * 0.6;                       // tips of the ears
+    let face = ss(3.0, 3.35, z) * ss(4.2, 3.7, y) * 0.35;                      // the nose end of the head
+    let w = Math.max(leg, ear, face);
+    const sk = H.socks && z < 0.6 && y < 0.95 ? ss(0.95, 0.6, y) : 0;         // hind socks
+    for (let k = 0; k < 3; k++) { let v = 1 + (pt[k] - 1) * w; v = v + (pw[k] - v) * sk; col[i * 3 + k] = v * (1 + 0.04 * Math.sin(i * 12.9898)); }
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  m.set(key, g); return g;
 }
 function horseUVs(scene) {
   if (!HORSE_UV_SCALE) {
@@ -206,13 +237,18 @@ export class Jouster {
 
   _buildMaterials() {
     const a = this.arms, H = this.horseDef, AR = this.armourDef;
+    const fancy = FANCY && GFX.tier !== 'low';      // low: plain materials
+    this.fancy = fancy;
     this.coat = nScale(new THREE.MeshStandardMaterial({ color: H.coat ?? 0x5a3620, roughness: 0.5, envMapIntensity: 0.55, normalMap: T_COAT.normalMap, roughnessMap: T_COAT.roughnessMap }), 0.5);
     this.hair = new THREE.MeshStandardMaterial({ color: H.mane ?? 0x15110e, roughness: 0.7, envMapIntensity: 0.4, normalMap: T_COAT.normalMap });
+    // the caparison: wool weave (fine normal + roughness 0.85-0.95, so no plastic gloss) and a faint fabric sheen at grazing angles
+    const wool = (o) => { const m = fancy ? new THREE.MeshPhysicalMaterial(Object.assign({ sheen: 0.55, sheenRoughness: 0.6, sheenColor: new THREE.Color(o.color ?? 0xffffff).lerp(new THREE.Color(0xd8d0c0), 0.55) }, o)) : new THREE.MeshStandardMaterial(o); return m; };
     const tex = armsTexture(a, 512, 512, [1, 1]);
     const clothN = photoTex('rough_linen', 'nor_gl', [9, 9]);
-    this.cloth = nScale(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.35, normalMap: clothN }), 0.6);
-    this.clothPlain = nScale(new THREE.MeshStandardMaterial({ color: a.c1, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.35, normalMap: clothN }), 0.6);
-    this.cloth2 = nScale(new THREE.MeshStandardMaterial({ color: a.c2, roughness: 0.88, envMapIntensity: 0.35, normalMap: clothN }), 0.6);
+    const weave = fancy && T_CLOTH.normalMap ? { normalMap: T_CLOTH.normalMap, roughnessMap: T_CLOTH.roughnessMap } : { normalMap: clothN };
+    this.cloth = nScale(wool({ map: tex, roughness: 0.92, side: THREE.DoubleSide, envMapIntensity: 0.3, ...weave }), 0.25);
+    this.clothPlain = nScale(wool({ color: a.c1, roughness: 0.92, side: THREE.DoubleSide, envMapIntensity: 0.3, ...weave }), 0.25);
+    this.cloth2 = nScale(wool({ color: a.c2, roughness: 0.9, envMapIntensity: 0.3, ...weave }), 0.25);
     this.shieldMat = new THREE.MeshStandardMaterial({ map: armsTexture(a, 512, 512), roughness: 0.62, metalness: 0, envMapIntensity: 0.35, side: THREE.DoubleSide });
     this.lanceMat = new THREE.MeshStandardMaterial({
       map: canvasTex(64, 256, (g, w, h) => {
@@ -266,7 +302,9 @@ export class Jouster {
       let rise = 0;
       if (closeStart) rise = Math.max(rise, Math.pow(1 - f, 5));
       if (closeEnd) rise = Math.max(rise, Math.pow(f, 5));
-      const dag = (i % 2 ? 0.055 : 0) * (1 - rise);
+      // The hem used to alternate 5.5 cm up / down every single row (a 2-sample sawtooth): too fine to read as a cut, so on screen it was a
+      // frayed, clipped edge, and the flutter pulled the teeth about. Now one broad, smooth swell per fold of the cloth.
+      const dag = (0.5 + 0.5 * Math.cos(z * 17 + hemBase * 9)) * 0.045 * (1 - rise);
       const hemY = lerp(hemBase + dag, top - hang - 0.12, rise * 0.55);
       for (let j = 0; j < cols; j++) {
         const k = j - half, s = Math.sign(k), a = Math.abs(k);
@@ -274,7 +312,8 @@ export class Jouster {
         if (a <= ARC) { const th = (a / ARC) * Math.PI / 2; x = Math.sin(th) * hw; y = top - (1 - Math.cos(th)) * hang; }
         else {
           const t = (a - ARC) / HANG;
-          x = hw * (1 + 0.1 * t) + 0.025 * t + Math.sin(z * 21 + s * 1.3) * 0.016 * t;   // vertical folds
+          // broad hanging folds (two wavelengths, deeper toward the hem): the cloth has weight and drape, not a smooth skin
+          x = hw * (1 + 0.1 * t) + 0.025 * t + (Math.sin(z * 11 + s * 1.3 + hemBase * 5) * 0.022 + Math.sin(z * 23 + s * 2.1) * 0.01) * t * (0.4 + 0.6 * t);
           y = lerp(top - hang, hemY, t); w = t;
         }
         pos.push(s * x, y, z); wts.push(w);
@@ -440,6 +479,7 @@ export class Jouster {
   _attachModelHorse() {
     const m = this.model = cloneSkinned(HORSE_MODEL.scene), H = this.horseDef;
     const coat = new THREE.Color(H.coat ?? 0x5a3620), mane = new THREE.Color(H.mane ?? 0x15110e);
+    if (this.fancy && coat.r + coat.g + coat.b < 1.0) coat.multiplyScalar(0.86);      // the coat texture's own tonal variation sits on a slightly deeper base (bay, not orange); greys are left alone
     const uvOf = horseUVs(HORSE_MODEL.scene), nm = coatTex('normalMap'), rm = coatTex('roughnessMap');
     m.traverse(o => {
       if (!o.isMesh) return;
@@ -455,13 +495,17 @@ export class Jouster {
       // the coat: short hair catches the light at grazing angles (sheen), which is what stops a smooth horse looking like plastic
       if (n === 'Main' || n === 'Muzzle') o.material = new THREE.MeshPhysicalMaterial({ name: n, color: mat.color, roughness: 0.58, metalness: 0, envMapIntensity: 0.45,
         sheen: 0.55, sheenRoughness: 0.42, sheenColor: mat.color.clone().offsetHSL(0, -0.05, 0.18) });
-      // coat texture: needs uv, so only on skinned parts that can be projected
-      if (o.isSkinnedMesh && o.geometry.attributes.position && (n === 'Main' || n === 'Muzzle' || n === 'Hair')) {
+      // coat texture: needs uv, so only on skinned parts that can be projected. Low tier keeps the flat colours.
+      if (this.fancy && o.isSkinnedMesh && o.geometry.attributes.position && (n === 'Main' || n === 'Muzzle' || n === 'Hair')) {
         try {
+          const hair = n === 'Hair', t = o.material;
           o.geometry = uvOf(o.geometry);
-          const t = o.material;
-          if (nm) { t.normalMap = nm; t.normalScale = new THREE.Vector2(n === 'Hair' ? 0.9 : 0.35, n === 'Hair' ? 0.9 : 0.35); }
-          if (rm && n !== 'Hair') t.roughnessMap = rm;
+          const nmap = hair ? coatTex('normalMap', T_MANE, 'mane') : nm, rmap = hair ? coatTex('roughnessMap', T_MANE, 'mane') : rm, amap = hair ? coatTex('map', T_MANE, 'mane') : coatTex('map');
+          if (nmap) { t.normalMap = nmap; t.normalScale = new THREE.Vector2(hair ? 1.1 : 0.7, hair ? 1.1 : 0.7); }
+          if (rmap) { t.roughnessMap = rmap; t.roughness = 1; }
+          if (amap) t.map = amap;
+          if (n === 'Main') { o.geometry = pointsGeo(o.geometry, H); t.vertexColors = true; }
+          if (hair) { t.envMapIntensity = 0.7; }      // a little glossier than the coat
           t.needsUpdate = true;
         } catch (e) { /* keep the flat colour */ }
       }
