@@ -17,6 +17,8 @@ export function sfxPack() {
 }
 export function setSfxPack(v) { try { localStorage.setItem('tilt.sfx', v === 'new' ? 'new' : 'old'); } catch (e) { /* ignore */ } }
 
+import { mymusic } from './mymusic.js';
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
@@ -54,7 +56,22 @@ class MusicBus {
   constructor(ga) {
     this.ga = ga; this.vol = MUSIC_DEFAULT; this.ducked = false; this.gain = null; this.tracks = null; this._man = null;
     this.want = null; this.mood = null; this.cur = null; this.last = null;
+    this.yt = null; this._where = 'menu'; this._ytLoad = null;
+    this.queue = []; this._tok = 0;      // "your own music": shuffled playlist of the player's tracks (src/mymusic.js)
   }
+  /** True while the player's own songs replace the game's music. */
+  get mine() { return mymusic.source === 'files' && mymusic.tracks.length > 0; }
+  /** YouTube source (src/ytmusic.js, loaded only when used): the game's own music stays silent while it plays. */
+  async _yt(go = true) {
+    if (!this.yt) {
+      this._ytLoad = this._ytLoad || import('./ytmusic.js').then(m => { this.yt = m.ytmusic; this.yt.on((k) => { if (k === 'stop') { mymusic.setSource('game'); this.refreshMine(); } }); });
+      try { await this._ytLoad; } catch (e) { return; }
+    }
+    const y = this.yt; y.setVolume(this.vol); y.duck(this.ducked); y.muted = !!this.ga.muted; y.place(this._where);
+    if (go && mymusic.source === 'yt') y.start();
+  }
+  /** Which corner the YouTube box sits in: 'menu' or 'match'. */
+  place(w) { this._where = w; if (this.yt) this.yt.place(w); }
   get playing() { return !!this.cur; }
   _level() { return lin(MUSIC_DB) * (this.vol / MUSIC_DEFAULT) * (this.ducked ? lin(MUSIC_DUCK_DB) : 1); }
   _attach() { const ga = this.ga; if (this.gain || !ga.ctx) return; this.gain = ga.ctx.createGain(); this.gain.gain.value = this._level(); this.gain.connect(ga.master); if (this.want) this.play(this.want); }
@@ -65,18 +82,24 @@ class MusicBus {
   }
   setVolume(v) {
     this.vol = clamp(+v || 0, 0, 1);
-    if (this.vol <= 0) { this._fadeOut(1); this.cur = null; this.mood = null; return; }
+    if (this.yt) this.yt.setVolume(this.vol);
+    if (this.vol <= 0) { this._tok++; this._fadeOut(1); this.cur = null; this.mood = null; mymusic.setNow(null); return; }
     if (this.gain) this.gain.gain.setTargetAtTime(this._level(), this.ga.ctx.currentTime, 0.1);
     if (!this.cur && this.want) this.play(this.want);
   }
   duck(on) {
     this.ducked = !!on;
+    if (this.yt) this.yt.duck(this.ducked);
     if (this.gain) try { this.gain.gain.setTargetAtTime(this._level(), this.ga.ctx.currentTime, 0.5); } catch (e) { /* ignore */ }
   }
   /** Play a random track of this mood (never the one just played); a track already playing for that mood is left alone. */
   async play(mood) {
     this.want = mood;
     const ga = this.ga; if (!ga.ctx || !this.gain || ga.muted || this.vol <= 0) return;
+    if (mymusic.source === 'yt') { this._yt(true); return; }
+    if (mymusic.source === 'files') { await mymusic.list(); if (this.want !== mood) return; }
+    if (this.mine) { if (!this.cur || !this.cur.mine) this._startMine(); return; }
+    if (this.cur && this.cur.mine) { this._dropMine(); }
     const tracks = this.tracks || await this.load(); if (this.want !== mood || !tracks.length) return;
     let pool = tracks.filter(t => (t.moods || []).includes(mood)), eff = mood;
     if (!pool.length) { pool = tracks.filter(t => (t.moods || []).includes('menu')); eff = 'menu'; }
@@ -99,15 +122,59 @@ class MusicBus {
       this.cur = rec; this.last = t.id; this.mood = eff;
     } catch (e) { /* music is optional */ }
   }
+  /** Next song of the player's playlist: shuffled, none repeats until all have played. */
+  async _startMine() {
+    const tok = ++this._tok, ctx = this.ga.ctx; if (!ctx || !this.gain) return;
+    const all = mymusic.tracks; if (!all.length) return;
+    this.queue = this.queue.filter(id => all.some(t => t.id === id));
+    if (!this.queue.length) {
+      const ids = all.map(t => t.id); for (let i = ids.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [ids[i], ids[j]] = [ids[j], ids[i]]; }
+      if (ids.length > 1 && ids[0] === this.last) ids.push(ids.shift());
+      this.queue = ids;
+    }
+    const id = this.queue.shift(), t = all.find(x => x.id === id);
+    let url = null; try { url = await mymusic.getUrl(id); } catch (e) { /* unreadable */ }
+    if (tok !== this._tok || !this.mine || !this.gain) { mymusic.revoke(id); return; }
+    if (!url) { if (all.length > 1) this._startMine(); return; }
+    try {
+      const el = new Audio(url); el.preload = 'auto'; el.loop = false;
+      const src = ctx.createMediaElementSource(el), g = ctx.createGain(), now = ctx.currentTime;
+      g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(1, now + MUSIC_FADE);
+      src.connect(g); g.connect(this.gain);
+      const rec = { el, src, g, t: { id }, mine: id };
+      el.addEventListener('ended', () => { if (this.cur === rec) { this.cur = null; mymusic.setNow(null); this._startMine(); } });
+      el.addEventListener('error', () => { try { src.disconnect(); g.disconnect(); } catch (e) { /* gone */ } mymusic.revoke(id); if (this.cur === rec) { this.cur = null; this.mood = null; mymusic.setNow(null); if (this.mine && this.queue.length) this._startMine(); } });
+      const p = el.play(); if (p && p.catch) p.catch(() => { if (this.cur === rec) { this.cur = null; mymusic.setNow(null); } });
+      this._fadeOut(MUSIC_FADE);
+      this.cur = rec; this.last = id; this.mood = 'mine'; mymusic.setNow({ id, name: t ? t.name : '' });
+    } catch (e) { /* music is optional */ }
+  }
+  /** Skip to the next of the player's songs. */
+  next() { if (mymusic.source === 'yt') { if (this.yt) this.yt.next(); return; } if (this.mine && this.ga.ctx && this.vol > 0 && !this.ga.muted) this._startMine(); }
+  _dropMine() { this._fadeOut(MUSIC_FADE); this.cur = null; this.mood = null; mymusic.setNow(null); }
+  /** The on/off switch or the list changed: swap between the player's songs and the game's own music. */
+  async refreshMine() {
+    if (mymusic.source === 'yt') { if (this.cur) { this._fadeOut(MUSIC_FADE); this.cur = null; this.mood = null; mymusic.setNow(null); } this._tok++; this._yt(true); return; }
+    if (this.yt && this.yt.wantPlay) this.yt.stop();
+    await mymusic.list();
+    const on = this.mine;
+    if (on && this.cur && this.cur.mine && !mymusic.tracks.some(t => t.id === this.cur.mine)) { this._dropMine(); }
+    if (!on && this.cur && this.cur.mine) this._dropMine();
+    if (on && this.cur && !this.cur.mine) { this._fadeOut(MUSIC_FADE); this.cur = null; this.mood = null; }
+    this.queue = this.queue.filter(id => mymusic.tracks.some(t => t.id === id));
+    if (!this.cur && this.want) this.play(this.want);
+  }
   _fadeOut(sec) {
     const rec = this.cur; if (!rec || !this.ga.ctx) return;
+    if (rec.mine) setTimeout(() => mymusic.revoke(rec.mine), sec * 1000 + 150);
     const ctx = this.ga.ctx, now = ctx.currentTime;
     try { rec.g.gain.cancelScheduledValues(now); rec.g.gain.setValueAtTime(rec.g.gain.value, now); rec.g.gain.linearRampToValueAtTime(0, now + sec); } catch (e) { /* ignore */ }
     setTimeout(() => { try { rec.el.pause(); rec.src.disconnect(); rec.g.disconnect(); } catch (e) { /* gone */ } }, sec * 1000 + 100);
   }
-  stop(fadeSec = 1.5) { this.want = null; this._fadeOut(fadeSec); this.cur = null; this.mood = null; }
+  stop(fadeSec = 1.5) { this.want = null; this._tok++; this._fadeOut(fadeSec); this.cur = null; this.mood = null; mymusic.setNow(null); }
   /** Mute pauses the stream, unmute carries on (or starts what was wanted). */
   setMuted(m) {
+    if (this.yt) this.yt.setMuted(m);
     if (m) { if (this.cur) try { this.cur.el.pause(); } catch (e) { /* ignore */ } return; }
     if (this.cur) { try { const p = this.cur.el.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
     else if (this.want) this.play(this.want);

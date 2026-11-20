@@ -6,6 +6,8 @@ import { featCount } from './achievements.js';
 import { ANNOUNCER, circuitOpening } from './drama_lines.js';
 import { sfxPack, setSfxPack, SFX_HAS_OLD } from './audio.js';
 import * as ranks from './ranks.js';
+import { mymusic } from './mymusic.js';
+import { ytmusic } from './ytmusic.js';
 import { safeName } from './online.js';
 import { confirmBuy, buyAsk } from './confirm.js';
 let buyOk = false;   // set for the one re-dispatched click after a purchase is confirmed
@@ -39,6 +41,50 @@ export function initMenus(api) {
   // every screen is a scroll: the skin, then the page that is written on (and scrolls)
   const scroll = (cls, html) => `<div class="${cls} scroll"><i class="paper"></i><div class="page">${html}</div></div>`;
 
+  /** "Your own music": songs from the player's own computer, kept in this browser only (src/mymusic.js). */
+  const mmMsg = { text: '' };
+  const mmNow = () => (mymusic.now && mymusic.now.name ? `Now playing: ${esc(mymusic.now.name)}` : (mymusic.enabled && mymusic.tracks.length ? 'Now playing: (starts with the game)' : ''));
+  const ytTitles = {};     // id -> title, filled in while a video plays
+  function myMusicBlock() {
+    const tr = mymusic.tracks, src = mymusic.source, yt = ytmusic.ids;
+    const chip = (k, t) => `<span class="chip ${src === k ? 'sel' : ''}" data-mm="src" data-v="${k}">${t}</span>`;
+    const files = `<div class="toggles"><label class="chip" title="Pick audio files from this computer (mp3, m4a, ogg, wav)">Add songs<input type="file" id="mmFile" accept="audio/*" multiple hidden></label>${tr.length ? `<span class="chip" data-mm="next" title="Next song (N)">Next ▸</span>` : ''}</div>
+      ${tr.length ? `<div class="mmlist">${tr.map(t => `<div class="mmrow"><span>${esc(t.name)}</span><b data-mm="rm" data-id="${t.id}" title="Remove">✕</b></div>`).join('')}</div>` : ''}
+      <div class="mmnow" id="mmNow">${mmNow()}</div><div class="mmnote">Your songs stay in this browser only; they're not uploaded or shared.</div>`;
+    const ytp = `<div class="mmlist">${yt.map(id => `<div class="mmrow"><span>${esc(ytTitles[id] || (ytmusic.DEFAULTS[id] || 'youtu.be/' + id))}</span><b data-mm="ytrm" data-id="${id}" title="Remove">✕</b></div>`).join('') || '<div class="mmrow"><span>(empty)</span></div>'}</div>
+      <div class="mmadd"><input id="mmLink" placeholder="Paste a YouTube link" autocomplete="off" spellcheck="false"><span class="chip" data-mm="ytadd">Add link</span><span class="chip" data-mm="next" title="Next (N)">Next ▸</span></div>
+      <div class="mmnote">Played by YouTube's own player, shown in the corner. Nothing is downloaded.</div>`;
+    return `<div class="mymusic"><div class="toggles"><span class="lbl">Music source:</span>${chip('game', 'Game music')}${chip('files', 'My files')}${chip('yt', 'YouTube')}</div>
+      ${src === 'files' ? files : src === 'yt' ? ytp : ''}<div class="mmmsg" id="mmMsg">${esc(mmMsg.text)}</div></div>`;
+  }
+  mymusic.list().then(() => { if (root.dataset.name === 'main' && root.classList.contains('on')) show('main'); });
+  mymusic.on((k) => {
+    if (k === 'now') { const n = el('mmNow'); if (n) n.textContent = mmNow(); }
+    else if (root.dataset.name === 'main' && root.classList.contains('on')) show('main');
+  });
+  ytmusic.on((k) => {
+    if (k === 'now' && ytmusic.title && ytmusic.curId) ytTitles[ytmusic.curId] = ytmusic.title;
+    if ((k === 'list' || k === 'now') && root.dataset.name === 'main' && root.classList.contains('on') && !(document.activeElement && document.activeElement.id === 'mmLink')) show('main');
+  });
+  root.addEventListener('keydown', (e) => { if (e.target.id === 'mmLink' && e.key === 'Enter') { const t = root.querySelector('[data-mm="ytadd"]'); if (t) t.click(); } });
+  root.addEventListener('change', async (e) => {
+    if (e.target.id !== 'mmFile') return;
+    const files = Array.from(e.target.files || []); e.target.value = '';
+    const r = await mymusic.add(files);
+    mmMsg.text = r.messages.join(' ') || (r.added ? '' : 'No songs added.');
+    if (!r.added) { const m = el('mmMsg'); if (m) m.textContent = mmMsg.text; }
+    else { show('main'); if (api.musicMine) api.musicMine(); }
+  });
+  root.addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-mm]'); if (!t) return;
+    api.ui('click'); mmMsg.text = '';
+    if (t.dataset.mm === 'src') { mymusic.setSource(t.dataset.v); if (api.musicMine) api.musicMine(); }
+    else if (t.dataset.mm === 'ytadd') { const i = el('mmLink'), r = ytmusic.add(i ? i.value : ''); mmMsg.text = r.ok ? '' : r.msg; if (!r.ok) { const m = el('mmMsg'); if (m) m.textContent = mmMsg.text; } }
+    else if (t.dataset.mm === 'ytrm') ytmusic.remove(t.dataset.id)
+    else if (t.dataset.mm === 'next') { if (api.musicNext) api.musicNext(); }
+    else if (t.dataset.mm === 'rm') { await mymusic.remove(t.dataset.id); if (api.musicMine) api.musicMine(); }
+  });
+
   function main() {
     const p = api.profile, T = p.table, round = T ? T.round : 0, pts = skillPoints(p), rank = RANKS[rankOf(p.renown)];
     root.innerHTML = scroll('menu', `
@@ -56,6 +102,7 @@ export function initMenus(api) {
       <div class="standing"><span>${rank.name}</span><span>${purseText(p.gold)}</span></div>
       ${rankBar(p.renown)}
       <div class="toggles"><span class="chip" data-act="diff">Difficulty: ${DIFFICULTY[p.difficulty ?? 1].name}</span><span class="chip" data-act="herald">Herald: ${p.herald === false ? 'silent' : 'speaks'}</span><span class="chip" data-act="voices" title="The robot voice for the herald, the king, your men and the sellers (needs sound on)">Voices: ${api.voicesOn && !api.voicesOn() ? 'off' : 'on'}</span><span class="chip" data-act="view">View: ${p.firstPerson ? 'first person' : 'third person'}</span><span class="chip" data-act="autoride" title="After a pass: ride back to your mark yourself (W/S gait, A/D steer), or let the horse take you">Ride back: ${p.autoRide === false ? 'by hand' : 'auto'}</span><label class="chip vol">Music <input type="range" id="musicVol" min="0" max="100" step="5" value="${api.musicVol ? api.musicVol() : 60}"> <span id="musicPct">${api.musicVol ? api.musicVol() : 60}%</span></label><span class="chip" data-act="gfx" title="Picture quality. Auto picks for your device; Low suits old phones. Changing it reloads the page.">${gfxChip()}</span>${SFX_HAS_OLD ? `<span class="chip" data-act="sfxpack" title="Switch between the original and the royalty-free sound pack (reloads the page)">Sound pack: ${sfxPack() === 'new' ? 'New' : 'Old'}</span>` : ''}</div>
+      ${myMusicBlock()}
       <div class="foot">Sound is on. The speaker button at the top, or M, mutes it.</div>`);
   }
 

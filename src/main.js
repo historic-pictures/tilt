@@ -62,6 +62,9 @@ function setMusic(v) {
   if (v > 0) initAudio();
   m.setVolume(v / 100);
 }
+function musicNext() { const m = audio.music; if (m && m.next) { initAudio(); m.next(); } }
+/** "Your own music" was switched, added to or removed from (src/mymusic.js): the bus swaps between those songs and the game's own. */
+function musicMine() { const m = audio.music; if (!m || !m.refreshMine) return; initAudio(); m.refreshMine(); }
 let musicSeen = null, musicMood = null, musicDuck = false;
 function musicSync() {
   const m = audio.music; if (!m || !m.play) return;     // audio module still loading
@@ -71,6 +74,7 @@ function musicSync() {
   else if (S.mode === 'charge') duck = true;           // keep whatever is playing, just lower it
   else if (S.mode === 'after' && C && C.carded && M && M.result) mood = M.result.startsWith('win') || M.result === 'practice' ? 'victory' : 'defeat';
   else if (S.mode === 'ready' || S.mode === 'after' || S.mode === 'intro') mood = 'between';
+  if (m.place) m.place(S.mode === 'menu' ? 'menu' : 'match');
   if (duck !== musicDuck) { musicDuck = duck; m.duck(duck); }
   if (mood && mood !== musicMood) { musicMood = mood; m.play(mood); }
 }
@@ -2748,6 +2752,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'Space' || k === 'Enter') { e.preventDefault(); if (S.mode === 'intro' || (C && (C.mont || C.beat))) { skipKey = true; return; } if (e.repeat) return; if (S.mode === 'charge' && k === 'Space') doBrace(); else advance(); }
   else if (k === 'KeyV') { if (S.mode === 'replay') replayView(); else { S.fp = !S.fp; profile.firstPerson = S.fp; saveProfile(); } }
   else if (k === 'KeyM') setSound(S.muted);
+  else if (k === 'KeyN') { if (S.mode === 'menu' && !e.repeat) musicNext(); }
   else if (k === 'KeyR') { if (M && S.paused && !S.rpl) openReplays('pause'); else if (M && !S.paused && M.result && C && C.carded && S.mode === 'after') openReplays('card'); else if (C && S.mode === 'after' && C.replayed && C.rec.f.length > 20 && !C.cut && !R && !S.online) startReplay({ frozen: true }); }
   else if (k === 'KeyE' || k === 'Digit4') { if (S.mode === 'ready') interlude(4); else if (C && player.speed < 2.6 && C.patCd <= 0 && S.mode === 'charge') { C.patCd = 1.2; M.agit = clamp(M.agit - 0.22, 0, 1); audio.snort(0); } }
   else if (k === 'KeyX' || k === 'Digit1') { if (S.mode === 'ready') interlude(1); else if (C && S.mode === 'after' && opp && opp.unhorsed && !C.courtesy) { C.courtesy = true; react('salute', 1, false); discover('courtesy'); withFeats(() => courtesyFeat(profile)); say('You salute your fallen foe. The gallery approves.', 'THE GALLERY', 2, { prompt: true, phases: 'after' }); } }
@@ -3134,7 +3139,7 @@ const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
   get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, newTable, online: onlineApi,
   resetCircuit() { profile.table = newTable(); profile.venue = 0; saveProfile(); },
   startPractice(restart) { if (restart) { profile.lesson = 0; saveProfile(); } startMatch(Math.max(0, venueIdx), null, false, true); },
-  setVenue, musicVol, setMusic, voicesOn, setVoices, checkFeats() { withFeats(() => checkFeats(profile)); }, ui: (k) => { initAudio(); audio.ui(k); }, S, onShow: (name) => { S.menuView = name; },
+  setVenue, musicVol, setMusic, musicNext, musicMine, voicesOn, setVoices, checkFeats() { withFeats(() => checkFeats(profile)); }, ui: (k) => { initAudio(); audio.ui(k); }, S, onShow: (name) => { S.menuView = name; },
 });
 $('soundBtn').addEventListener('click', () => setSound(S.muted));
 { // show the saved sound state on the button (no save); browsers need a gesture before audio starts

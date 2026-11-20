@@ -586,3 +586,42 @@ body.touch.compact .online .rrow { font-size: 15px; padding: 3px 8px; gap: 8px; 
 body.touch.compact .online .rrow span { font-size: 13px; }
 body.touch.compact .online .wait.big { font-size: 20px; margin: 12px 0 6px; }
 body.touch.compact .online .onrow.three .btn.big small { font-size: 11px; }
+
+/* Your own music (src/mymusic.js) */
+.mymusic { margin-top: 8px; }
+.mymusic .toggles { margin-top: 4px; }
+.mymusic .chip { user-select: none; }
+.mmlist { margin-top: 4px; max-height: 5.2em; overflow-y: auto; border: 1px solid var(--ink-soft); padding: 2px 6px; font-size: 14px; }
+.mmrow { display: flex; justify-content: space-between; gap: 8px; line-height: 1.3; }
+.mmrow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mmrow b { cursor: pointer; color: var(--ink-soft); }
+.mmrow b:hover { color: var(--red); }
+.mmnow { margin-top: 3px; font-size: 14px; min-height: 1.2em; }
+.mmmsg { font-size: 13px; color: var(--red); }
+.mmmsg:empty { display: none; }
+.mmnote { font-size: 12px; font-style: italic; color: var(--ink2); }
+body.touch.compact .mmlist { max-height: 3.9em; font-size: 12px; margin-top: 2px; }
+body.touch.compact .mmnow { font-size: 12px; margin-top: 1px; }
+body.touch.compact .mmnote { font-size: 11px; }
+body.touch.compact .mymusic { margin-top: 4px; }
+
+/* YouTube music box (src/ytmusic.js): the player stays visible, 200x200, never covered */
+#ytbox { position: fixed; z-index: 58; width: 200px; background: #1b130b; border: 1px solid var(--ink-soft); box-shadow: 0 2px 10px rgba(0,0,0,.5); color: #f2e6c9; font-size: 12px; }
+#ytbox[data-where="menu"] { right: 8px; bottom: 8px; }
+body.touch #ytbox[data-where="menu"] { right: 0; bottom: 50px; }
+#ytbox[data-where="match"] { left: 8px; top: 66px; }
+#ytbox .ythead { display: flex; align-items: center; gap: 8px; padding: 2px 6px; background: #2b1f12; line-height: 18px; }
+#ytbox #ytnow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ytbox b { cursor: pointer; font-weight: normal; white-space: nowrap; }
+#ytbox b:hover { color: #ff8a70; }
+#ytnote { display: none; padding: 2px 6px; background: #5a1f14; font-size: 11px; }
+#ytframe { display: block; }
+#ytframe iframe { display: block; }
+.mmadd { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.mmadd input { flex: 1; min-width: 0; font: inherit; font-size: 14px; background: transparent; border: 0; border-bottom: 1px solid var(--ink-soft); color: var(--ink); }
+.mymusic .toggles .lbl { font-size: 14px; color: var(--ink2); }
+/* the training lesson card sits to the right of the YouTube box instead of under it */
+body:has(#ytbox[data-where="match"]) #lesson { left: 222px; width: 300px; }
+/* phone in landscape: the top-right is the only free 200x224 patch (SPUR is below it, the pause and sound buttons are top-left) */
+body.touch.compact #ytbox[data-where="match"] { left: auto; right: 8px; top: 4px; }
+body.touch.compact:has(#ytbox[data-where="match"]) #lesson { left: 14px; width: 330px; }
