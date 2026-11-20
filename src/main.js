@@ -1996,6 +1996,7 @@ function showCard() {
   $('cardTitle').textContent = B ? (final ? (B.held ? 'THE BRIDGE IS HELD' : 'THE BRIDGE IS LOST') : M.result.startsWith('win') ? 'BOUT WON' : M.result === 'draw' ? 'BOUT DRAWN' : 'BOUT LOST')
     : M.void ? 'THE JOUST IS VOID' : { 'win': 'VICTORY', 'win-unhorse': 'VICTORY BY UNHORSING', 'loss': 'DEFEAT', 'loss-unhorse': 'UNHORSED', 'loss-dq': 'DISQUALIFIED', 'win-dq': 'VICTORY — HE IS DISQUALIFIED', 'loss-yield': 'YOU YIELD — TOO BATTERED TO RIDE', 'win-yield': 'VICTORY — HE YIELDS', 'draw': 'HONOURS EVEN', 'practice': 'YOU ARE READY FOR THE LISTS' }[M.result];
   $('cardReplays').classList.toggle('hidden', !recList().length);
+  if (S.online && M.result && NET.net) rematchHint(); else
   $('cardHint').textContent = nextOd ? `The next challenger is ${nextOd.short} · ${touchMode ? 'TAP' : 'SPACE / CLICK'} to meet him` : touchMode ? 'TAP to continue' : 'SPACE / CLICK to continue';
   if (M.how) voice.later(0.4, () => say(`The prize is given for ${M.how}.`, 'THE JUDGES', 1, { ttl: 8 }));
   const base = `${profile.name} ${M.score[0]} — ${M.score[1]} ${M.od.short}`;
@@ -2267,6 +2268,7 @@ function advance() {
   if (S.paused) return;
   if (S.mode === 'replay') { if (touchMode) replayView(); else endReplay(); return; }
   if (S.mode === 'intro') return;      // a tap no longer skips the intro: hold Space / Enter (see skipVote)
+  if (S.mode === 'after' && C.carded && M.result && S.online && NET.net && !M.forfeit) { rematchVote(); return; }      // online: a rematch vote (Esc, then Leave the lists, to go)
   if (S.mode === 'after' && C.carded && M.result && M.bridge && !M.bridge.final) { audio.ui('select'); nextBout(); return; }      // the bridge goes on: the next challenger
   if (S.mode === 'after' && C.carded && M.result) { audio.ui('select'); const wasCircuit = M.circuit; endMatch(); menus.show(wasCircuit ? 'circuit' : 'main'); }
 }
@@ -2275,8 +2277,8 @@ function nextBout() {
   const B = M.bridge, vIdx = M.vIdx; B.bout++;
   endMatch(); startMatch(vIdx, B.queue[B.bout - 1], false, false, 'bridge', 0, B);
 }
-function endMatch() {
-  if (S.online) netLeave();
+function endMatch(keepLink = false) {
+  if (S.online && !keepLink) netLeave();
   if (world && world.setTilt) world.setTilt(true);
   for (const id of ['card', 'hud', 'verdict', 'lesson', 'royalCap', 'replayTag', 'replayKeys', 'replayYou', 'replayHim']) $(id).classList.add('hidden');
   $('helmMask').style.display = 'none'; $('flashTxt').className = '';
@@ -2438,6 +2440,7 @@ function lobbyRide() {
 }
 function startOnlineMatch() {
   if (!LOBBY.friend || M) return;
+  NET.againMe = NET.againThem = false;
   NET.od = onlineOd(LOBBY.friend);
   startMatch(LOBBY.room.v, 'friend', false, false, LOBBY.room.m, LOBBY.room.c, null, true);
 }
@@ -2467,6 +2470,9 @@ function onNetMessage(m) {
     if (m.t === 'room') { LOBBY.room = cleanRoom(m); if (!M) setVenue(LOBBY.room.v); lobbyShow(); return; }
     if (m.t === 'start' && LOBBY.friend) { LOBBY.room = cleanRoom(m); startOnlineMatch(); return; }
   }
+  if (m.t === 'start' && M && M.result && S.online && !NET.host && LOBBY.friend) {      // the host began the rematch: follow him even if his vote went astray
+    NET.againMe = NET.againThem = false; endMatch(true); NET.remote.reset(); NET.rem = null; LOBBY.room = cleanRoom(m); startOnlineMatch(); return;
+  }
   if (M && S.online) onMatchMessage(m);
 }
 const HOWS = ['three strokes in the sight of the helm', 'the fewer faults'];
@@ -2481,6 +2487,7 @@ function onMatchMessage(m) {
     case 'rdy': if (NET.host && C && m.n === M.course) NET.rdyIn = M.course; break;
     case 'next': if (!NET.host && C && S.mode === 'after' && !M.result && m.n === M.course + 1) beginCourse(false); break;
     case 'tilt': if (NET.host && C && m.n === M.course) { C.oTiltPts = clampNum(m.p, -9, 9); M.oTilts = clampNum(m.k | 0, 0, 99); } break;
+    case 'again': NET.againThem = true; if (M.result && C && C.carded) rematchHint(); rematchCheck(); break;      // (a vote that comes before my card shows is kept)
     case 'bye': netForfeit(); break;
     default: break;      // 'ka' and anything unknown
   }
@@ -2630,11 +2637,26 @@ function netLeave() {
   syncAnnounce();
 }
 /** The friend has gone (said bye, closed, or fell silent): you win by forfeit, unless the joust was already decided. */
+/** Rematch: each player's vote is locked in until the other's arrives (as the intro skip); then the host starts the same match again. */
+function rematchHint() {
+  const go = touchMode ? 'TAP' : 'SPACE / CLICK', out = touchMode ? 'pause to leave' : 'ESC to leave';
+  $('cardHint').textContent = NET.againMe ? `Waiting for your opponent to accept the rematch… · ${out}` : NET.againThem ? `Your opponent wants a rematch · ${go} to accept · ${out}` : `${go} for a rematch · ${out}`;
+}
+function rematchVote() {
+  if (NET.againMe) return;
+  NET.againMe = true; netSend({ t: 'again' }); audio.ui('select'); rematchHint(); rematchCheck();
+}
+function rematchCheck() {
+  if (!NET.againMe || !NET.againThem || !M || !M.result) return;
+  NET.againMe = NET.againThem = false;
+  endMatch(true); NET.remote.reset(); NET.rem = null;
+  if (NET.host) { netSend(roomMsg('start')); startOnlineMatch(); }      // the guest starts on the host's 'start' (the channel keeps order, so it comes after his vote)
+}
 function netForfeit() {
   if (!M || !S.online || M.forfeit) return;
   M.forfeit = true;
   const n = NET.net; NET.net = null; NET.token++; clearInterval(NET.ka); NET.ka = 0; if (n) { n.onOpen = n.onMessage = n.onClose = null; try { n.close(); } catch (e) { /* ignore */ } }
-  if (M.result) return;      // already decided: he is only leaving the card
+  if (M.result) { if (C && C.carded) $('cardHint').textContent = `Your opponent has left · ${touchMode ? 'TAP' : 'SPACE / CLICK'} to continue`; return; }      // already decided: he is only leaving the card
   if (!C || S.mode === 'intro') { endMatch(); menus.show('main'); toast('THE LISTS ARE EMPTY', 'Your opponent has left the lists.', 6); return; }
   M.result = 'win-forfeit'; S.mode = 'after'; C.pL.done = C.oL.done = true; C.carded = C.verdict = C.replayed = C.montDone = C.judged = true; C.countDue = false;
   for (const st of [C.pL, C.oL]) if (!st.res) st.res = { zone: 'none', pts: 0, code: 'm', text: '' };
