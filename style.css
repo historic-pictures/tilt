@@ -550,6 +550,29 @@ body.touch.compact .online .onrow, body.touch.compact .online .joinrow { margin:
 body.touch.compact .online .btn.big { font-size: 17px; padding: 8px 14px; }
 body.touch.compact .online input.name.code { font-size: 24px; width: 150px; }
 
+/* ---- Rankings: your row over a scrolling list; the page itself never scrolls */
+.ranksscr .page { display: flex; flex-direction: column; overflow: hidden; }
+.ranksscr .rkme { margin: 8px 0 4px; padding: 6px 10px; border: 1px solid var(--gold2, #a8883c); border-radius: 4px; background: rgba(255, 250, 235, .45); font-size: 19px; }
+.ranksscr .rkme em { color: var(--ink2); font-size: 15px; }
+.ranksscr .rkhead, .ranksscr .rkrow { display: grid; grid-template-columns: 38px 1fr 110px 70px 64px; gap: 10px; align-items: baseline; padding: 3px 10px; }
+.ranksscr .rkhead { font-family: var(--caps); font-size: 14px; letter-spacing: .12em; color: var(--red2); border-bottom: 1px solid var(--ink); }
+.ranksscr .rklist { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.ranksscr .rkrow { font-size: 18px; border-bottom: 1px solid rgba(43, 29, 18, .15); }
+.ranksscr .rkrow b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranksscr .rkrow .n { color: var(--ink2); } .ranksscr .rkrow .dv { color: var(--ink2); font-size: 16px; } .ranksscr .rt, .ranksscr .wl { text-align: right; }
+.ranksscr .rkrow.me { background: rgba(176, 52, 38, .16); outline: 1px solid var(--red); }
+.ranksscr .rkrec { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.ranksscr .rkcode { font-family: monospace; font-size: 17px; word-break: break-all; padding: 8px 10px; border: 1px dashed var(--ink); background: rgba(255, 250, 235, .5); user-select: all; }
+.ranksscr .joinrow input.name { flex: 1; min-width: 0; }
+body.touch.compact .ranksscr .page { padding: 10px 22px 8px; }
+body.touch.compact .ranksscr .rkme { font-size: 14px; margin: 4px 0 2px; padding: 3px 8px; }
+body.touch.compact .ranksscr .rkme em { font-size: 12px; }
+body.touch.compact .ranksscr .rkhead, body.touch.compact .ranksscr .rkrow { grid-template-columns: 28px 1fr 84px 52px 48px; gap: 6px; padding: 1px 6px; }
+body.touch.compact .ranksscr .rkrow { font-size: 14px; } body.touch.compact .ranksscr .rkrow .dv { font-size: 12px; } body.touch.compact .ranksscr .rkhead { font-size: 11px; }
+body.touch.compact .ranksscr .rkrec p { font-size: 13px; margin: 2px 0 4px; } body.touch.compact .ranksscr .rkcode { font-size: 12px; padding: 4px 6px; }
+body.touch.compact .ranksscr .joinrow { margin: 4px 0; }
+body.touch.compact .ranksscr h3 { font-size: 24px; }
+
 /* ---- public rooms (the online screen's list) */
 .online .onrow.three { gap: 12px; flex-wrap: nowrap; }
 .online .onrow.three .btn.big { flex: 1 1 0; min-width: 0; }

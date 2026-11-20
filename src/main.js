@@ -28,6 +28,7 @@ import { ANNOUNCER, HOST_LINES, INTRO, hostOf, hailName, bioOf, boastFor, fill, 
 import { ACH_BY_ID, ensureFeats, checkFeats, courseFeats, matchFeats, circuitFeat, courtesyFeat, ladyFeat, rankLine } from './achievements.js';
 import { Hit, sweepCapCap, sweepCapObb, capCapGap, capObbGap } from './collide.js';
 import { createNet, makeCode, cleanCode, validCode, failText, preloadNet } from './net.js';
+import * as ranks from './ranks.js';
 import { cleanName, Remote, SEND_HZ, packProfile, cleanProfile, onlineOd, cleanRoom, onlineModeIds, packRider, cleanState, applyRider, mirrorVec, MIRROR_RESULT, cleanRes, cleanNear, clampNum } from './online.js';
 
 const $ = (id) => document.getElementById(id);
@@ -141,8 +142,9 @@ window.addEventListener('resize', resize);
 // ------------------------------------------------------------------ state
 const S = { mode: 'menu', time: 0, timeScale: 1, excite: 0.12, slowT: 0, shake: 0, fp: false, muted: (() => { try { return localStorage.getItem('tilt.sound') === 'off'; } catch (e) { return false; } })(), introT: 0, skipHold: 0, skipWanted: { me: false, them: false }, online: false, menuAng: 0.6, paused: false, menuView: 'main' };
 let profile = loadProfile();
+ranks.setNameSource(() => profile.name);
 /** Joust a friend (see src/net.js, src/online.js and the 'online' block below): the link, who is host, the friend's interpolated rider. */
-const NET = { net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0 };
+const NET = { mid: '', oppPlay: null, net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0 };
 let world = null, worldKey = -1, venueIdx = -1, player = null, opp = null, M = null, C = null, R = null;
 const G = window.G = { S, auto: false, get M() { return M; }, get C() { return C; }, get R() { return R; }, get player() { return player; }, get opp() { return opp; }, get world() { return world; }, camera, scene, renderer };
 S.fp = !!profile.firstPerson;
@@ -670,6 +672,7 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
     agit: 0.15 + (1 - player.horseDef.nerve) * 0.3, focus: 1, fouls: 0, breaks: [0, 0], result: null, online: !!onl, hpO: { horse: 1, body: 1 }, oTilts: 0, hp: { horse: 1, body: 1 }, bodyS: { p: { arm: 0, wind: 0 }, o: { arm: 0, wind: 0 } }, taught: {}, lesson: practice ? Math.min(profile.lesson || 0, LESSONS.length - 1) : -1,
     kit: modeKit(practice ? null : mode), shyN: [0, 0], shieldOff: [0, 0], sights: [0, 0], maxDef: 0, tilts: 0, usedFacts: new Set(), ladyPending: false, teachPick: null,
     stats: [0, 1].map(() => ({ broken: 0, attaint: 0, helm: 0, miss: 0, top: 0, best: 0 })), tech: { sight: 0, lance: 0, horse: 0, will: 0, n: 0 } };
+  if (onl) { M.mid = NET.mid; M.oppRid = LOBBY.friend ? LOBBY.friend.rid : ''; }
   if (bridge && bridge.keep) { const k = bridge.keep; M.stamina = k.stamina; M.hp.horse = k.horse; M.hp.body = k.body; M.agit = k.agit; M.focus = Math.min(k.focus, k.body); M.fav = Object.assign({}, k.fav); M.favour = k.favour; if (k.bodyS) Object.assign(M.bodyS.p, k.bodyS); }      // the bridge: nothing is mended between bouts
   if (M.kit.shieldTall > 1) { player.tallShield(M.kit.shieldTall); if (!practice) opp.tallShield(M.kit.shieldTall); }      // the Renntartsche: the same tall shield for both
   M.retUsed = new Set(); field.setup(profile.retinue, profile.arms, practice, practice ? null : { name: od.short, arms: od.arms });
@@ -1120,16 +1123,20 @@ function updateRide(dt, dtReal) {
   if (live) {
     let steer = ((keys.left ? -1 : 0) + (keys.right ? 1 : 0)) * (M.kit.blind ? PHYS.kit.blindSteer : 1);
     if (touchMode && !G.auto) steer = clamp(-(C.lat - LANE_X) * 1.2 - C.latV * 0.4, -1, 1) * 0.85 * (M.kit.blind ? PHYS.kit.blindSteer : 1);      // phone: no reins, so the rider keeps his own line (a fretful horse still wavers)          // left = toward the tilt; a blinkered horse keeps his line and is slow to be turned
-    let shy = M.kit.blind ? 0 : Math.max(0, M.agit - 0.45) * 1.6 * (0.4 + wobble(S.time * 0.9, 3) * 0.6);      // (a blinkered horse cannot shy)
+    // a fretful horse (agit > swayAt) sways about his lane, both ways and centred: his position is a slow sine pair that starts at the lane, so he never pulls one way (a blinkered horse cannot)
+    const swayA = M.kit.blind ? 0 : clamp((M.agit - PHYS.kit.swayAt) / (1 - PHYS.kit.swayAt), 0, 1) * PHYS.kit.swayMax * clamp(player.speed / 5, 0, 1);
+    C.swayT = (C.swayT || 0) + dt; if (C.swayDir === undefined) { C.swayDir = Math.random() < 0.5 ? -1 : 1; C.swayPos = 0; }
+    const swayNow = Math.max(-PHYS.kit.swayIn, swayA * C.swayDir * (0.65 * Math.sin(PHYS.kit.swayW1 * C.swayT) + 0.35 * Math.sin(PHYS.kit.swayW2 * C.swayT)));      // toward the tilt it stops short of the barrier: a fretful horse is not a fault of the rider's
+    const shy = 0;
     // open eyes: a nervous horse may shy from the oncoming lance in the last strides, once, losing a little pace and veering away
     if (M.kit.shy && S.mode === 'charge' && !C.shyRolled && gap < PHYS.kit.shyGap && gap > 4) {
       C.shyRolled = true;
       if (Math.random() < M.kit.shy * clamp((M.agit - PHYS.kit.shyAt) * PHYS.kit.shyGain, 0, PHYS.kit.shyMax) * (1.3 - player.horseDef.nerve)) { C.latV += PHYS.kit.shyKick; player.speed *= PHYS.kit.shyPace; M.shyN[0]++; callout('YOUR HORSE SHIES', 'bad'); }
     }
     C.latV += (steer * 3.2 + shy) * dt * clamp(player.speed / 5, 0.15, 1);
-    if (!touchMode && !G.auto && !M.taught.drift && shy > 0.05 && C.lat > LANE_X + 0.15 && !keys.left) { M.taught.drift = true; callout('YOUR HORSE PULLS WIDE · HOLD A', 'bad'); }      // the nervous horse's drift is a mechanic: say how to answer it, once a match
     C.latV *= Math.exp(-2.4 * dt);
-    C.lat += C.latV * dt;
+    C.lat += C.latV * dt + (swayNow - C.swayPos); C.swayPos = swayNow;
+    if (!touchMode && !G.auto && !M.taught.drift && swayA > 0.02 && Math.abs(C.lat - LANE_X) > PHYS.kit.swayHint && !keys.left && !keys.right) { M.taught.drift = true; callout('YOUR HORSE IS FRETFUL · STEER WITH A / D', 'bad'); }      // the nervous horse's sway is a mechanic: say how to answer it, once a match, only when it is large
     if (C.lat < 0.7 && !M.mode.tilt) { C.lat = 0.7; C.latV = Math.max(C.latV, 0.4); }       // open field: nothing to strike, the horses simply will not close further
     else if (C.lat < 0.7) {
       C.lat = 0.7; C.latV = 0.9; player.speed *= 0.93;
@@ -2052,6 +2059,7 @@ function showCard() {
   }
   if (B) $('cardFacts').innerHTML += `<h6>THE BRIDGE</h6>` + B.log.map((b, i) => f(`BOUT ${i + 1} · ${b.short.toUpperCase()}`, b.res.startsWith('win') ? 'won' : b.res === 'draw' ? 'drawn' : 'lost', `${b.score[0]} — ${b.score[1]}`)).join('');
   if (M.circuit) recordCircuit();
+  if (S.online) rankReport();
 }
 
 // ------------------------------------------------------------------ instant replay
@@ -2353,7 +2361,7 @@ function netClose() {
   syncAnnounce();
 }
 function netWire(n) {
-  n.onOpen = () => { NET.lastRx = performance.now(); n.send(packProfile(profile)); syncAnnounce(); };
+  n.onOpen = () => { NET.lastRx = performance.now(); n.send(Object.assign(packProfile(profile), { rid: ranks.id() })); syncAnnounce(); if (!ranks.id()) ranks.ensure().then((rid) => { if (rid && NET.net === n) n.send({ t: 'rid', rid }); }); };
   n.onMessage = (m) => { NET.lastRx = performance.now(); onNetMessage(m); };
   n.onClose = () => onNetClose();
   clearInterval(NET.ka); NET.ka = setInterval(() => netSend({ t: 'ka' }), 1500);      // (the match loop sends nothing while a tab is hidden; this keeps the friend from thinking you left)
@@ -2423,6 +2431,7 @@ function lobbyBack() {
 }
 function lobbySetPublic(b) { if (!NET.host || LOBBY.phase !== 'hostWait') return; LOBBY.pub = !!b; lobbyShow(); }
 function lobbyOpen() {
+  ranks.syncName();      // (the rank server: make the key, register, send the name; fails silently)
   netClose(); stopWatch(); NET.host = false; LOBBY.qt++; LOBBY.phase = 'choose'; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.pub = LOBBY.quick = LOBBY.fromList = false; preloadNet(); import('./lobby.js').then((m) => m.preloadLobby()).catch(() => {});
   if (!LOBBY.venueSet) LOBBY.room.v = Math.min(profile.venue || 0, VENUES.length - 1);      // (Quick match opens the lists you last rode in)
 }
@@ -2436,12 +2445,19 @@ function lobbySetRoom(k, v) {
 }
 function lobbyRide() {
   if (!NET.host || LOBBY.phase !== 'hostReady' || !NET.net || !NET.net.open || !LOBBY.friend) return;
-  netSend(roomMsg('start')); startOnlineMatch();
+  netSend(startMsg()); startOnlineMatch();
 }
+/** The host's 'start': the room's settings and a fresh match id (random 128 bits; both players sign their reports with it, see src/ranks.js). */
+function startMsg() {
+  const b = crypto.getRandomValues(new Uint8Array(16)); NET.mid = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return Object.assign(roomMsg('start'), { mid: NET.mid });
+}
+const HEX = (v, n) => (typeof v === 'string' && v.length === n && /^[0-9a-f]+$/.test(v) ? v : '');
 function startOnlineMatch() {
   if (!LOBBY.friend || M) return;
   NET.againMe = NET.againThem = false;
   NET.od = onlineOd(LOBBY.friend);
+  ranksPlay();
   startMatch(LOBBY.room.v, 'friend', false, false, LOBBY.room.m, LOBBY.room.c, null, true);
 }
 function onNetClose() {
@@ -2462,16 +2478,18 @@ function onNetMessage(m) {
   if (!m || typeof m !== 'object') return;
   if (m.t === 'hi') {
     const f = cleanProfile(m); if (!f || M) return;
-    LOBBY.friend = f;
+    LOBBY.friend = f; friendLookup();
     if (NET.host) { LOBBY.phase = 'hostReady'; netSend(roomMsg()); } else LOBBY.phase = 'joined';
     lobbyShow(); return;
   }
+  if (m.t === 'rid') { if (LOBBY.friend && !LOBBY.friend.rid && !M) { LOBBY.friend.rid = HEX(m.rid, 16); friendLookup(); } return; }
+  if (m.t === 'play') { const mid = HEX(m.mid, 32), sig = typeof m.sig === 'string' && m.sig.length < 200 ? m.sig : ''; if (mid && sig) NET.oppPlay = { mid, sig }; return; }
   if (!M && !NET.host) {
     if (m.t === 'room') { LOBBY.room = cleanRoom(m); if (!M) setVenue(LOBBY.room.v); lobbyShow(); return; }
-    if (m.t === 'start' && LOBBY.friend) { LOBBY.room = cleanRoom(m); startOnlineMatch(); return; }
+    if (m.t === 'start' && LOBBY.friend) { LOBBY.room = cleanRoom(m); NET.mid = HEX(m.mid, 32); startOnlineMatch(); return; }
   }
   if (m.t === 'start' && M && M.result && S.online && !NET.host && LOBBY.friend) {      // the host began the rematch: follow him even if his vote went astray
-    NET.againMe = NET.againThem = false; endMatch(true); NET.remote.reset(); NET.rem = null; LOBBY.room = cleanRoom(m); startOnlineMatch(); return;
+    NET.againMe = NET.againThem = false; endMatch(true); NET.remote.reset(); NET.rem = null; LOBBY.room = cleanRoom(m); NET.mid = HEX(m.mid, 32); startOnlineMatch(); return;
   }
   if (M && S.online) onMatchMessage(m);
 }
@@ -2650,7 +2668,7 @@ function rematchCheck() {
   if (!NET.againMe || !NET.againThem || !M || !M.result) return;
   NET.againMe = NET.againThem = false;
   endMatch(true); NET.remote.reset(); NET.rem = null;
-  if (NET.host) { netSend(roomMsg('start')); startOnlineMatch(); }      // the guest starts on the host's 'start' (the channel keeps order, so it comes after his vote)
+  if (NET.host) { netSend(startMsg()); startOnlineMatch(); }      // the guest starts on the host's 'start' (the channel keeps order, so it comes after his vote)
 }
 function netForfeit() {
   if (!M || !S.online || M.forfeit) return;
@@ -2664,6 +2682,40 @@ function netForfeit() {
   $('cardTitle').textContent = 'VICTORY BY FORFEIT'; $('cardSub').textContent = 'Your opponent has left the lists'; $('cardCols').innerHTML = ''; $('cardRows').innerHTML = ''; $('cardFacts').innerHTML = '';
   $('cardReplays').classList.add('hidden'); $('cardHint').textContent = touchMode ? 'TAP to continue' : 'SPACE / CLICK to continue'; $('card').classList.remove('hidden');
   fanfare('victory'); callout('YOUR OPPONENT HAS LEFT THE LISTS', 'good');
+  rankReport();
+}
+// ------------------------------------------------------------------ rankings (src/ranks.js; every call fails silently, online play never waits for it)
+/** The friend's rank and our head-to-head, for the room screen. */
+function friendLookup() {
+  const f = LOBBY.friend; if (!f || !f.rid) return;
+  ranks.ensure().then(async (me) => {
+    if (!me || LOBBY.friend !== f) return;
+    const [p, h] = await Promise.all([ranks.player(f.rid), ranks.h2h(me, f.rid)]);
+    if (!p || LOBBY.friend !== f) return;
+    f.rank = { text: ranks.rankText(p), h2h: ranks.h2hText(h) }; lobbyShow();
+  });
+}
+/** At the start of a match: sign "I am playing this match against him" and send it (his proof, if I leave, that I was there). */
+function ranksPlay() {
+  const mid = NET.mid, rid = LOBBY.friend && LOBBY.friend.rid;
+  if (!mid || !rid) return;
+  ranks.playProof(mid, rid).then((sig) => { if (sig && NET.net && NET.mid === mid) netSend({ t: 'play', mid, sig }); });
+}
+/** The match is decided: send my side to the rank server, then show the rating change on the card once the other side's report has confirmed it. */
+function rankReport() {
+  if (!M || !S.online || M.practice || !M.result || M.rankSent || !M.mid || !M.oppRid) return;
+  M.rankSent = true;
+  const m = M, c = (n) => Math.max(0, Math.min(99, n | 0)), a = m.stats[0], forfeit = m.result === 'win-forfeit', pl = NET.oppPlay;
+  const rec = { matchId: m.mid, oppId: m.oppRid, result: m.result, score: [Math.max(-99, Math.min(99, m.score[0] | 0)), Math.max(-99, Math.min(99, m.score[1] | 0))],
+    stats: { breaks: c(a.broken), attaints: c(a.attaint), helms: c(a.helm), unhorse: m.result === 'win-unhorse' ? 1 : 0, courses: c(m.course) }, mode: m.mode.id, venue: m.V.id };
+  if (forfeit) { if (!pl || pl.mid !== m.mid) return; rec.oppSig = pl.sig; }
+  ranks.report(rec).then(async (r) => {
+    if (!r) return;
+    if (r.status === 'pending') r = await ranks.awaitConfirm(m.mid, 8000);
+    if (!r || r.status !== 'confirmed' || M !== m) return;
+    const line = `${r.division}${r.provisional ? '?' : ''} · ${r.after} (${r.delta >= 0 ? '+' : '−'}${Math.abs(r.delta)})`;
+    $('cardSub').textContent += ' · ' + line;
+  }).catch(() => {});
 }
 const onlineApi = { get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic };
 

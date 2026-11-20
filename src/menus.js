@@ -5,6 +5,10 @@ import { GFX, setPref, PREFS } from './gfx.js';
 import { featCount } from './achievements.js';
 import { ANNOUNCER, circuitOpening } from './drama_lines.js';
 import { sfxPack, setSfxPack, SFX_HAS_OLD } from './audio.js';
+import * as ranks from './ranks.js';
+import { safeName } from './online.js';
+import { confirmBuy, buyAsk } from './confirm.js';
+let buyOk = false;   // set for the one re-dispatched click after a purchase is confirmed
 
 const el = (id) => document.getElementById(id);
 const stat = (name, v) => `<div class="stat"><span>${name}</span><div class="bar"><div style="width:${Math.round(Math.max(0.05, Math.min(1, v)) * 100)}%"></div></div></div>`;
@@ -116,8 +120,8 @@ export function initMenus(api) {
       <h5>Rules <small>${MODES[room.m].sub}</small></h5><div class="swatches">${modes.map(id => `<span class="chip ${id === room.m ? 'sel' : ''}" data-onm="${id}">${MODES[id].name}</span>`).join('')}</div>
       <h5>Courses${fixed ? ' <small>fixed by the rules</small>' : ''}</h5><div class="swatches">${fixed ? `<span class="chip sel">${fixed}</span>` : EX_COURSES.map(n => `<span class="chip ${n === room.c ? 'sel' : ''}" data-onc="${n}">${n}</span>`).join('')}</div>`;
     const summary = () => `<p class="dimtxt">${V.name}, ${V.city} · ${MODES[room.m].name} · ${fixed || room.c} courses &nbsp;(the host chooses)</p>`;
-    const friendRow = () => fr ? `<div class="friend">${crest(fr.arms, 30, 36)}<span><b>${fr.name}</b> <i>${fr.land ? '· ' + fr.land : ''}</i></span></div>` : '';
-    let head = 'Ride against a real opponent. No account needed.', actions = '<button class="btn" data-on="back">Back</button>', body = '';
+    const friendRow = () => fr ? `<div class="friend">${crest(fr.arms, 30, 36)}<span><b>${fr.name}</b> <i>${fr.rank ? '· ' + fr.rank.text + ' · ' + fr.rank.h2h : fr.land ? '· ' + fr.land : ''}</i></span></div>` : '';
+    let head = 'Ride against a real opponent. No account needed.', actions = '<button class="btn" data-on="back">Back</button>' + (ph === 'choose' ? '<button class="btn" data-on="ranks">Rankings</button>' : ''), body = '';
     const rows = () => {
       const rs = L.rooms.slice(0, 5), rl = L.relays || {};
       if (!rs.length) return `<p class="wait">${rl.failed ? 'Could not reach the lobby. Check your connection, or use Joust a friend.' : rl.open ? 'No open rooms yet: create one or try Quick match.' : 'Connecting to the lobby…'}</p>`;
@@ -305,7 +309,32 @@ export function initMenus(api) {
       ${ACH_GROUPS.map(g => { const list = ACHIEVEMENTS.filter(a => a.group === g); return list.length ? `<h5>${g} <small>${list.filter(a => got[a.id]).length}/${list.length}</small></h5><div class="feats">${list.map(seal).join('')}</div>` : ''; }).join('')}`);
   }
 
-  const screens = { main, circuit, exhibition, online, armoury, skills, how, stable, feats, welcome };
+  // ---- Rankings (src/ranks.js): your row, then the top 100; or, on the other tab, your recovery code. Every call may fail: the screen then says so and carries on.
+  const RK = { status: 'idle', me: null, rows: [], myId: '', view: 'board', code: '', msg: '', draft: '' };
+  const esc = (s) => String(s).replace(/[<>&"]/g, '');
+  function rankings() {
+    const R = RK, rk = () => { if (root.dataset.name === 'rankings') rankings(); };
+    if (R.status === 'idle') {
+      R.status = 'loading';
+      ranks.ensure().then(async (id) => {
+        R.myId = id || '';
+        const [me, rows] = await Promise.all([id ? ranks.player(id) : null, ranks.leaderboard(100)]);
+        R.me = me; R.rows = rows || []; R.status = rows || me ? 'ok' : 'fail'; rk();
+      }).catch(() => { R.status = 'fail'; rk(); });
+    }
+    const line = (p, i) => `<div class="rkrow ${p.id === R.myId ? 'me' : ''}"><span class="n">${i}</span><b>${esc(safeName(p.name))}</b><span class="dv">${p.division}</span><span class="rt">${p.rating}${p.provisional ? '?' : ''}</span><span class="wl">${p.wins}–${p.losses}</span></div>`;
+    const m = R.me, mine = m && m.matches
+      ? `<div class="rkme"><b>${esc(safeName(m.name))}</b> · ${m.division} · ${m.rating}${m.rank ? ` · rank ${m.rank}` : ''} · ${m.wins}–${m.losses}–${m.draws}${m.provisional ? ` <em>provisional (${m.matches}/10 matches)</em>` : ''}</div>`
+      : `<div class="rkme">${R.status === 'loading' ? 'Looking up your rank…' : R.status === 'fail' ? 'The rankings are not reachable just now. Online play works as usual.' : 'No ranked match yet: every online joust counts, a friend or a stranger.'}</div>`;
+    let body;
+    if (R.view === 'recover') {
+      body = `<div class="rkrec"><p>Keep this to move your rank to another device. Anyone who has it can ride as you.</p><div class="rkcode">${R.code ? R.code : R.status === 'fail' ? 'Not available while the rankings are unreachable.' : '…'}</div>
+        <p>Use a recovery code on this device (it replaces the rank this browser has):</p><div class="joinrow"><input class="name" id="rkIn" maxlength="64" placeholder="Recovery code" value="${esc(R.draft)}" autocomplete="off" spellcheck="false"><button class="btn primary" data-on="rkuse">Use code</button></div>${R.msg ? `<p class="err">${R.msg}</p>` : ''}</div>`;
+    } else body = `<div class="rkhead"><span class="n">#</span><b>Knight</b><span class="dv">Division</span><span class="rt">Rating</span><span class="wl">W–L</span></div><div class="rklist">${R.rows.length ? R.rows.map((p, i) => line(p, i + 1)).join('') : `<p class="wait">${R.status === 'loading' ? 'Loading…' : R.status === 'fail' ? 'Could not reach the rankings.' : 'No ranked knights yet. Be the first.'}</p>`}</div>`;
+    root.innerHTML = scroll('sheet ranksscr', `<div class="top"><div><h3>Rankings</h3><p>Online matches only. A “?” marks a rating still settling (under 10 matches).</p></div><div class="actions"><button class="btn" data-on="rkback">Back</button><button class="btn" data-on="rkview">${R.view === 'recover' ? 'Top 100' : 'Recovery code'}</button></div></div>${mine}${body}`);
+    const inp = el('rkIn'); if (inp) inp.addEventListener('input', () => { R.draft = inp.value; });
+  }
+  const screens = { main, circuit, exhibition, online, armoury, skills, how, stable, feats, welcome, rankings };
   function show(name) {
     if (name === 'main' && api.profile.named === false) name = 'welcome';      // first visit: your name before anything else
     // re-drawing the screen you are on keeps your place on the page
@@ -324,6 +353,8 @@ export function initMenus(api) {
     const t = e.target.closest('[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-on],[data-onv],[data-onm],[data-onc],[data-stcap],[data-stcapset],[data-skill]');
     if (!t) return;
     const p = api.profile, d = t.dataset;
+    if (buyOk) buyOk = false;
+    else { const ask = buyAsk(p, d); if (ask) { confirmBuy({ title: ask.title, price: ask.price, gold: p.gold, note: ask.note }).then((yes) => { if (yes) { buyOk = true; t.click(); buyOk = false; } }); return; } }
     api.ui(d.go || d.act ? 'select' : 'click');
     if (d.act === 'fullscreen') { if (api.fullscreen) api.fullscreen(); return; }
     if (d.go) { dismissArm = null; if (d.go === 'online') api.online.open(); return show(d.go); }
@@ -340,6 +371,10 @@ export function initMenus(api) {
       if (d.on === 'back') { joinDraft = ''; return O.back(); }
       if (d.on === 'joinmode') { O.lobby.phase = 'joinInput'; O.lobby.err = ''; return show('online'); }
       if (d.on === 'join') return O.join(joinDraft);
+      if (d.on === 'ranks') { RK.status = 'idle'; RK.view = 'board'; RK.msg = ''; return show('rankings'); }
+      if (d.on === 'rkback') return show('online');
+      if (d.on === 'rkview') { RK.view = RK.view === 'recover' ? 'board' : 'recover'; RK.msg = ''; if (RK.view === 'recover' && !RK.code) ranks.recoveryCode().then((c) => { RK.code = c || ''; if (root.dataset.name === 'rankings') show('rankings'); }); return show('rankings'); }
+      if (d.on === 'rkuse') { RK.msg = 'Checking…'; show('rankings'); ranks.restore(RK.draft).then((id) => { RK.msg = id ? '' : 'That code did not work, or the rankings are unreachable.'; if (id) { RK.status = 'idle'; RK.code = ''; RK.draft = ''; RK.view = 'board'; } if (root.dataset.name === 'rankings') show('rankings'); }); return; }
       if (d.on === 'ride') return O.ride();
       if (d.on === 'leave') { joinDraft = ''; return O.leave(); }
       return;

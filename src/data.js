@@ -424,7 +424,9 @@ export const PHYS = {
   // blindSteer: the blinkered horse's steering response; boltedHead: how much of a blow to the helm still snaps the head back; queueFatigue: arm fatigue with a queue.
   // shyAt / shyGain / shyMax: the open-eyed horse's chance to shy (once per course, inside shyGap metres of the other man); shyKick: its sideways kick; shyPace: pace it loses.
   kit: { lockWind: 0.8, lockArm: 0.5, lockTheta: 0.5, lockKick: 1, springCent: 0.5, springAbsorb: 0.35, soft: 0.3, blindSteer: 0.35, boltedHead: 0.35, queueFatigue: 0.7,
-    shyAt: 0.12, shyGain: 1.0, shyMax: 0.45, shyGap: 14, shyKick: 1.1, shyPace: 0.93, wander: 0.8 },
+    shyAt: 0.12, shyGain: 1.0, shyMax: 0.45, shyGap: 14, shyKick: 1.1, shyPace: 0.93, wander: 0.8,
+    // a fretful horse (agit over swayAt) sways about his lane, both ways, never a constant pull: peak +-swayMax m at agit 1, two slow sines (rad/s) that start at the lane
+    swayAt: 0.45, swayMax: 0.3, swayIn: 0.2, swayW1: 0.8, swayW2: 1.7, swayHint: 0.25 },
   // The unhorsed rider as one rigid body: mass (kg), moment of inertia (kg m2), bounce, grip of the sand.
   fall: { kg: 105, inertia: 13, bounce: 0.18, friction: 0.65 },
   quintainKg: 250,      // the board, its arm and sandbag, and the reaction of the post

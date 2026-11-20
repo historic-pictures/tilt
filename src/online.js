@@ -42,7 +42,7 @@ export function cleanProfile(m) {
   if (!m || typeof m !== 'object' || m.t !== 'hi') return null;
   const horse = HORSES[m.horse] ? m.horse : 'rouncey', armour = ARMOURS[m.armour] ? m.armour : 'mail';
   const helm = HELMS[m.helm] ? m.helm : ARMOURS[armour].helm;
-  return { name: safeName(m.name), arms: cleanArms(m.arms), horse, armour, helm, lance: LANCES[m.lance] ? m.lance : 'standard', cap: CAPARISONS[m.cap] ? m.cap : 'livery', bond: num(m.bond | 0, 1, 4, 1),
+  return { rid: typeof m.rid === 'string' && /^[0-9a-f]{16}$/.test(m.rid) ? m.rid : '', name: safeName(m.name), arms: cleanArms(m.arms), horse, armour, helm, lance: LANCES[m.lance] ? m.lance : 'standard', cap: CAPARISONS[m.cap] ? m.cap : 'livery', bond: num(m.bond | 0, 1, 4, 1),
     land: typeof m.land === 'string' ? m.land.replace(/[^\p{L} .'’\-]/gu, '').slice(0, 30) : '' };
 }
 /** The friend as an opponent record (what the roster's knights are in src/data.js), so that the rest of the game can treat him like one. */
