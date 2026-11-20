@@ -8,7 +8,8 @@
 //   await net.join(code)                // connect to a room (resolves when connected; rejects with Error('notfound' | 'timeout' | 'unreachable'))
 //   net.send(obj); net.close();
 //
-// There is no relay (TURN) server: some networks block direct connections, and then join() times out after JOIN_TIMEOUT.
+// STUN only unless src/netcfg.js has a TURN credentials URL: some networks block direct connections, and then join() fails with 'timeout' after JOIN_TIMEOUT.
+import { iceServers } from './netcfg.js';
 
 export const JOIN_TIMEOUT = 15000;
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';      // no I and O (and no digits: 0 and 1 look like O and I)
@@ -18,7 +19,13 @@ export const makeCode = () => { let s = ''; for (let i = 0; i < CODE_LEN; i++) s
 export const cleanCode = (v) => String(v || '').toUpperCase().replace(/[^A-Z]/g, '').split('').filter(c => ALPHABET.includes(c)).join('').slice(0, CODE_LEN);
 export const validCode = (c) => typeof c === 'string' && c.length === CODE_LEN && [...c].every(ch => ALPHABET.includes(ch));
 export const useLocal = () => { try { return new URLSearchParams(location.search).get('net') === 'local'; } catch (e) { return false; } };
-export const FAIL_TEXT = "Couldn't reach your friend. Some networks block direct connections; try another network, e.g. phone data.";
+export const FAIL_TEXTS = {
+  notfound: 'No room with that code. Check the letters, and make sure your friend is still on the waiting screen (on a phone, switching apps can close the room).',
+  timeout: "Found your friend's room but couldn't connect. One of your networks blocks direct connections.",
+  unreachable: "Couldn't reach the matchmaking server. Check your connection.",
+};
+export const failText = (e) => FAIL_TEXTS[e && e.message] || FAIL_TEXTS.timeout;
+export const FAIL_TEXT = FAIL_TEXTS.timeout;
 
 export function createNet(kind = useLocal() ? 'local' : 'peer') { return kind === 'local' ? new LocalNet() : new PeerNet(); }
 
@@ -45,37 +52,67 @@ function loadPeerJS() {
 /** Warm the library up (the online screen calls this when it opens, so that Create / Join does not wait for it). */
 export function preloadNet() { if (!useLocal()) loadPeerJS().catch(() => {}); }
 
+/** Log what the connection is doing (a player can copy the console to us): the ICE state and the kinds of candidate gathered (host / srflx / relay). */
+function watchIce(c, who) {
+  const pc = c && c.peerConnection; if (!pc) return;
+  const types = {};
+  pc.addEventListener('icecandidate', (e) => {
+    if (e.candidate) { const t = e.candidate.type || (/ typ (\w+)/.exec(e.candidate.candidate || '') || [])[1] || '?'; types[t] = (types[t] || 0) + 1; }
+    else console.warn('[net] ' + who + ' candidates gathered:', JSON.stringify(types));
+  });
+  pc.addEventListener('iceconnectionstatechange', () => console.warn('[net] ' + who + ' iceConnectionState:', pc.iceConnectionState, JSON.stringify(types)));
+}
+
 class PeerNet extends Base {
-  constructor() { super(); this.kind = 'peer'; this.peer = null; this.conn = null; }
+  constructor() { super(); this.kind = 'peer'; this.peer = null; this.conn = null; this.code = ''; this.cfg = null; this.Peer = null; this._vis = null; }
   async host(code) {
-    const Peer = await loadPeerJS();
+    this.Peer = await loadPeerJS(); this.code = code; this.cfg = { iceServers: await iceServers() };
+    await this._hostPeer();
+    // phones: the page was asleep and the signalling link dropped (or the peer was destroyed): when it is seen again, reconnect, or take the same code again
+    this._vis = () => {
+      if (document.visibilityState !== 'visible' || this._dead || !this.code) return;
+      const p = this.peer;
+      if (!p || p.destroyed) { if (!(this.conn && this.conn.open)) this._rehost(8); }
+      else if (p.disconnected) { console.warn('[net] host: signalling link was down, reconnecting'); try { p.reconnect(); } catch (e) { /* ignore */ } }
+    };
+    document.addEventListener('visibilitychange', this._vis);
+    return code;
+  }
+  _rehost(left) {
+    console.warn('[net] host: re-opening room', this.code);
+    this._hostPeer().catch((e) => { console.warn('[net] host: re-open failed:', e && e.message); if (left > 0 && !this._dead) setTimeout(() => { if (!this._dead && (!this.peer || this.peer.destroyed)) this._rehost(left - 1); }, 4000); });
+  }
+  _hostPeer() {
     return new Promise((resolve, reject) => {
       let done = false;
-      const peer = this.peer = new Peer('tilt-' + code);
+      try { if (this.peer && !this.peer.destroyed) this.peer.destroy(); } catch (e) { /* ignore */ }
+      const peer = this.peer = new this.Peer('tilt-' + this.code, { config: this.cfg });
       const fail = (e) => { if (!done) { done = true; reject(e); } };
       const t = setTimeout(() => fail(new Error('unreachable')), JOIN_TIMEOUT);
-      peer.on('open', () => { if (!done) { done = true; clearTimeout(t); resolve(code); } });
-      peer.on('error', (err) => { clearTimeout(t); fail(new Error(err && err.type === 'unavailable-id' ? 'taken' : 'unreachable')); });
+      peer.on('open', () => { if (!done) { done = true; clearTimeout(t); resolve(this.code); } });
+      peer.on('error', (err) => { clearTimeout(t); console.warn('[net] host peer error:', err && err.type); fail(new Error(err && err.type === 'unavailable-id' ? 'taken' : 'unreachable')); });
       peer.on('connection', (c) => {
         if (this.conn && this.conn.open) { try { c.on('open', () => c.close()); } catch (e) { /* ignore */ } return; }      // a room holds two
-        this._attach(c);
+        watchIce(c, 'host'); this._attach(c);
       });
-      peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { /* ignore */ } });      // lost the signalling server: the open link carries on
+      peer.on('disconnected', () => { try { if (!peer.destroyed && document.visibilityState === 'visible') peer.reconnect(); } catch (e) { /* ignore */ } });      // lost the signalling server: the open link carries on
     });
   }
   async join(code) {
-    const Peer = await loadPeerJS();
+    const Peer = await loadPeerJS(), cfg = { iceServers: await iceServers() };
     return new Promise((resolve, reject) => {
-      let done = false;
-      const peer = this.peer = new Peer();
-      const fail = (m) => { if (!done) { done = true; clearTimeout(t); reject(new Error(m)); } };
-      const t = setTimeout(() => fail('timeout'), JOIN_TIMEOUT);
-      peer.on('error', (err) => { const ty = err && err.type; fail(ty === 'peer-unavailable' ? 'notfound' : ty === 'network' || ty === 'server-error' || ty === 'socket-error' || ty === 'socket-closed' ? 'unreachable' : 'timeout'); });
+      let done = false, t1 = 0, t2 = 0, c = null;
+      const peer = this.peer = new Peer(undefined, { config: cfg });
+      const fail = (m, why) => { if (!done) { done = true; clearTimeout(t1); clearTimeout(t2); const pc = c && c.peerConnection; console.warn('[net] join failed:', m, why || '', pc ? 'iceConnectionState=' + pc.iceConnectionState : ''); reject(new Error(m)); } };
+      t1 = setTimeout(() => fail('unreachable', 'no answer from the signalling server'), JOIN_TIMEOUT);
+      peer.on('error', (err) => { const ty = err && err.type; fail(ty === 'peer-unavailable' ? 'notfound' : ty === 'network' || ty === 'server-error' || ty === 'socket-error' || ty === 'socket-closed' ? 'unreachable' : 'timeout', 'peer error ' + ty); });
       peer.on('open', () => {
-        const c = peer.connect('tilt-' + code, { reliable: true, serialization: 'json' });
-        c.on('open', () => { if (done) return; done = true; clearTimeout(t); this._attach(c); resolve(); });
-        c.on('error', () => fail('timeout'));
-        c.on('close', () => { if (!done) fail('timeout'); });
+        clearTimeout(t1); t2 = setTimeout(() => fail('timeout', 'no data channel in time'), JOIN_TIMEOUT);
+        c = peer.connect('tilt-' + code, { reliable: true, serialization: 'json' });
+        setTimeout(() => watchIce(c, 'guest'), 0);
+        c.on('open', () => { if (done) return; done = true; clearTimeout(t2); this._attach(c); resolve(); });
+        c.on('error', (e) => fail('timeout', 'connection error ' + (e && e.type)));
+        c.on('close', () => { if (!done) fail('timeout', 'connection closed before it opened'); });
       });
     });
   }
@@ -88,7 +125,7 @@ class PeerNet extends Base {
     c.on('error', () => { if (this.conn === c) this._closed(); });
   }
   send(obj) { try { if (this.conn && this.conn.open) this.conn.send(obj); } catch (e) { /* the link is going */ } }
-  close() { this._dead = true; this.open = false; try { if (this.conn) this.conn.close(); } catch (e) { /* ignore */ } try { if (this.peer) this.peer.destroy(); } catch (e) { /* ignore */ } this.conn = this.peer = null; }
+  close() { this._dead = true; this.open = false; if (this._vis) document.removeEventListener('visibilitychange', this._vis); try { if (this.conn) this.conn.close(); } catch (e) { /* ignore */ } try { if (this.peer) this.peer.destroy(); } catch (e) { /* ignore */ } this.conn = this.peer = null; }
 }
 
 // ------------------------------------------------------------------ BroadcastChannel (?net=local): two tabs of one browser

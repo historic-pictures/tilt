@@ -5,6 +5,7 @@
 // The friend's own world is that world turned 180 degrees about the middle of the lists (the origin), so his rider is shown at (-x, y, -z), yawed by PI, riding the other way
 // (dir = -dir). Local quantities (lance lowering, aim, brace, guard, speed, the horse's gait) are in the rider's own frame and copy across unchanged.
 import * as THREE from 'three';
+import { filterName } from './namefilter.js';
 import { HORSES, ARMOURS, HELMS, CAPARISONS, LANCES, MODES, VENUES, bondLevel, rankOf, RANKS } from './data.js';
 
 export const PROTOCOL = 1;
@@ -17,6 +18,9 @@ const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 
 
 /** A name typed by a player: no markup, at most 22 characters, never empty (it is put into the page, so it is cleaned again when it arrives). */
 export const cleanName = (v) => String(v == null ? '' : v).replace(/[^\p{L}\p{N} .,'’\-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 22) || 'Sir Nameless';
+
+/** A name from somebody else, as it may be shown: cleaned, and "A knight" if it is on the block-list. */
+export const safeName = (v) => filterName(cleanName(v));
 
 /** The modes a friendly online joust may use: not Keep the Bridge (a queue of challengers) nor Judged Tilt (a card of style marks that needs both riders' lance work). */
 export const onlineModeIds = () => Object.values(MODES).filter(m => !m.bridge && !m.style).map(m => m.id);
@@ -38,7 +42,7 @@ export function cleanProfile(m) {
   if (!m || typeof m !== 'object' || m.t !== 'hi') return null;
   const horse = HORSES[m.horse] ? m.horse : 'rouncey', armour = ARMOURS[m.armour] ? m.armour : 'mail';
   const helm = HELMS[m.helm] ? m.helm : ARMOURS[armour].helm;
-  return { name: cleanName(m.name), arms: cleanArms(m.arms), horse, armour, helm, lance: LANCES[m.lance] ? m.lance : 'standard', cap: CAPARISONS[m.cap] ? m.cap : 'livery', bond: num(m.bond | 0, 1, 4, 1),
+  return { name: safeName(m.name), arms: cleanArms(m.arms), horse, armour, helm, lance: LANCES[m.lance] ? m.lance : 'standard', cap: CAPARISONS[m.cap] ? m.cap : 'livery', bond: num(m.bond | 0, 1, 4, 1),
     land: typeof m.land === 'string' ? m.land.replace(/[^\p{L} .'’\-]/gu, '').slice(0, 30) : '' };
 }
 /** The friend as an opponent record (what the roster's knights are in src/data.js), so that the rest of the game can treat him like one. */

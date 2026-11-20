@@ -41,7 +41,7 @@ export function initMenus(api) {
       <h1>Tilt</h1><h2>The Jousting Circuit</h2>
       <button data-go="circuit">${round > 0 && round < VENUES.length ? 'Continue the Circuit' : 'Ride the Circuit'}<small>Five great lists across Europe, a herald and the royal gallery</small></button>
       <button data-go="exhibition">Exhibition Joust<small>Any lists, any opponent</small></button>
-      <button data-go="online">Joust a friend<small>Make a room, share the code, ride against a friend online</small></button>
+      <button data-go="online">Play online<small>Quick match, public rooms, or a friend by code</small></button>
       <button data-act="practice">${(p.lesson || 0) >= LESSONS.length ? 'Tiltyard Practice' : (p.lesson || 0) > 0 ? 'Continue your Training' : 'Learn to Joust'}<small>${(p.lesson || 0) >= LESSONS.length ? 'Run at the quintain again' : `Lesson ${Math.min(LESSONS.length, (p.lesson || 0) + 1)} of ${LESSONS.length}: ${LESSONS[Math.min(LESSONS.length - 1, p.lesson || 0)].title}`}</small></button>
       <button data-go="armoury">Armoury &amp; Retinue<small>${p.name} · ${HORSES[p.horse].name} · ${HELMS[p.helm].name}, ${ARMOURS[p.armour].name}</small></button>
       <button data-go="stable">The Stable<small>See every horse, turn it round, and choose your mount</small></button>
@@ -117,31 +117,49 @@ export function initMenus(api) {
       <h5>Courses${fixed ? ' <small>fixed by the rules</small>' : ''}</h5><div class="swatches">${fixed ? `<span class="chip sel">${fixed}</span>` : EX_COURSES.map(n => `<span class="chip ${n === room.c ? 'sel' : ''}" data-onc="${n}">${n}</span>`).join('')}</div>`;
     const summary = () => `<p class="dimtxt">${V.name}, ${V.city} · ${MODES[room.m].name} · ${fixed || room.c} courses &nbsp;(the host chooses)</p>`;
     const friendRow = () => fr ? `<div class="friend">${crest(fr.arms, 30, 36)}<span><b>${fr.name}</b> <i>${fr.land ? '· ' + fr.land : ''}</i></span></div>` : '';
-    let head = 'Make a room, share its code, and ride against a friend. No account needed.', actions = '<button class="btn" data-on="leave">Back</button>', body = '';
+    let head = 'Ride against a real opponent. No account needed.', actions = '<button class="btn" data-on="back">Back</button>', body = '';
+    const rows = () => {
+      const rs = L.rooms.slice(0, 5), rl = L.relays || {};
+      if (!rs.length) return `<p class="wait">${rl.failed ? 'Could not reach the lobby. Check your connection, or use Joust a friend.' : rl.open ? 'No open rooms yet: create one or try Quick match.' : 'Connecting to the lobby…'}</p>`;
+      return `<div class="rooms">${rs.map(r => `<div class="rrow"><b>${r.name}</b><span>${VENUES[r.v].name}</span><span>${MODES[r.m].name}</span><span>${r.c} courses</span><button class="btn primary" data-on="joinlist" data-code="${r.code}">Join</button></div>`).join('')}</div>${L.rooms.length > 5 ? `<p class="dimtxt">and ${L.rooms.length - 5} more</p>` : ''}`;
+    };
     if (ph === 'choose') {
-      body = `<div class="onrow"><button class="btn primary big" data-on="create">Create a room<small>You get a code to share</small></button><button class="btn big" data-on="joinmode">Join a room<small>Type your friend's code</small></button></div>
-        <p class="dimtxt">Both of you need this page open. You ride with your own arms, horse and harness; nothing is paid, and no renown is won.</p>`;
+      head = 'Ride against a real opponent. No account needed.';
+      body = `<div class="onrow three"><button class="btn primary big" data-on="quick">Quick match<small>Join the next open room, or wait for a challenger</small></button><button class="btn big" data-on="list">Public rooms<small>See who is waiting, and pick a room</small></button><button class="btn big" data-on="friend">Joust a friend<small>A private room: share the code</small></button></div>
+        <p class="dimtxt">You ride with your own arms, horse and harness; nothing is paid, and no renown is won. Only your chosen name is shown to others.</p>`;
+    } else if (ph === 'friend') {
+      head = 'Make a private room and share its code, or type your friend\'s code.';
+      body = `<div class="onrow"><button class="btn primary big" data-on="create">Create a room<small>You get a code to share</small></button><button class="btn big" data-on="joinmode">Join a room<small>Type your friend's code</small></button></div>`;
+    } else if (ph === 'list') {
+      head = 'Open public rooms. Pick one to join.';
+      actions = '<button class="btn" data-on="back">Back</button><button class="btn" data-on="createpub">Create a room</button>';
+      body = `${L.err ? `<p class="err">${L.err}</p>` : ''}${rows()}`;
+    } else if (ph === 'quickLook') {
+      head = 'Quick match'; actions = '<button class="btn" data-on="back">Cancel</button>';
+      body = '<p class="wait">Looking for an open room…</p>';
     } else if (host) {
-      head = ph === 'hostReady' ? `${fr.name} has joined. Choose the lists and the rules, then ride.` : 'Share this code with your friend.';
-      actions = `<button class="btn" data-on="leave">Back</button>${ph === 'hostReady' ? '<button class="btn primary" data-on="ride">Ride!</button>' : ''}`;
-      body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code || '·····'}</b></div>
-        ${ph === 'hostReady' ? friendRow() : `<p class="wait">${L.code ? 'Waiting for your friend…' : 'Opening the room…'}</p>`}
+      const pubRow = () => `<h5>Who can see this room</h5><div class="swatches"><span class="chip ${L.pub ? '' : 'sel'}" data-on="pub" data-pub="0">Private</span><span class="chip ${L.pub ? 'sel' : ''}" data-on="pub" data-pub="1">Public</span><small class="dimtxt">${L.pub ? 'Listed in Public rooms until a challenger arrives' : 'Only someone with the code can join'}</small></div>`;
+      head = ph === 'hostReady' ? `${fr.name} has joined. Choose the lists and the rules, then ride.` : L.quick ? 'Quick match' : L.pub ? 'Your room is listed in Public rooms.' : 'Share this code with your friend.';
+      actions = `<button class="btn" data-on="back">${ph === 'hostReady' ? 'Back' : 'Cancel'}</button>${ph === 'hostReady' ? '<button class="btn primary" data-on="ride">Ride!</button>' : ''}`;
+      if (L.quick && ph === 'hostWait') body = `<p class="wait big">${L.code ? 'Waiting for a challenger…' : 'Opening a room…'}</p><p class="dimtxt">No open room was found, so yours is listed: ${V.name} · ${MODES[room.m].name} · ${fixed || room.c} courses</p>`;
+      else body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code || '·····'}</b></div>
+        ${ph === 'hostReady' ? friendRow() : `<p class="wait">${L.code ? (L.pub ? 'Waiting for a challenger…' : 'Waiting for your friend…') : 'Opening the room…'}</p>${pubRow()}`}
         ${chips()}`;
     } else if (ph === 'joinInput') {
       head = 'Type the five letters your friend gives you.';
       body = `<div class="joinrow"><input class="name code" id="joinCode" maxlength="5" placeholder="CODE" value="${joinDraft}" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="btn primary" data-on="join">Join</button></div>
         ${L.err ? `<p class="err">${L.err}</p>` : ''}`;
     } else if (ph === 'joining') {
-      head = 'Connecting…'; actions = '<button class="btn" data-on="leave">Cancel</button>';
+      head = 'Connecting…'; actions = '<button class="btn" data-on="back">Cancel</button>';
       body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code}</b></div><p class="wait">Looking for your friend… this can take a few seconds.</p>`;
     } else if (ph === 'joined') {
       head = fr ? `You are in ${fr.name}'s room.` : 'Connected…';
       body = `${friendRow()}<p class="wait">Waiting for ${fr ? fr.name : 'the host'} to start the joust…</p>${summary()}`;
     } else {      // failed
       head = 'The room could not be opened.';
-      body = `<p class="err">${L.err}</p><div class="onrow"><button class="btn primary" data-on="create">Try again</button></div>`;
+      body = `<p class="err">${L.err}</p><div class="onrow"><button class="btn primary" data-on="retry">Try again</button></div>`;
     }
-    root.innerHTML = scroll('sheet online', `<div class="top"><div><h3>Joust a Friend</h3><p>${head}</p></div><div class="actions">${actions}</div></div>${body}`);
+    root.innerHTML = scroll('sheet online', `<div class="top"><div><h3>Play Online</h3><p>${head}</p></div><div class="actions">${actions}</div></div>${body}`);
     crests();
     if (host || ph === 'joined') api.setVenue(room.v);
     const inp = el('joinCode');
@@ -311,7 +329,15 @@ export function initMenus(api) {
     if (d.go) { dismissArm = null; if (d.go === 'online') api.online.open(); return show(d.go); }
     if (d.on) {
       const O = api.online;
-      if (d.on === 'create') return O.create();
+      if (d.on === 'create') return O.create(false);
+      if (d.on === 'createpub') return O.create(true);
+      if (d.on === 'retry') return O.create(O.lobby.pub, O.lobby.quick);
+      if (d.on === 'quick') return O.quick();
+      if (d.on === 'list') return O.list();
+      if (d.on === 'friend') { O.lobby.phase = 'friend'; O.lobby.err = ''; return show('online'); }
+      if (d.on === 'joinlist') return O.joinListed(d.code);
+      if (d.on === 'pub') return O.setPublic(d.pub === '1');
+      if (d.on === 'back') { joinDraft = ''; return O.back(); }
       if (d.on === 'joinmode') { O.lobby.phase = 'joinInput'; O.lobby.err = ''; return show('online'); }
       if (d.on === 'join') return O.join(joinDraft);
       if (d.on === 'ride') return O.ride();

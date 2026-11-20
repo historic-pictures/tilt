@@ -549,3 +549,17 @@ body.touch.compact .online .roomcode b { font-size: 38px; }
 body.touch.compact .online .onrow, body.touch.compact .online .joinrow { margin: 8px 0 4px; }
 body.touch.compact .online .btn.big { font-size: 17px; padding: 8px 14px; }
 body.touch.compact .online input.name.code { font-size: 24px; width: 150px; }
+
+/* ---- public rooms (the online screen's list) */
+.online .onrow.three { gap: 12px; flex-wrap: nowrap; }
+.online .onrow.three .btn.big { flex: 1 1 0; min-width: 0; }
+.online .rooms { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
+.online .rrow { display: grid; grid-template-columns: 1.4fr 1.2fr 1.2fr .8fr auto; gap: 12px; align-items: center; padding: 6px 10px; border: 1px solid var(--gold2, #a8883c); border-radius: 4px; background: rgba(255, 250, 235, .35); font-size: 19px; }
+.online .rrow b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.online .rrow span { color: var(--ink2); font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.online .wait.big { font-size: 26px; margin: 26px 0 10px; }
+.online .swatches small.dimtxt { margin-left: 10px; align-self: center; }
+body.touch.compact .online .rrow { font-size: 15px; padding: 3px 8px; gap: 8px; }
+body.touch.compact .online .rrow span { font-size: 13px; }
+body.touch.compact .online .wait.big { font-size: 20px; margin: 12px 0 6px; }
+body.touch.compact .online .onrow.three .btn.big small { font-size: 11px; }

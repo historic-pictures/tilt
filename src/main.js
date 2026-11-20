@@ -27,8 +27,8 @@ import { createCeremony, INTRO_END, SKIP_HOLD, MOVE } from './ceremony.js';
 import { ANNOUNCER, HOST_LINES, INTRO, hostOf, hailName, bioOf, boastFor, fill, CIRCUIT } from './drama_lines.js';
 import { ACH_BY_ID, ensureFeats, checkFeats, courseFeats, matchFeats, circuitFeat, courtesyFeat, ladyFeat, rankLine } from './achievements.js';
 import { Hit, sweepCapCap, sweepCapObb, capCapGap, capObbGap } from './collide.js';
-import { createNet, makeCode, cleanCode, validCode, FAIL_TEXT, preloadNet } from './net.js';
-import { Remote, SEND_HZ, packProfile, cleanProfile, onlineOd, cleanRoom, onlineModeIds, packRider, cleanState, applyRider, mirrorVec, MIRROR_RESULT, cleanRes, cleanNear, clampNum } from './online.js';
+import { createNet, makeCode, cleanCode, validCode, failText, preloadNet } from './net.js';
+import { cleanName, Remote, SEND_HZ, packProfile, cleanProfile, onlineOd, cleanRoom, onlineModeIds, packRider, cleanState, applyRider, mirrorVec, MIRROR_RESULT, cleanRes, cleanNear, clampNum } from './online.js';
 
 const $ = (id) => document.getElementById(id);
 const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -2323,25 +2323,41 @@ function doBrace() { if (S.mode !== 'charge' || C.braceCd > 0) return; C.braceT 
 // The HOST decides every stroke with the ordinary strike code (his rider against the interpolated friend) and tells the guest ('st' per stroke, 'course' when both are spent);
 // the guest never collides: he shows what he is told, mirrored (netApplyStroke, netApplyCourse). The host also gives the marshal's signal ('plan', 'sig') and starts each next course
 // ('next') once the guest says he is at his mark ('rdy'). Messages: hi (profile) · room / start (host's settings) · skip (intro vote) · s · plan · sig · st · course · rdy · next · tilt · ka · bye.
-const LOBBY = { phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 } };
+const LOBBY = { phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 }, pub: false, quick: false, qt: 0, fromList: false, rooms: [], relays: { open: 0, total: 0, failed: false }, watching: false, venueSet: false };
+// The public list (src/lobby.js, loaded only when the online screen opens): LOBBY.phase 'list' shows LOBBY.rooms; a PUBLIC room waiting for a challenger is announced; Quick match = look for ~3 s, join the oldest, else host a public room.
+let lobbyP = null, lobbyObj = null;
+const lobbyApi = () => lobbyP || (lobbyP = import('./lobby.js').then((m) => (lobbyObj = m.createLobby())));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function syncAnnounce() {
+  const want = () => NET.host && LOBBY.pub && LOBBY.phase === 'hostWait' && LOBBY.code && NET.net && !NET.net.open && !M;
+  if (want()) lobbyApi().then((l) => { if (want()) l.announce({ code: LOBBY.code, name: cleanName(profile.name), v: LOBBY.room.v, m: LOBBY.room.m, c: LOBBY.room.c }); }).catch((e) => console.warn('[lobby]', e));
+  else if (lobbyObj) lobbyObj.stop();
+}
+function startWatch() {
+  LOBBY.watching = true;
+  setTimeout(() => { if (LOBBY.watching && !LOBBY.relays.open) { LOBBY.relays = { open: 0, total: LOBBY.relays.total, failed: true }; if (LOBBY.phase === 'list') lobbyShow(); } }, 8000);
+  lobbyApi().then((l) => { if (LOBBY.watching) l.watch((rooms, st) => { LOBBY.rooms = rooms; LOBBY.relays = st; if (LOBBY.phase === 'list') lobbyShow(); }); }).catch(() => { LOBBY.relays = { open: 0, total: 0, failed: true }; if (LOBBY.phase === 'list') lobbyShow(); });
+}
+function stopWatch() { LOBBY.watching = false; LOBBY.rooms = []; if (lobbyObj) lobbyObj.unwatch(); }
 const netSend = (o) => { if (NET.net) NET.net.send(o); };
-const lobbyShow = () => { if (typeof menus !== 'undefined' && menus.root.classList.contains('on') && menus.root.dataset.name === 'online') menus.show('online'); };
+const lobbyShow = () => { syncAnnounce(); if (typeof menus !== 'undefined' && menus.root.classList.contains('on') && menus.root.dataset.name === 'online') menus.show('online'); };
 const roomMsg = (t = 'room') => Object.assign({ t }, LOBBY.room);
 function netClose() {
   NET.token++; clearInterval(NET.ka); NET.ka = 0;
   const n = NET.net; NET.net = null;
   if (n) { n.onOpen = n.onMessage = n.onClose = null; try { n.close(); } catch (e) { /* ignore */ } }
+  syncAnnounce();
 }
 function netWire(n) {
-  n.onOpen = () => { NET.lastRx = performance.now(); n.send(packProfile(profile)); };
+  n.onOpen = () => { NET.lastRx = performance.now(); n.send(packProfile(profile)); syncAnnounce(); };
   n.onMessage = (m) => { NET.lastRx = performance.now(); onNetMessage(m); };
   n.onClose = () => onNetClose();
   clearInterval(NET.ka); NET.ka = setInterval(() => netSend({ t: 'ka' }), 1500);      // (the match loop sends nothing while a tab is hidden; this keeps the friend from thinking you left)
 }
-window.addEventListener('pagehide', () => { if (NET.net) { try { NET.net.send({ t: 'bye' }); } catch (e) { /* ignore */ } } });
+window.addEventListener('pagehide', () => { if (lobbyObj) lobbyObj.stop(); if (NET.net) { try { NET.net.send({ t: 'bye' }); } catch (e) { /* ignore */ } } });
 const HOST_FAIL = "Couldn't reach the room server. Check your connection and try again.";
-async function lobbyCreate() {
-  netClose(); const my = NET.token; NET.host = true; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.phase = 'hostWait'; lobbyShow();
+async function lobbyCreate(pub = false, quick = false) {
+  netClose(); LOBBY.pub = !!pub; LOBBY.quick = !!quick; LOBBY.fromList = false; const my = NET.token; NET.host = true; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.phase = 'hostWait'; lobbyShow();
   for (let i = 0; i < 6; i++) {
     const n = NET.net = createNet(), code = makeCode(); netWire(n);
     try { await n.host(code); } catch (e) {
@@ -2355,25 +2371,62 @@ async function lobbyCreate() {
   }
   LOBBY.phase = 'failed'; LOBBY.err = HOST_FAIL; lobbyShow();
 }
-async function lobbyJoin(raw) {
+async function lobbyJoin(raw, opts = {}) {
   const code = cleanCode(raw);
-  if (!validCode(code)) { LOBBY.err = 'A room code is five letters.'; lobbyShow(); return; }
-  netClose(); const my = NET.token; NET.host = false; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = code; LOBBY.phase = 'joining'; lobbyShow();
+  if (!validCode(code)) { LOBBY.err = 'A room code is five letters.'; lobbyShow(); return false; }
+  netClose(); const my = NET.token; NET.host = false; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = code; LOBBY.pub = false; LOBBY.fromList = !!opts.listed || !!opts.quick; LOBBY.phase = opts.quick ? 'quickLook' : 'joining'; lobbyShow();
   const n = NET.net = createNet(); netWire(n);
   try { await n.join(code); } catch (e) {
-    if (my !== NET.token) return;
+    if (my !== NET.token) return false;
     n.onOpen = n.onMessage = n.onClose = null; try { n.close(); } catch (e2) { /* ignore */ } NET.net = null; clearInterval(NET.ka);
-    LOBBY.phase = 'joinInput'; LOBBY.err = e && e.message === 'notfound' ? 'No room has that code. Check the letters and try again.' : FAIL_TEXT; lobbyShow(); return;
+    const gone = e && e.message === 'notfound';
+    if (opts.quick) { LOBBY.phase = 'quickLook'; lobbyShow(); return false; }
+    if (opts.listed) { LOBBY.phase = 'list'; LOBBY.err = gone ? 'That room is no longer open.' : failText(e); lobbyShow(); return false; }
+    LOBBY.phase = 'joinInput'; LOBBY.err = failText(e); lobbyShow(); return false;
   }
-  if (my !== NET.token) return;
-  LOBBY.phase = 'joined'; lobbyShow();
+  if (my !== NET.token) return false;
+  if (!opts.quick) stopWatch();
+  LOBBY.phase = 'joined'; lobbyShow(); return true;
 }
-function lobbyOpen() { netClose(); NET.host = false; LOBBY.phase = 'choose'; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; preloadNet(); }
-function lobbyLeave() { netLeave(); LOBBY.phase = 'choose'; LOBBY.friend = null; LOBBY.err = ''; menus.show('main'); }
+function lobbyList() { netClose(); NET.host = false; LOBBY.quick = false; LOBBY.pub = false; LOBBY.friend = null; LOBBY.code = ''; LOBBY.err = ''; LOBBY.qt++; LOBBY.phase = 'list'; startWatch(); lobbyShow(); }
+const lobbyJoinListed = (code) => lobbyJoin(code, { listed: true });
+/** Quick match: look at the public list for ~3 s; join the oldest open room (the next one if that fails), else open a public room with the usual rules and wait. */
+async function lobbyQuick() {
+  netClose(); const my = ++LOBBY.qt; NET.host = false; LOBBY.quick = true; LOBBY.pub = false; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.phase = 'quickLook'; startWatch(); lobbyShow();
+  const t0 = performance.now();
+  for (;;) { await sleep(250); if (LOBBY.qt !== my) return; const el = performance.now() - t0; if (el >= 3000 && (LOBBY.relays.open > 0 || el >= 8000)) break; }
+  const tried = new Set();
+  for (;;) {
+    const r = LOBBY.rooms.find((x) => !tried.has(x.code)); if (!r) break;
+    tried.add(r.code);
+    if (await lobbyJoin(r.code, { quick: true })) {
+      if (LOBBY.qt !== my) return;
+      let got = false; for (let i = 0; i < 14 && LOBBY.qt === my && NET.net; i++) { if (LOBBY.friend) { got = true; break; } await sleep(250); }
+      if (LOBBY.qt !== my) return;
+      if (got) { stopWatch(); return; }
+      netClose(); LOBBY.phase = 'quickLook'; lobbyShow();      // that room was full or has gone: the next one
+    } else if (LOBBY.qt !== my) return;
+  }
+  if (LOBBY.qt !== my) return;
+  stopWatch(); LOBBY.room = { v: LOBBY.room.v, m: 'planken', c: 5 };
+  await lobbyCreate(true, true);
+}
+/** Back, one step up inside the online screen (from the first page: out to the main menu). */
+function lobbyBack() {
+  if (LOBBY.phase === 'choose') { lobbyLeave(); return; }
+  const priv = LOBBY.phase === 'joinInput' || LOBBY.phase === 'joining' || (LOBBY.phase === 'joined' && !LOBBY.fromList) || ((LOBBY.phase === 'hostWait' || LOBBY.phase === 'hostReady' || LOBBY.phase === 'failed') && !LOBBY.quick && !LOBBY.pub);
+  LOBBY.qt++; stopWatch(); netLeave(); LOBBY.friend = null; LOBBY.err = ''; LOBBY.quick = false; LOBBY.pub = false; LOBBY.fromList = false; LOBBY.phase = priv ? 'friend' : 'choose'; lobbyShow();
+}
+function lobbySetPublic(b) { if (!NET.host || LOBBY.phase !== 'hostWait') return; LOBBY.pub = !!b; lobbyShow(); }
+function lobbyOpen() {
+  netClose(); stopWatch(); NET.host = false; LOBBY.qt++; LOBBY.phase = 'choose'; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.pub = LOBBY.quick = LOBBY.fromList = false; preloadNet(); import('./lobby.js').then((m) => m.preloadLobby()).catch(() => {});
+  if (!LOBBY.venueSet) LOBBY.room.v = Math.min(profile.venue || 0, VENUES.length - 1);      // (Quick match opens the lists you last rode in)
+}
+function lobbyLeave() { LOBBY.qt++; stopWatch(); netLeave(); LOBBY.phase = 'choose'; LOBBY.friend = null; LOBBY.err = ''; LOBBY.pub = LOBBY.quick = LOBBY.fromList = false; menus.show('main'); }
 function lobbySetRoom(k, v) {
   if (!NET.host || (LOBBY.phase !== 'hostWait' && LOBBY.phase !== 'hostReady')) return;
   const R_ = LOBBY.room;
-  if (k === 'v') R_.v = clamp(v | 0, 0, VENUES.length - 1); else if (k === 'm' && onlineModeIds().includes(v)) R_.m = v; else if (k === 'c') R_.c = clamp(v | 0, 3, 20);
+  if (k === 'v') { R_.v = clamp(v | 0, 0, VENUES.length - 1); LOBBY.venueSet = true; } else if (k === 'm' && onlineModeIds().includes(v)) R_.m = v; else if (k === 'c') R_.c = clamp(v | 0, 3, 20);
   if (LOBBY.phase === 'hostReady') netSend(roomMsg());
   lobbyShow();
 }
@@ -2390,7 +2443,15 @@ function onNetClose() {
   if (M && S.online) { netForfeit(); return; }
   const wasHost = NET.host;
   if (wasHost && (LOBBY.phase === 'hostReady')) { LOBBY.friend = null; LOBBY.phase = 'hostWait'; lobbyShow(); }      // the room stays open for another friend
-  else if (!wasHost) { netClose(); LOBBY.friend = null; LOBBY.phase = 'joinInput'; LOBBY.err = 'The host has closed the room.'; lobbyShow(); }
+  else if (!wasHost) {
+    const filled = LOBBY.fromList && !LOBBY.friend;      // joined from the list and thrown out at once: somebody else got there first
+    netClose(); LOBBY.friend = null;
+    if (filled && LOBBY.quick) return;      // (Quick match carries on with the next room)
+    if (filled) { LOBBY.phase = 'list'; LOBBY.err = 'That room just filled'; startWatch(); }
+    else if (LOBBY.fromList) { LOBBY.phase = 'list'; LOBBY.err = 'The host has closed the room.'; startWatch(); }
+    else { LOBBY.phase = 'joinInput'; LOBBY.err = 'The host has closed the room.'; }
+    lobbyShow();
+  }
 }
 function onNetMessage(m) {
   if (!m || typeof m !== 'object') return;
@@ -2564,6 +2625,7 @@ function netLeave() {
   const n = NET.net; NET.net = null; NET.token++; clearInterval(NET.ka); NET.ka = 0;
   if (n) { n.onOpen = n.onMessage = n.onClose = null; try { n.send({ t: 'bye' }); } catch (e) { /* ignore */ } setTimeout(() => { try { n.close(); } catch (e) { /* ignore */ } }, 300); }
   S.online = false; document.body.classList.remove('online'); NET.rem = null; NET.remote.reset();
+  syncAnnounce();
 }
 /** The friend has gone (said bye, closed, or fell silent): you win by forfeit, unless the joust was already decided. */
 function netForfeit() {
@@ -2579,7 +2641,7 @@ function netForfeit() {
   $('cardReplays').classList.add('hidden'); $('cardHint').textContent = touchMode ? 'TAP to continue' : 'SPACE / CLICK to continue'; $('card').classList.remove('hidden');
   fanfare('victory'); callout('YOUR OPPONENT HAS LEFT THE LISTS', 'good');
 }
-const onlineApi = { get lobby() { return LOBBY; }, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds };
+const onlineApi = { get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic };
 
 // ------------------------------------------------------------------ input
 window.addEventListener('keydown', (e) => {
