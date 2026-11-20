@@ -600,7 +600,7 @@ function introCues(t) {
   at('lance', 36.6, () => { player.raiseT = 1; opp.raiseT = 1; });                                    // and raise their lances
 }
 /** Skipping the intro is a VOTE. Offline it passes at once. Online both players must hold: send { skip: true } to the peer here, and call G.skipThem(true) when theirs arrives;
- *  the intro then ends only when S.skipWanted.me && S.skipWanted.them (and the vote is withdrawn when the key is let go, see the frame loop). */
+ *  the intro then ends only when S.skipWanted.me && S.skipWanted.them; a vote once cast stands (see the frame loop). */
 function skipVote() {
   S.skipWanted.me = true; if (S.online) netSend({ t: 'skip', v: 1 });
   if (!S.online || S.skipWanted.them) skipIntro();
@@ -3009,8 +3009,10 @@ function frame(dtReal) {
     player.update(dt); opp.update(dt);
     // hold Space / Enter to skip: the ring fills; a tap does nothing
     S.skipHold = skipKey ? S.skipHold + dtReal : Math.max(0, S.skipHold - dtReal * 2.5);
-    if (!skipKey && S.skipWanted.me && S.online) { S.skipWanted.me = false; netSend({ t: 'skip', v: 0 }); }      // online: letting go withdraws the vote
-    ceremony.skipUI(true, S.skipHold / SKIP_HOLD);
+    // online: a vote once cast stands (players rarely hold at the same moment); the ring says who is still to vote
+    const tch = touchMode ? 'Hold the screen' : 'Hold <kbd>SPACE</kbd>';
+    const lbl = !S.online ? null : S.skipWanted.me ? 'Waiting for your opponent to skip…' : S.skipWanted.them ? `Your opponent wants to skip · ${tch}` : null;
+    ceremony.skipUI(true, S.skipWanted.me ? 1 : S.skipHold / SKIP_HOLD, lbl);
     if (S.skipHold >= SKIP_HOLD && !S.skipWanted.me) skipVote();
     if (S.mode === 'intro' && S.introT > (introNew() ? INTRO_END : 8.4)) finishIntro();
   } else if (S.mode === 'menu') { if (player) player.update(dt); if (S.menuView === 'armoury') previews.update(dtReal, menus.root, profile.arms); if (S.menuView === 'stable') stable.update(dtReal, menus.root, menus.stableHorse(), profile.arms, menus.stableCap()); else stable.release(); }

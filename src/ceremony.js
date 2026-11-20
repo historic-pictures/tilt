@@ -168,7 +168,7 @@ export function createCeremony(scene) {
 
   // ---- the "hold SPACE to skip" ring, bottom right; frac 0..1 is the fill
   let ring = null;
-  T.skipUI = function skipUI(show, frac = 0) {
+  T.skipUI = function skipUI(show, frac = 0, label = null) {
     if (!show) { if (ring) { ring.remove(); ring = null; } return; }
     if (!ring) {
       ring = document.createElement('div'); ring.id = 'skipHold';
@@ -176,6 +176,8 @@ export function createCeremony(scene) {
       document.body.appendChild(ring); ring._fg = ring.querySelector('.fg');
     }
     ring._fg.style.strokeDashoffset = String(100.5 * (1 - clamp(frac, 0, 1))); ring.classList.toggle('held', frac > 0.02);
+    const txt = label || 'Hold <kbd>SPACE</kbd> to skip';      // online: who is still to vote (see skipVote in main.js)
+    if (ring._txt !== txt) { ring._txt = txt; ring.querySelector('span').innerHTML = txt; }
   };
   /** The announcer's portrait for menus and cards: draws into a canvas. */
   T.portrait = (cv) => drawFace(cv, ANNOUNCER.name, ANNOUNCER.color, ANNOUNCER.cap);
