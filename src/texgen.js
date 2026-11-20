@@ -15,6 +15,7 @@
 // 'map' textures are near-white multipliers: keep material.color as the base colour.
 
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 
 export const KINDS = ['steel', 'mail', 'cloth', 'velvet', 'leather', 'wood', 'stone', 'sand', 'coat', 'grass'];
 
@@ -453,7 +454,7 @@ function toTexture(canvas, colorSpace, repeat) {
   const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat[0], repeat[1]);
-  t.anisotropy = 8;
+  t.anisotropy = GFX.aniso;
   t.colorSpace = colorSpace;
   t.needsUpdate = true;
   return t;

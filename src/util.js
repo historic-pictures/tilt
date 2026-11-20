@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -110,7 +111,7 @@ export function canvasTex(w, h, draw, opts = {}) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   if (opts.repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...opts.repeat); }
-  t.anisotropy = 8;
+  t.anisotropy = GFX.aniso;
   return t;
 }
 
@@ -271,8 +272,8 @@ export function drawCrest(cv, arms) {
 const _tl = new THREE.TextureLoader();
 /** kind: 'diff' | 'nor_gl' | 'rough'. Each call makes its own texture so repeats can differ. */
 export function photoTex(name, kind, repeat = [1, 1]) {
-  const t = _tl.load(`assets/tex/${name}_${kind}.jpg`);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); t.anisotropy = 8;
+  const t = _tl.load(`assets/tex/${GFX.halfTex ? 'h/' : ''}${name}_${kind}.jpg`);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); t.anisotropy = GFX.aniso;
   if (kind === 'diff') t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }

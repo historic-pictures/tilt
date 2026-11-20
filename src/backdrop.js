@@ -5,6 +5,7 @@
 //
 // Frame: metres, Y up, lists along Z, hero view toward +Z.  Nothing is placed inside radius ~110 m.
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { photoTex, detailWorld } from './util.js';
 
@@ -56,7 +57,7 @@ function makeTextures() {
     const t = new THREE.CanvasTexture(cv);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    t.anisotropy = Math.min(4, GFX.aniso);
     return t;
   };
   const speckle = (g, s, n, lo, hi) => {

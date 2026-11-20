@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 import { buildFlora } from './flora.js';
 import { touchMode } from './touch.js';
 import { buildCrowd } from './crowd.js';
@@ -84,13 +85,15 @@ export function buildWorld(scene, renderer, venue = {}) {
   const low = 1 - Math.min(1, Math.max(0, (sunDir.y - 0.25) / 0.5));
   const sun = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).lerp(new THREE.Color(0xffb070), low * 0.8), 3.1 - low * 0.5);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(touchMode ? 2048 : 4096, touchMode ? 2048 : 4096);
+  sun.shadow.mapSize.set(GFX.shadow, GFX.shadow);      // 4096 (2048 on phones) at high, 2048 medium, 1024 low
   const sc = sun.shadow.camera;
   sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 220;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
   grp.add(sun, sun.target);
   world.sun = sun; world.sunDir = sunDir;
   const lastFocus = new THREE.Vector3();
+  /** Live change of the shadow map size (the frame-time safety net dropped a tier). */
+  world.setShadowSize = (n) => { sun.shadow.mapSize.set(n, n); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } };
   world.focusShadow = (p) => {
     lastFocus.copy(p);
     sun.target.position.set(p.x, 0, p.z);
@@ -293,6 +296,9 @@ export function buildWorld(scene, renderer, venue = {}) {
   }
 
   // ---------- crowd ----------
+  if (GFX.crowd < 1 && !T) {      // lower tiers: fewer people (the notable ones, class 2 and 3, always stay)
+    const keep = rng(777); const kept = crowdSpots.filter(s => s[4] >= 2 || keep() < GFX.crowd); crowdSpots.length = 0; crowdSpots.push(...kept);
+  }
   world.crowd = T ? { update() {}, setColors() {}, ladies: () => [], spotlight() {} } : buildCrowd(grp, crowdSpots, { seed: 99, colorsA: V.colorsA, colorsB: V.colorsB });
   world.crowdState = { excitement: 0.12, anticipation: 0, favour: 0, scorer: 0, waveStart: -999, focusZ: 0 };
 
@@ -327,7 +333,8 @@ export function buildWorld(scene, renderer, venue = {}) {
   }
   const tc = [['#a3201f', '#efe6cf'], ['#1f3f7a', '#efe6cf'], ['#d9b23c', '#1a1a1a'], ['#2c6e3a', '#efe6cf'], ['#7a1f6a', '#efe6cf'], ['#efe6cf', '#b5541a']];
   const tentSpots = [[-14, -66], [-5, -72], [6, -68], [15, -74], [-22, -78], [24, -64], [-13, 66], [-3, 73], [8, 67], [17, 74], [-24, 70], [26, 78], [-34, -40], [-38, -20], [-36, 5], [-40, 28], [36, -44], [40, 30], [-33, 48], [35, 52]];
-  if (!T) tentSpots.forEach((p, i) => tent(p[0], p[1], ...tc[i % tc.length], 0.9 + r() * 0.35));
+  const tentN = Math.round(tentSpots.length * GFX.tents);      // lower tiers: fewer tents (the layout of the rest does not change)
+  if (!T) tentSpots.forEach((p, i) => i < tentN && tent(p[0], p[1], ...tc[i % tc.length], 0.9 + r() * 0.35));
 
   // ---------- venue skyline ----------
   const backdrop = T ? { update() {} } : buildBackdrop(grp, V.id, { seed: 11 });

@@ -1,6 +1,7 @@
 import { HORSES, ARMOURS, KNIGHTS, VENUES, PATTERNS, CHARGES, TINCTURES, ovr, bondLevel, BOND_NAMES, LANCES, DIFFICULTY, HISTORIC_ARMS, ARTS, LESSONS,
   ECON, entryFee, purse, RANKS, rankOf, skillPoints, SKILLS, ACHIEVEMENTS, ACH_GROUPS, ACH_RENOWN, HELMS, MODES, RETINUE, CAPARISONS, TRAITS, RETINUE_UP, newMan, fixRetinue, wageOf, trainCost, menFx } from './data.js';
 import { drawCrest, drawFace } from './util.js';
+import { GFX, setPref, PREFS } from './gfx.js';
 import { featCount } from './achievements.js';
 import { ANNOUNCER, circuitOpening } from './drama_lines.js';
 import { sfxPack, setSfxPack, SFX_HAS_OLD } from './audio.js';
@@ -17,6 +18,9 @@ export function rankBar(renown) {
   return `<div class="rankline"><span>Rank: ${here.name} — ${next ? `${renown}/${next.at}` : renown} renown</span><div class="bar"><div style="width:${Math.round(Math.max(0.03, Math.min(1, f)) * 100)}%"></div></div></div>`;
 }
 
+let gfxTimer = 0; const gfxStart = GFX.pref;      // the choice this page was loaded with
+const gfxChip = () => { const pend = GFX.pref !== gfxStart, nm = (t) => t[0].toUpperCase() + t.slice(1);
+  return `Graphics: ${GFX.pref === 'auto' ? 'Auto' + (pend ? '' : ' (' + GFX.tier + ')') : nm(GFX.pref)}${pend ? ' · reloading to apply…' : ''}`; };
 export function initMenus(api) {
   const root = el('screen');
   let exVenue = 0, exOpp = KNIGHTS[0].id, exMode = 'planken', exCourses = 5, dismissArm = null;
@@ -46,7 +50,7 @@ export function initMenus(api) {
       ${api.touch ? `<button data-act="fullscreen">Full screen<small>Hide the browser bars and lock the screen sideways</small></button>` : ''}
       <div class="standing"><span>${rank.name}</span><span>${purseText(p.gold)}</span></div>
       ${rankBar(p.renown)}
-      <div class="toggles"><span class="chip" data-act="diff">Difficulty: ${DIFFICULTY[p.difficulty ?? 1].name}</span><span class="chip" data-act="herald">Herald: ${p.herald === false ? 'silent' : 'speaks'}</span><span class="chip" data-act="voices" title="The robot voice for the herald, the king, your men and the sellers (needs sound on)">Voices: ${api.voicesOn && !api.voicesOn() ? 'off' : 'on'}</span><span class="chip" data-act="view">View: ${p.firstPerson ? 'first person' : 'third person'}</span><span class="chip" data-act="autoride" title="After a pass: ride back to your mark yourself (W/S gait, A/D steer), or let the horse take you">Ride back: ${p.autoRide === false ? 'by hand' : 'auto'}</span><label class="chip vol">Music <input type="range" id="musicVol" min="0" max="100" step="5" value="${api.musicVol ? api.musicVol() : 60}"> <span id="musicPct">${api.musicVol ? api.musicVol() : 60}%</span></label>${SFX_HAS_OLD ? `<span class="chip" data-act="sfxpack" title="Switch between the original and the royalty-free sound pack (reloads the page)">Sound pack: ${sfxPack() === 'new' ? 'New' : 'Old'}</span>` : ''}</div>
+      <div class="toggles"><span class="chip" data-act="diff">Difficulty: ${DIFFICULTY[p.difficulty ?? 1].name}</span><span class="chip" data-act="herald">Herald: ${p.herald === false ? 'silent' : 'speaks'}</span><span class="chip" data-act="voices" title="The robot voice for the herald, the king, your men and the sellers (needs sound on)">Voices: ${api.voicesOn && !api.voicesOn() ? 'off' : 'on'}</span><span class="chip" data-act="view">View: ${p.firstPerson ? 'first person' : 'third person'}</span><span class="chip" data-act="autoride" title="After a pass: ride back to your mark yourself (W/S gait, A/D steer), or let the horse take you">Ride back: ${p.autoRide === false ? 'by hand' : 'auto'}</span><label class="chip vol">Music <input type="range" id="musicVol" min="0" max="100" step="5" value="${api.musicVol ? api.musicVol() : 60}"> <span id="musicPct">${api.musicVol ? api.musicVol() : 60}%</span></label><span class="chip" data-act="gfx" title="Picture quality. Auto picks for your device; Low suits old phones. Changing it reloads the page.">${gfxChip()}</span>${SFX_HAS_OLD ? `<span class="chip" data-act="sfxpack" title="Switch between the original and the royalty-free sound pack (reloads the page)">Sound pack: ${sfxPack() === 'new' ? 'New' : 'Old'}</span>` : ''}</div>
       <div class="foot">Sound is on. The speaker button at the top, or M, mutes it.</div>`);
   }
 
@@ -266,6 +270,11 @@ export function initMenus(api) {
     if (d.act === 'herald') { p.herald = p.herald === false; api.saveProfile(); return show('main'); }
     if (d.act === 'voices') { api.setVoices(!(api.voicesOn ? api.voicesOn() : true)); return show('main'); }
     if (d.act === 'diff') { p.difficulty = ((p.difficulty ?? 1) + 1) % DIFFICULTY.length; api.saveProfile(); return show('main'); }
+    if (d.act === 'gfx') {      // Graphics: Auto -> Low -> Medium -> High; saved in the profile, the page reloads a moment after the last tap
+      const nx = PREFS[(PREFS.indexOf(GFX.pref) + 1) % PREFS.length]; setPref(nx); p.gfx = nx; api.saveProfile();
+      clearTimeout(gfxTimer); if (GFX.pref !== gfxStart) gfxTimer = setTimeout(() => { const u = new URL(location.href); u.searchParams.delete('gfx'); location.href = u.href; }, 1500);
+      return show('main');
+    }
     if (d.act === 'sfxpack') { setSfxPack(sfxPack() === 'new' ? 'old' : 'new'); return location.reload(); }
     if (d.act === 'autoride') { if (p.autoRide === false) delete p.autoRide; else p.autoRide = false; api.saveProfile(); return show('main'); }
     if (d.act === 'view') { p.firstPerson = !p.firstPerson; api.S.fp = p.firstPerson; api.saveProfile(); return show('main'); }

@@ -107,6 +107,7 @@ const GradeShader = {
 
 export function createPost(renderer, scene, camera, opts = {}) {
   const lite = !!opts.lite;      // phones: no bloom, no ambient occlusion, lighter MSAA
+  const plain = !!opts.plain;    // lowest tier: no composer at all (the scene is drawn straight to the screen; the canvas does the tone mapping)
   const state = {
     enabled: true,
     composer: null,
@@ -121,6 +122,7 @@ export function createPost(renderer, scene, camera, opts = {}) {
   };
 
   try {
+    if (plain) throw new Error('plain rendering (low graphics tier)');
     const size = renderer.getSize(new THREE.Vector2());
     const pr = renderer.getPixelRatio();
     state.w = size.x; state.h = size.y; state.pr = pr;
@@ -153,6 +155,7 @@ export function createPost(renderer, scene, camera, opts = {}) {
 
     // Ambient occlusion (grounds horses, stands and figures). Loaded lazily; skipped if unavailable.
     if (!lite) import('three/addons/postprocessing/GTAOPass.js').then(({ GTAOPass }) => {
+      if (!state.composer || state.lighter) return;      // dropped to a lighter pipeline while this was loading
       const gtao = new GTAOPass(scene, camera, size.x * pr, size.y * pr);
       gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.6, thickness: 1.2, scale: 1.25, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
       gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
@@ -167,7 +170,7 @@ export function createPost(renderer, scene, camera, opts = {}) {
     state.bloom = bloom;
     state.smaa = smaa;
   } catch (err) {
-    console.warn('[post] composer creation failed, using plain rendering:', err);
+    if (!plain) console.warn('[post] composer creation failed, using plain rendering:', err);
     state.composer = null;
   }
 
@@ -214,6 +217,18 @@ export function createPost(renderer, scene, camera, opts = {}) {
       state.composer.setSize(w, h);
       if (state.bloom) state.bloom.setSize(Math.max(1, w * pr * 0.5), Math.max(1, h * pr * 0.5));
       state.smaa.setSize(w * pr, h * pr);
+    },
+
+    /** Live drop to a lighter pipeline (the frame-time safety net): 'lite' switches bloom and ambient occlusion off, 'plain' frees the composer. */
+    lighten(level) {
+      if (!state.composer) return;
+      if (level === 'plain') {
+        try { state.composer.renderTarget1.dispose(); state.composer.renderTarget2.dispose(); if (state.gtao && state.gtao.dispose) state.gtao.dispose(); } catch (e) { /* already gone */ }
+        state.composer = null; return;
+      }
+      if (state.bloom) state.bloom.enabled = false;
+      if (state.gtao) state.gtao.enabled = false;
+      state.lighter = true;
     },
 
     setImpact(v) { state.tImpact = Math.min(Math.max(v, 0), 1); },

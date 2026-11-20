@@ -12,7 +12,9 @@ import { createPost } from './post.js';
 import { touchMode, initTouch, goFullscreen } from './touch.js';
 import { Quintain } from './quintain.js';
 import { drawHitMap, drawDoll } from './verdict.js';
-import { preloadScans } from './scans.js';
+import { SCANS, preloadScans, loadSkyList, loadSky } from './scans.js';
+import { GFX, frameTime } from './gfx.js';
+import { stats as loadStats, mb } from './loadmeter.js';
 import { LanceArm, impact, breakAt } from './physics.js';
 import { createVoice } from './voice.js';
 import { createField } from './retinue_field.js';
@@ -70,7 +72,15 @@ function musicSync() {
   if (mood && mood !== musicMood) { musicMood = mood; m.play(mood); }
 }
 let audio = noop, HERALD = null, ttsVoice = null;
-import('./audio.js').then(m => { audio = new m.GameAudio(); G.audio = audio; if (venueIdx >= 0) audio.setVenue(VENUES[venueIdx].id); if (!S.muted) audio.init(); }).catch(e => console.warn('audio unavailable', e));
+let audioStarted = false;
+/** The sound code and its samples are fetched once the menu is up (and, below the high tier, once the trees and props are in), so they never compete with what the menu needs. */
+function startAudio() {
+  if (audioStarted) return; audioStarted = true;
+  import('./audio.js').then(m => { audio = new m.GameAudio(); G.audio = audio; if (venueIdx >= 0) audio.setVenue(VENUES[venueIdx].id); if (!S.muted) audio.init();
+    const c = audio.ctx;      // loaded after the player's first tap? the browser may have left the new audio context asleep: wake it on the next one
+    if (c && c.state === 'suspended' && !S.muted) { const wake = () => { window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); try { c.resume(); if (audio.music && audio.music.want) audio.music.play(audio.music.want); } catch (e) { /* ignore */ } }; window.addEventListener('pointerdown', wake); window.addEventListener('keydown', wake); }
+  }).catch(e => console.warn('audio unavailable', e));
+}
 import('./herald_lines.js').then(m => { HERALD = m.HERALD; }).catch(() => {});
 function pickVoice() {
   try {
@@ -109,15 +119,15 @@ function speechVolume(at) {
 
 // ------------------------------------------------------------------ renderer
 const canvas = $('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(touchMode ? (window.devicePixelRatio > 2.5 ? 1 : Math.min(window.devicePixelRatio, 1.25)) : Math.min(window.devicePixelRatio, 1.75));      // phones: a lighter frame
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: GFX.antialias, powerPreference: GFX.tier === 'low' ? 'default' : 'high-performance' });
+renderer.setPixelRatio(GFX.pixelRatio());      // by graphics tier (src/gfx.js); high is what it always was: phones 1.25 at most, desktops 1.75
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.72;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.08, 4000);
 const fx = new FX(scene);
-const post = createPost(renderer, scene, camera, { lite: touchMode });
+const post = createPost(renderer, scene, camera, { lite: GFX.post !== 'full', plain: GFX.post === 'plain' });
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -218,11 +228,12 @@ const crew = (k) => Object.keys(profile.retinue || {}).reduce((a, id) => { const
 function saveProfile() { try { localStorage.setItem('tilt.profile', JSON.stringify(profile)); } catch (e) { /* ignore */ } }
 
 // ------------------------------------------------------------------ world / riders
+let worldScans = false;      // did the current world get the scanned trees and props (they may still be downloading when the menu first shows)
 function setVenue(i, training = false) {      // training: the practice meadow (TRAINING_GROUND) instead of venue i
   const key = training ? -2 : i;
   if (key === worldKey && world) return;
   if (world) world.dispose();
-  worldKey = key; venueIdx = i; world = buildWorld(scene, renderer, training ? TRAINING_GROUND : VENUES[i]);
+  worldScans = SCANS.ready; worldKey = key; venueIdx = i; world = buildWorld(scene, renderer, training ? TRAINING_GROUND : VENUES[i]);
   audio.setVenue(training ? 'training' : VENUES[i].id);
   world.setLivery([profile.arms.c1, profile.arms.c2], ['#a81e1e', '#ece8dc']);
   world.captureEnv([player && player.root, opp && opp.root, fx.spl, fx.dustP.points, fx.sparkP.points].filter(Boolean));
@@ -616,7 +627,26 @@ function bridgeRestoreHarness(k) {
   Object.assign(player.dmg, k.dmg); player.dlog = k.dlog.map(e => Object.assign({}, e)); player.askew = k.askew; if (k.plumeGone) player._plumeGone = true; player._rebuild(Infinity);
 }
 
-function startMatch(vIdx, oppId, circuit, practice = false, modeId = null, courses = 0, bridge = null) {
+let preparing = false;
+/** Start a match. If the trees and props are still arriving in the background, wait for them behind "Preparing the lists…" rather than build the venue without them. */
+function startMatch(...args) {
+  if (SCANS.ready) return startMatchNow(...args);
+  if (preparing) return;
+  preparing = true; const el = $('preparing'), txt = $('prepTxt'); el.classList.remove('hidden');
+  const paint = () => { const st = loadStats('bg'); txt.textContent = `${Math.round(st.frac * 100)}%  ·  ${mb(st.loaded)} of ${mb(st.total)} MB`; };
+  paint(); const iv = setInterval(paint, 150);
+  Promise.race([SCANS.pending || preloadScans(), new Promise(r => setTimeout(r, 45000))]).catch(() => {}).then(() => {      // (after 45 s it goes ahead without them)
+    clearInterval(iv); preparing = false; el.classList.add('hidden');
+    if (!SCANS.ready) return startMatchNow(...args);
+    refreshWorldWithScans(); startMatchNow(...args);
+  });
+}
+/** The menu's world was built before the trees and props arrived: build it again with them (never during a match). */
+function refreshWorldWithScans() {
+  if (M || !world || worldScans || !SCANS.ready) return;
+  const training = worldKey === -2; worldKey = -99; setVenue(venueIdx, training);
+}
+function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, courses = 0, bridge = null) {
   initAudio(); G.physLog = [];
   setVenue(vIdx, practice);
   if (!practice && MODES[modeId || VENUES[vIdx].mode || 'planken'].bridge && !bridge) { bridge = newBridge(oppId); oppId = bridge.queue[0]; }      // a fresh pas d'armes: the queue is drawn once
@@ -2375,11 +2405,11 @@ function updateHud(force) {
 }
 /** The in-match prompt in touch words (the keyboard prompt above is computed, then replaced). */
 function touchPrompt(tti) {
-  if (S.mode === 'ready') return C.rd.sig ? `Tap <kbd>SPUR</kbd> — ride!` : C.rd.p ? `Your lance is up. Wait for the marshal…` : `Tap <kbd>SPUR</kbd> to raise your lance &nbsp;·&nbsp; drag to aim`;
+  if (S.mode === 'ready') return C.rd.sig ? `Tap <kbd>SPUR</kbd> — ride!` : C.rd.p ? `Your lance is up. Wait for the marshal…` : `Tap <kbd>SPUR</kbd> to raise your lance &nbsp;·&nbsp; drag or tap to aim`;
   if (S.mode === 'charge' && !C.pL.done) {
     if (C.tier < 3 && C.t > 1.2) return `Tap <kbd>SPUR</kbd> again — walk, trot, canter, gallop`;
     if (C.couch > 0.9 && tti < 0.45 && C.braceT <= 0 && C.braceCd <= 0) return `Tap <kbd>BRACE</kbd> — thrust!`;
-    if (C.t < 5) return `Drag to aim`;
+    if (C.t < 5) return `Drag or tap to aim`;
   }
   return '';
 }
@@ -2554,8 +2584,17 @@ const clock = new THREE.Clock();
 function tick() {
   requestAnimationFrame(tick);
   if (G.manual) return;
-  frame(Math.min(clock.getDelta(), 0.05));
+  const dt = clock.getDelta();
+  frameTime(dt * 1000, S.paused || document.hidden);      // the live safety net (src/gfx.js)
+  frame(Math.min(dt, 0.05));
 }
+// the safety net lowered the pixel ratio or a tier: apply what can change on the fly (trees and crowd change with the next venue build)
+GFX.listeners.push((ev) => {
+  renderer.setPixelRatio(ev.pr); resize();
+  if (ev.kind === 'tier') { post.lighten(GFX.post === 'plain' ? 'plain' : 'lite'); if (world && world.setShadowSize) world.setShadowSize(GFX.shadow); }
+  console.info('[gfx] frames averaged ' + ev.avg.toFixed(1) + ' ms: ' + (ev.kind === 'tier' ? 'dropped to ' + ev.tier : 'pixel ratio ' + ev.pr.toFixed(2)));
+  if (G.gfxLog) G.gfxLog.push(ev); else G.gfxLog = [ev];
+});
 G.physLog = [];
 G.hitboxes = (on = true) => { G._hbDebug = !!on; if (!on) { if (player) player.dbgUpdate(frameId, false); if (opp && opp.dbgUpdate) opp.dbgUpdate(frameId, false); } return G._hbDebug; };
 G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) frame(dt); };
@@ -2648,10 +2687,32 @@ $('soundBtn').addEventListener('click', () => setSound(S.muted));
 G.setSound = setSound; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
 resize();
 const firstVenue = Math.min(profile.venue || 0, VENUES.length - 1);
-await Promise.all([preloadHorse(), preloadScans(VENUES[firstVenue].sky)]);
+// Staged loading: the menu needs only the two models (and, at medium and high, the first sky, but not for more than a few seconds).
+// The trees, props and the rest of the sky arrive in the background afterwards (SCANS.ready); a match waits for them (startMatch).
+const paintLoading = () => {
+  const st = loadStats('boot'), bar = $('loadBar'), txt = $('loadTxt');
+  if (bar) bar.firstElementChild.style.width = Math.round(st.frac * 100) + '%';
+  if (txt) txt.textContent = st.total ? `${mb(st.loaded)} of ${mb(st.total)} MB  ·  ${GFX.tier} graphics` : '';
+};
+paintLoading(); const loadIv = setInterval(paintLoading, 120);
+const horseP = preloadHorse(), skyList = loadSkyList();
+const skyP = GFX.skyWait ? skyList.then(() => loadSky(VENUES[firstVenue].sky, 'boot')) : null;
+await horseP;
+if (skyP) await Promise.race([skyP, new Promise(r => setTimeout(r, 8000))]);
+clearInterval(loadIv);
+await skyList;
 setVenue(Math.min(profile.venue || 0, VENUES.length - 1));
 rebuildPlayer();
 menus.show('main');
 tick();
+window.__tiltUp = true;      // the menu is up (the watchdog in index.html stops waiting)
+try { performance.mark('tilt-menu'); } catch (e) { /* ignore */ }
 const hideLoading = () => { const l = $('loading'); if (l) { l.classList.add('done'); setTimeout(() => l.remove(), 900); } };
 requestAnimationFrame(hideLoading); setTimeout(hideLoading, 400);
+{ // in the background: trees, props, and (low tier) the sky
+  if (!GFX.skyWait) loadSky(VENUES[firstVenue].sky);
+  const note = $('bgNote'), paint = () => { const st = loadStats('bg'); if (note) { note.textContent = SCANS.ready ? '' : `Loading trees and props ${Math.round(st.frac * 100)}%`; note.classList.toggle('hidden', SCANS.ready || S.mode !== 'menu'); } };
+  const iv = setInterval(paint, 300);
+  preloadScans().then(() => { clearInterval(iv); paint(); refreshWorldWithScans(); startAudio(); });
+  if (GFX.tier === 'high') startAudio(); else setTimeout(startAudio, 20000);      // (below high: after the trees and props, or after 20 s at the latest)
+}

@@ -6,6 +6,7 @@ import { lanceRadius } from './physics.js';
 import { Cap, Obb, Hit, capCapGap, capObbGap, closestSegSeg, SS } from './collide.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { touchMode } from './touch.js';
+import { expect, progress, done } from './loadmeter.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -16,8 +17,11 @@ const MODEL_SCALE = 0.52, MODEL_Z = -0.1;
 const DRAPE_FIT = new Map();   // caparison fit per horse scale + girth: the rigged horse's top and half-width under each drape point
 // horse_smooth.glb: the Quaternius horse welded, subdivided twice and smooth-shaded in Blender (13 Nov), one coat material; same rig and clips.
 export async function preloadHorse(url = 'assets/models/horse_smooth.glb') {
-  try { HORSE_MODEL = await new GLTFLoader().loadAsync(url); } catch (e) { HORSE_MODEL = null; console.warn('horse model unavailable, using the built-in horse', e); }
-  await preloadKnight();
+  expect('horse', 'boot', 2.6e6); expect('knight', 'boot', 2.2e6);
+  const knight = preloadKnight();      // (both models download side by side)
+  try { HORSE_MODEL = await new GLTFLoader().loadAsync(url, (e) => progress('horse', e)); } catch (e) { HORSE_MODEL = null; console.warn('horse model unavailable, using the built-in horse', e); }
+  done('horse');
+  await knight;
   return !!HORSE_MODEL;
 }
 
@@ -27,7 +31,7 @@ export async function preloadHorse(url = 'assets/models/horse_smooth.glb') {
 let KNIGHT_PARTS = null;
 export async function preloadKnight(url = 'assets/models/knight_plate.glb') {
   try {
-    const g = await new GLTFLoader().loadAsync(url); g.scene.updateMatrixWorld(true);
+    const g = await new GLTFLoader().loadAsync(url, (e) => progress('knight', e)); g.scene.updateMatrixWorld(true);
     // part(name, skip): merge a group in its own frame (or in the frame of `frame`), leaving out the subtree called `skip`
     const part = (name, skip, frame = name) => {
       const root = g.scene.getObjectByName(name), fr = g.scene.getObjectByName(frame); if (!root || !fr) return null;
@@ -55,6 +59,7 @@ export async function preloadKnight(url = 'assets/models/knight_plate.glb') {
     KNIGHT_PARTS = { legs: part('KnightLegs'), torso: part('KnightTorso', 'KnightCore'), core: part('KnightCore', null, 'KnightTorso') };
     if (!KNIGHT_PARTS.legs || !KNIGHT_PARTS.torso) KNIGHT_PARTS = null;
   } catch (e) { KNIGHT_PARTS = null; console.warn('knight model unavailable, using the built-in knight', e); }
+  done('knight');
 }
 
 const BY = 1.22;                 // barrel centre height (body pivot)

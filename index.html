@@ -7,6 +7,8 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
 <link rel="stylesheet" href="style.css">
+<!-- browsers without import maps (iOS before 16.4, older Android WebViews) get them from es-module-shims; browsers that have them ignore it -->
+<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -102,8 +104,49 @@
 
 <div id="screen"></div>
 <button id="soundBtn" aria-label="Sound off (M)" title="Sound off (M)"></button>
-<div id="loading">Raising the lists…</div>
+<div id="loading"><div id="loadBox"><div id="loadMsg">Raising the lists…</div><div id="loadBar"><i></i></div><div id="loadTxt"></div></div></div>
+<div id="preparing" class="hidden"><div><div id="prepMsg">Preparing the lists…</div><div id="prepTxt"></div></div></div>
+<div id="bgNote" class="hidden"></div>
 
+<script>
+// If the game cannot start (an old browser, no memory, a blocked script) say so instead of sitting on "Raising the lists…" for ever.
+(function () {
+  var shown = false;
+  try { performance.setResourceTimingBufferSize(1000); } catch (e) { /* (so the number of bytes loaded can be counted) */ }
+  function fail(why) {
+    if (window.__tiltUp || shown) return;      // once the menu is up an error is the browser's to log, not ours to show
+    shown = true;
+    var q = /[?&]gfx=low/.test(location.search), l = document.getElementById('loading');
+    if (!l) return;
+    l.className = 'err'; l.style.opacity = 1;
+    l.innerHTML = '<div id="loadBox"><div id="loadMsg">This device or browser could not start the game.</div>' +
+      '<p>It may be too old or too short of memory for the full version.' + (q ? ' You are already on the light version; a newer browser or another device may help.' : '') + '</p>' +
+      '<button id="lightBtn">' + (q ? 'Try again' : 'Try the light version') + '</button><div id="loadTxt"></div></div>';
+    document.getElementById('lightBtn').onclick = function () {
+      try { var u = new URL(location.href); u.searchParams.set('gfx', 'low'); location.href = u.href; } catch (e) { location.search = '?gfx=low'; }
+    };
+    if (window.console) console.error('[tilt] start failed:', why);
+    var t = document.getElementById('loadTxt'); if (t) t.textContent = String(why).slice(0, 160);
+  }
+  window.__tiltFail = fail;
+  window.addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t !== window && t.tagName) {      // a file that would not load (an image or a font that is missing is not fatal)
+      if (t.tagName === 'SCRIPT' && !/es-module-shims/.test(t.src || '')) fail('could not load ' + t.src);
+      return;
+    }
+    if (/ResizeObserver/.test(e.message || '')) return;
+    fail(e.message || 'error');
+  }, true);
+  // a rejected promise is only fatal if the menu still has not come up a little later (some are harmless)
+  window.addEventListener('unhandledrejection', function (e) {
+    var why = (e.reason && (e.reason.message || e.reason)) || 'unhandled rejection';
+    if (window.console) console.warn('[tilt] unhandled rejection:', why);
+    setTimeout(function () { fail(why); }, 10000);
+  });
+  setTimeout(function () { if (!window.__tiltUp) fail('the menu did not appear within 40 seconds'); }, 40000);
+})();
+</script>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

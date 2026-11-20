@@ -6,17 +6,20 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { GFX } from './gfx.js';
+import { expect, progress, done } from './loadmeter.js';
 
 const ASSETS = new URL('../assets/', import.meta.url).href;
-export const SCANS = { ready: false, skies: {}, sky: new Map(), cards: new Map(), models: new Map() };
-
-const CARD_IDS = ['jacaranda_tree', 'island_tree_01', 'tree_small_02', 'island_tree_02'];
-const MODEL_IDS = ['rock_moss_set_01', 'wooden_barrels_01', 'wine_barrel_01', 'wooden_crate_02', 'wooden_bucket_01', 'tree_stump_01'];
+// ready: the trees and props for this graphics tier have all arrived (they load in the background after the menu is up; see GFX.cards / GFX.models)
+export const SCANS = { ready: false, pending: null, skies: {}, sky: new Map(), cards: new Map(), models: new Map() };
+const SKY_BYTES = { '4k': 20e6, '2k': 5e6, '1k': 1.3e6 };
+const MODEL_BYTES = { rock_moss_set_01: 1.9e6, wooden_barrels_01: 7.3e6, wine_barrel_01: 0.9e6, wooden_crate_02: 2.2e6, wooden_bucket_01: 2.3e6, tree_stump_01: 3.9e6 };
+const CARD_BYTES = [8.6e6, 8.1e6, 5.4e6, 6.1e6], CARD_HALF = 1.8e6;
 
 /** A scanned model, with its leaf cut-outs restored (the glTF files carry the colour as JPG, so the alpha comes separately). */
 export async function loadScan(id) {
   const base = `${ASSETS}scan/${id}/`;
-  const gltf = await new GLTFLoader().loadAsync(`${base}${id}.gltf`);
+  const gltf = await new GLTFLoader().loadAsync(`${base}${id}.gltf`, (e) => progress('scan:' + id, e));
   const cut = new Set();
   gltf.scene.traverse(o => { if (o.isMesh && (o.material.transparent || o.material.alphaTest > 0)) cut.add(o.material); });
   if (cut.size) {
@@ -32,34 +35,46 @@ export async function loadScan(id) {
 
 async function loadCard(id) {
   const meta = await (await fetch(`${ASSETS}impostor/${id}.json`)).json();
-  const tl = new THREE.TextureLoader();
-  const [col, nor, occ] = await Promise.all([tl.loadAsync(`${ASSETS}impostor/${id}_col.jpg`), tl.loadAsync(`${ASSETS}impostor/${id}_nor.png`), tl.loadAsync(`${ASSETS}impostor/${id}_occ.png`)]);
-  col.colorSpace = THREE.SRGBColorSpace; col.anisotropy = 4;
+  const tl = new THREE.TextureLoader(), h = GFX.halfCards ? '_h' : '';      // medium and low: the half-size atlases (tools/make_small_impostors.py); same layout, same json
+  const [col, nor, occ] = await Promise.all([tl.loadAsync(`${ASSETS}impostor/${id}${h}_col.jpg`), tl.loadAsync(`${ASSETS}impostor/${id}${h}_nor.png`), tl.loadAsync(`${ASSETS}impostor/${id}${h}_occ.png`)]);
+  col.colorSpace = THREE.SRGBColorSpace; col.anisotropy = Math.min(4, GFX.aniso);
   return { meta, col, nor, occ };
 }
 
-export function loadSky(name) {
+/** The sky in this tier's size (4k / 2k / 1k, made by tools/make_small_skies.py); the 4K original if a small one is missing. Progress is reported as 'sky:name'. */
+export function loadSky(name, group = 'bg') {
   if (!name || !SCANS.skies[name]) return Promise.resolve(null);
   if (!SCANS.sky.has(name)) {
-    SCANS.sky.set(name, new RGBELoader().loadAsync(`${ASSETS}sky/${name}_4k.hdr`).then(tex => {
+    const id = 'sky:' + name, get = (res) => new RGBELoader().loadAsync(`${ASSETS}sky/${name}_${res}.hdr`, (e) => progress(id, e));
+    expect(id, group, SKY_BYTES[GFX.sky] || 20e6);
+    SCANS.sky.set(name, get(GFX.sky).catch(() => (GFX.sky === '1k' || GFX.sky === '4k' ? Promise.reject() : get('4k'))).then(tex => {
       tex.wrapS = THREE.RepeatWrapping; tex.minFilter = tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = false;
-      const s = { name, tex, info: SCANS.skies[name] }; SCANS.sky.set(name, s); return s;
-    }).catch(() => { SCANS.sky.set(name, null); return null; }));
+      const s = { name, tex, info: SCANS.skies[name] }; SCANS.sky.set(name, s); done(id); return s;
+    }).catch(() => { SCANS.sky.set(name, null); done(id); return null; }));
   }
   return Promise.resolve(SCANS.sky.get(name));
 }
 /** The sky if it is already in memory, else null (and it starts loading). */
 export function skyNow(name) { const s = SCANS.sky.get(name); if (s && s.tex) return s; loadSky(name); return null; }
 
-export async function preloadScans(firstSky) {
-  const ok = (p) => p.catch(() => null);
-  try { SCANS.skies = await (await fetch(`${ASSETS}sky/skies.json`)).json(); } catch (e) { SCANS.skies = {}; }
-  const jobs = [ok(loadSky(firstSky))];
-  for (const id of CARD_IDS) jobs.push(ok(loadCard(id)).then(c => { if (c) SCANS.cards.set(id, c); }));
-  for (const id of MODEL_IDS) jobs.push(ok(loadScan(id)).then(m => { if (m) SCANS.models.set(id, m); }));
-  await Promise.all(jobs);
-  SCANS.ready = true;
-  return SCANS;
+/** The small sky list (needed before any sky can load). Resolves even if it is missing: the game then keeps its code-built sky. */
+export function loadSkyList() {
+  if (!SCANS.skyList) SCANS.skyList = fetch(`${ASSETS}sky/skies.json`).then(r => r.json()).then(j => { SCANS.skies = j; }).catch(() => { SCANS.skies = {}; });
+  return SCANS.skyList;
+}
+
+/**
+ * The tier's trees (impostor atlases) and props (scanned meshes), loaded in the background after the menu is up.
+ * Resolves, with SCANS.ready set, when all have arrived or failed; the game builds a venue only after that (see main.js waitForScans).
+ */
+export function preloadScans() {
+  if (SCANS.pending) return SCANS.pending;
+  const ok = (id, p) => p.catch(() => null).then(v => { done(id); return v; });
+  const jobs = [];
+  GFX.cards.forEach((id) => { const k = 'card:' + id; expect(k, 'bg', GFX.halfCards ? CARD_HALF : CARD_BYTES[['jacaranda_tree', 'island_tree_01', 'tree_small_02', 'island_tree_02'].indexOf(id)] || 6e6); jobs.push(ok(k, loadCard(id)).then(c => { if (c) SCANS.cards.set(id, c); })); });
+  GFX.models.forEach((id) => { const k = 'scan:' + id; expect(k, 'bg', MODEL_BYTES[id] || 2e6); jobs.push(ok(k, loadScan(id)).then(m => { if (m) SCANS.models.set(id, m); })); });
+  SCANS.pending = Promise.all(jobs).then(() => { SCANS.ready = true; return SCANS; });
+  return SCANS.pending;
 }
 
 // ------------------------------------------------------------------------------------------------ sky

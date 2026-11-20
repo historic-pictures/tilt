@@ -1,6 +1,7 @@
 // Small turning 3D previews for the armoury: each horse, each harness and each lance on its own little turntable.
 // One spare renderer draws them in turn and the picture is copied into the <canvas class="pv" data-pv="kind:id"> of each card.
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Jouster } from './jouster.js';
 import { HORSES, ARMOURS, LANCES, harness } from './data.js';
@@ -13,7 +14,7 @@ export function createPreviews() {
   const _t = new THREE.Vector3();
 
   function init() {
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
+    renderer = new THREE.WebGLRenderer({ antialias: GFX.antialias, alpha: true, preserveDrawingBuffer: false });
     renderer.setPixelRatio(1); renderer.setSize(BW, BH, false); renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95; renderer.outputColorSpace = THREE.SRGBColorSpace;
     scene = new THREE.Scene();

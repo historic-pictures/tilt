@@ -1,6 +1,7 @@
 // props.js - field set-dressing and attendant figures for the jousting lists.
 // Plain ES module, procedural geometry + canvas textures only.
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 
 /* ------------------------------------------------------------------ utils */
 function mulberry32(a) {
@@ -500,7 +501,7 @@ function lanceTexture(c1, c2) {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(1, 9);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = Math.min(4, GFX.aniso);
   return t;
 }
 
@@ -601,7 +602,7 @@ function shieldAtlas(designs) {
   }
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = Math.min(4, GFX.aniso);
   return t;
 }
 

@@ -12,7 +12,7 @@ export const touchMode = (() => {
 if (touchMode) document.body.classList.add('touch');
 
 const AIM_SENS = 2.2;       // NDC travelled per screen width (x) or height (y) of finger travel
-const AIM_ZONE = 0.6;       // a drag that starts in the left 60% of the screen aims; the rest only taps / holds
+const TAP_PULL = 0.65;      // in the lists, a tap pulls the aim this far toward the tapped point (1 = straight onto it)
 
 /** Full screen + landscape lock (both best-effort: iPhone Safari allows neither). */
 export function goFullscreen() {
@@ -62,22 +62,29 @@ export function initTouch(h) {
 
   // ---- the layer: one finger aims (relative, like a trackpad), any finger can tap or hold
   const pts = new Map(); let aim = null, skipHeld = false;
+  const aiming = () => { const C = h.getC(); return !S.paused && (S.mode === 'ready' || S.mode === 'charge') && !!C && !(C.pL && C.pL.done) && !C.mont && !C.beat; };
   const skippable = () => { const C = h.getC(); return S.mode === 'intro' || !!(C && (C.mont || C.beat)); };
   layer.addEventListener('pointerdown', (e) => {
     e.preventDefault(); h.initAudio();
     try { layer.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-    const r = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0, skip: skippable(), aim: false };
-    if (aim === null && e.clientX < window.innerWidth * AIM_ZONE) { aim = e.pointerId; r.aim = true; }
+    const r = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: performance.now(), moved: 0, skip: skippable(), aim: false };
     pts.set(e.pointerId, r);
   });
   layer.addEventListener('pointermove', (e) => {
     const r = pts.get(e.pointerId); if (!r) return; e.preventDefault();
     const dx = e.clientX - r.x, dy = e.clientY - r.y; r.x = e.clientX; r.y = e.clientY; r.moved += Math.hypot(dx, dy);
+    if (aim === null && r.moved >= 6) { aim = e.pointerId; r.aim = true; }      // any finger, anywhere: the first one to slide becomes the aiming finger
     if (r.aim && !S.paused) { h.mouse.x = clamp(h.mouse.x + dx / window.innerWidth * AIM_SENS, -1, 1); h.mouse.y = clamp(h.mouse.y - dy / window.innerHeight * AIM_SENS, -1, 1); }
   });
   const end = (e, cancelled) => {
     const r = pts.get(e.pointerId); if (!r) return; pts.delete(e.pointerId); if (aim === e.pointerId) aim = null;
-    if (!cancelled && r.moved < 14 && performance.now() - r.t < 450 && !r.skip && S.mode !== 'charge' && (!S.paused || S.hl)) h.advance();
+    if (cancelled || r.moved >= 14 || performance.now() - r.t >= 450) return;
+    if (aiming()) {      // in the lists a tap points the lance at that spot (most of the way: a drag fine-tunes it)
+      const nx = r.x0 / window.innerWidth * 2 - 1, ny = -(r.y0 / window.innerHeight * 2 - 1);
+      h.mouse.x = clamp(h.mouse.x + (nx - h.mouse.x) * TAP_PULL, -1, 1); h.mouse.y = clamp(h.mouse.y + (ny - h.mouse.y) * TAP_PULL, -1, 1);
+      return;
+    }
+    if (!r.skip && S.mode !== 'charge' && (!S.paused || S.hl)) h.advance();
   };
   layer.addEventListener('pointerup', (e) => { e.preventDefault(); end(e, false); });
   layer.addEventListener('pointercancel', (e) => end(e, true));

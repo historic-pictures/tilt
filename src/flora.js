@@ -1,6 +1,7 @@
 // flora.js - procedural trees, grass, wildflowers and set-dressing props for the jousting game.
 // Everything is generated at runtime (geometry + canvas textures). No external assets.
 import * as THREE from 'three';
+import { GFX } from './gfx.js';
 import { SCANS, buildCards, scanVariants, scatter } from './scans.js';
 
 /* ------------------------------------------------------------------ utils */
@@ -36,7 +37,7 @@ function canvasTex(w, h, draw) {
   draw(c.getContext('2d'), w, h);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = Math.min(4, GFX.aniso);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
@@ -419,7 +420,7 @@ export function buildFlora(group, opts = {}) {
       if (treeOK(x, z, 70)) { clumps.push({ x, z, s: 6 + rng() * 10 }); break; }
     }
   }
-  const TREES = 380;
+  const TREES = Math.round(380 * GFX.trees);      // lower graphics tiers plant fewer
   for (let att = 0; treePts.length < TREES && att < 40000; att++) {
     const mode = rng();
     let x, z;
@@ -481,7 +482,7 @@ export function buildFlora(group, opts = {}) {
     { c: [0, 0.55, 0], r: [1.2, 0.85, 1.2] }, { c: [0.8, 0.4, 0.4], r: [0.8, 0.6, 0.8] } ] };
   const bushGeo = buildCanopyGeometry(bushSpec, sunDir, seed * 1.7 + 500);
   const bushItems = [];
-  for (let att = 0; bushItems.length < 120 && att < 20000; att++) {
+  for (let att = 0; bushItems.length < Math.round(120 * GFX.bushes) && att < 20000; att++) {
     const a = rng() * Math.PI * 2, r = 45 + rng() * 65;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (!treeOK(x, z, 45)) continue;
@@ -514,16 +515,16 @@ export function buildFlora(group, opts = {}) {
   });
   const gPts = [];
   const push = (x, z) => gPts.push({ x, z });
-  for (let i = 0; i < 3600; i++) { // verge
+  for (let i = 0, n = Math.round(3600 * GFX.grass); i < n; i++) { // verge
     const sx = rng() < 0.5 ? -1 : 1, z = (rng() * 2 - 1) * 51;
     const maxX = Math.abs(z) < 36.5 ? 12.0 : 12.3;
     push(sx * lerp(9.7, maxX, rng()), z);
   }
-  for (let i = 0; i < 1800; i++) { // end bands
+  for (let i = 0, n = Math.round(1800 * GFX.grass); i < n; i++) { // end bands
     const sz = rng() < 0.5 ? -1 : 1;
     push((rng() * 2 - 1) * 12, sz * lerp(51.5, 60, rng()));
   }
-  for (let att = 0, n = 0; n < 3600 && att < 60000; att++) { // thinning scatter
+  for (let att = 0, n = 0; n < Math.round(3600 * GFX.grass) && att < 60000; att++) { // thinning scatter
     const x = (rng() * 2 - 1) * 52, z = (rng() * 2 - 1) * 92;
     const d = distToLists(x, z);
     if (d > 40 || !grassOK(x, z) || (z > 60 && Math.abs(x) < 10)) continue;
@@ -562,7 +563,7 @@ export function buildFlora(group, opts = {}) {
     drifts.push({ x, z, s: 1.8 + rng() * 2.5, c: (rng() * 4) | 0, mix: rng() < 0.3 });
   }
   const fItems = [], fc = new THREE.Color();
-  for (let att = 0; fItems.length < 700 && att < 20000 && drifts.length; att++) {
+  for (let att = 0; fItems.length < Math.round(700 * GFX.flowers) && att < 20000 && drifts.length; att++) {
     const d = drifts[(rng() * drifts.length) | 0];
     const x = d.x + gauss(rng) * d.s, z = d.z + gauss(rng) * d.s;
     if (!grassOK(x, z) || (z > 55 && Math.abs(x) < 12)) continue;
