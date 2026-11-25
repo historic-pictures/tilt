@@ -370,6 +370,16 @@ export class GameAudio {
       this._play('kit_rattle', o({ db: -4, delay: 0.06 }));
     });
   }
+  /** The helm ringing after a blow: no synthesis. The longest impact_metal samples, pitched up (a struck helm rings high and thin) in two slightly detuned
+   *  voices that beat against each other, each with a slow swell-and-die envelope and a wetter send, then a faint low one underneath. power 0..1.2. */
+  helmRing(power, dist = 1.5) {
+    this._run(() => {
+      const p = clamp(power, 0.2, 1.2), db = lerp(-9, -2, p / 1.2), hl = lerp(0.35, 0.9, p / 1.2), o = (x) => Object.assign({ stem: 'impact', dist, pick: 'long', wet: 6, delay: 0.05 }, x);
+      this._play('impact_metal', o({ db, rate: 1.9, env: [0.004, hl] }));
+      this._play('impact_metal', o({ db: db - 1.5, rate: 1.96, env: [0.004, hl * 1.2], delay: 0.07 }));
+      this._play('impact_metal', o({ db: db - 6, rate: 1.35, env: [0.01, hl * 1.5], delay: 0.12 }));
+    });
+  }
   lanceBreak(power, dist = 3) {
     this._run(() => {
       const p = clamp(power, 0.3, 1.2), o = (x) => Object.assign({ stem: 'impact', dist }, x);

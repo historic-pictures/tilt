@@ -5,24 +5,30 @@ export const GAITS = ['HALT', 'WALK', 'TROT', 'CANTER', 'GALLOP'];
 // tilt's 2 m panels): about 7 m/s at full pace, reached in about 2 s, at about 2 strides a second. Horse `top` speeds are set from that.
 export const GAIT_SPEED = [0, 1.8, 4.2, 6.2, 1];
 
+// Real sizes. `withers` (m) is the height at the withers, `hands` the same in hands and inches (1 hand = 4 in = 0.1016 m; 15.2 = 15 hands 2 in = 62 in = 1.575 m),
+// `kg` the weight, `length` point of shoulder to point of buttock in m. The rigged model is scaled so its withers stand at `withers` (jouster.js modelWithers),
+// and the saddle is then seated on that scaled back. Sources (from memory, not re-checked against the books): the Museum of London's "The Medieval Horse and its
+// Equipment" (Clark, 1995) and Ann Hyland's "The Medieval Warhorse" (1994) put most medieval horses, warhorses included, at 14 to 15 hands, with the great
+// destriers up to about 16 (a modern Shire is 17+). The per-horse figures are our own picks inside those ranges; weights are for lean, ridden horses.
+// `scale` is only the size of the older code-built horse, used if the rigged model fails to load.
 export const HORSES = {
   destrier: {
-    id: 'destrier', name: 'Destrier', blurb: 'The great horse. Heavy, steady and hard-hitting, slow to get going.',
+    id: 'destrier', name: 'Destrier', hands: 15.2, withers: 1.575, kg: 540, length: 1.65, blurb: 'The great horse. Heavy, steady and hard-hitting, slow to get going.',
     price: 260, top: 7.7, accel: 2.4, mass: 1.25, steady: 0.85, nerve: 0.8, stamina: 0.7, scale: 1.07, girth: 1.08,
     coat: 0x2a211b, mane: 0x0e0c0b,
   },
   courser: {
-    id: 'courser', name: 'Courser', blurb: 'Fast and hot-blooded. Brings great speed to the strike, but the lance bounces.',
+    id: 'courser', name: 'Courser', hands: 15.0, withers: 1.524, kg: 470, length: 1.58, blurb: 'Fast and hot-blooded. Brings great speed to the strike, but the lance bounces.',
     price: 170, top: 9.0, accel: 3.2, mass: 1.0, steady: 0.58, nerve: 0.5, stamina: 0.85, scale: 1.0, girth: 0.96,
     coat: 0x6a3f22, mane: 0x16110d,
   },
   andalusian: {
-    id: 'andalusian', name: 'Andalusian', blurb: 'Iberian warhorse. Collected, smooth-gaited and quick off the mark.',
+    id: 'andalusian', name: 'Andalusian', hands: 14.3, withers: 1.499, kg: 450, length: 1.52, blurb: 'Iberian warhorse. Collected, smooth-gaited and quick off the mark.',
     price: 130, top: 8.3, accel: 3.5, mass: 0.92, steady: 0.8, nerve: 0.68, stamina: 0.8, scale: 0.97, girth: 1.0,
     coat: 0xb9b5ac, mane: 0x8d8a84, socks: false,
   },
   rouncey: {
-    id: 'rouncey', name: 'Rouncey', blurb: 'An honest all-rounder. Unflappable and tireless, but light in the shock.',
+    id: 'rouncey', name: 'Rouncey', hands: 14.1, withers: 1.448, kg: 420, length: 1.48, blurb: 'An honest all-rounder. Unflappable and tireless, but light in the shock.',
     price: 0, top: 7.9, accel: 2.8, mass: 0.84, steady: 0.52, nerve: 0.92, stamina: 1.0, scale: 0.93, girth: 0.97,
     coat: 0x7b4a26, mane: 0x2a1c12, socks: true,
   },
@@ -430,6 +436,19 @@ export const PHYS = {
   // The unhorsed rider as one rigid body: mass (kg), moment of inertia (kg m2), bounce, grip of the sand.
   fall: { kg: 105, inertia: 13, bounce: 0.18, friction: 0.65 },
   quintainKg: 250,      // the board, its arm and sandbag, and the reaction of the post
+  // Drama: injuries, the surgeon, yielding, a dropped lance, helm ringing and daze (main.js, "drama" section; all offline: online play keeps none of it).
+  // heavyHelm / heavyBody: stroke power (1 = a full 250 J stroke) that makes a hit "heavy" (the battered-knight close-up; a lance broken on the helm always is). battered: seconds of that close-up; batterGap: courses between two close-ups.
+  // Condition (FIT / DOUBTFUL / UNFIT) from body hp, the jolt of arm and wind, and heavy blows taken: unfitBody and (unfitArm and unfitWind together) = UNFIT; doubtBody, doubtArm with doubtWind, or heavyN heavy blows with body under heavyBody2 = DOUBTFUL.
+  // tendPower: a blow this strong (or an unhorsing, or a body that fell tendBody in one course, or a smashed helm, or condition worsening) sends the surgeon to the man; tend: seconds of the beat. helmSwapAt: helm damage at which the spare helm is fitted (once a match).
+  // aiYield: chance per course that a DOUBTFUL AI yields when behind by aiBehind points or more. spares: spare lances (one more per course beyond four).
+  // Drop: a lance that holds (no break) on a stroke of dropPower or more, with the arm jarred to dropArm (or, for the struck man, thrown back dropLean of the way to going over): chance dropChance, scaled up by how far past; dropMax per man per match.
+  // Daze: seconds = dazeBase + dazePower * power (x dazeHelm on the helm), capped dazeMax; dazeAim: extra aim sway (x) while dazed (you), oppDaze: the same for the AI; dazeBlur: screen blur/wobble strength.
+  drama: { heavyHelm: 0.62, heavyBody: 0.8, battered: 2.1, batterGap: 2,
+    unfitBody: 0.18, unfitArm: 0.9, unfitWind: 0.9, doubtBody: 0.42, doubtArm: 0.75, doubtWind: 0.7, heavyN: 3, heavyBody2: 0.6,
+    tendPower: 1.0, tendBody: 0.2, tend: 6, helmSwapAt: 0.7,
+    aiYield: 0.35, aiBehind: 3, spares: 3,
+    dropPower: 0.7, dropArm: 0.5, dropLean: 0.8, dropChance: 0.45, dropMax: 1,
+    dazeBase: 0.9, dazePower: 1.1, dazeHelm: 1.35, dazeMax: 3, dazeAim: 2.2, oppDaze: 1.6, dazeBlur: 0.8 },
   lanceArm: { wnLoose: 5.5, wnSet: 11.5, zetaLoose: 0.35, zetaSet: 0.68, refKg: 5.5, lever: 0.36, tremor: 0.5, tremorFatigue: 2.6, tremorAgit: 1.4 },
 };
 
@@ -455,7 +474,7 @@ export const ACHIEVEMENTS = [
   { id: 'venue_leon', group: 'Venues', name: 'Passo Honroso', text: 'Win a match at the Passo Honroso, León.', rule: { in: ['venues', 'leon'] } },
   { id: 'venue_bruges', group: 'Venues', name: 'The Golden Tree', text: 'Win a match at the Golden Tree, Bruges.', rule: { in: ['venues', 'bruges'] } },
   { id: 'venue_nuremberg', group: 'Venues', name: 'Gesellenstechen', text: 'Win a match at Nuremberg.', rule: { in: ['venues', 'nuremberg'] } },
-  { id: 'champion', group: 'Venues', name: 'Circuit Champion', text: 'Finish the European Circuit at the head of the table.', rule: { ev: 'circuitWon' }, renown: 15 },
+  { id: 'champion', group: 'Venues', name: 'Circuit Champion', text: 'Win the final of the last tournament of a season.', rule: { ev: 'circuitWon' }, renown: 15 },
   { id: 'rule_planken', group: 'Rule Sets', name: 'Over the Tilt', text: 'Win a Standard Joust.', rule: { in: ['modes', 'planken'] } },
   { id: 'rule_tiptoft', group: 'Rule Sets', name: "The Earl's Rules", text: "Win under Tiptoft's Ordinances.", rule: { in: ['modes', 'tiptoft'] } },
   { id: 'rule_castile', group: 'Rule Sets', name: 'Knight of the Band', text: 'Win under the Statutes of the Band.', rule: { in: ['modes', 'castile'] } },

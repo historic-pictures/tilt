@@ -3,7 +3,7 @@ import { buildWorld, LANE_X, START_Z, LIST_HALF } from './world.js';
 import { Jouster, LANCE_REACH, preloadHorse } from './jouster.js';
 import { FX } from './fx.js';
 import { clamp, lerp, damp, smoothstep, wobble, drawCrest, TAU } from './util.js';
-import { HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, modeKit, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
+import { purse, HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, modeKit, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
 import { initMenus, purseText, rankBar } from './menus.js';
 import { reckon, settle } from './economy.js';
 import { createPreviews } from './previews.js';
@@ -24,11 +24,14 @@ import { chooseLine, ROLE_TITLE } from './retinue_lines.js';
 import { createFlagmen } from './flagmen.js';
 import { createJudges } from './judges.js';
 import { createCeremony, INTRO_END, SKIP_HOLD, MOVE } from './ceremony.js';
-import { ANNOUNCER, HOST_LINES, INTRO, hostOf, hailName, bioOf, boastFor, fill, CIRCUIT } from './drama_lines.js';
+import { ANNOUNCER, HOST_LINES, INTRO, hostOf, hailName, bioOf, boastFor, fill, CIRCUIT, STAKES, HOST_FINAL } from './drama_lines.js';
+import * as career from './career.js';
+import { FIELD } from './career_story.js';
 import { ACH_BY_ID, ensureFeats, checkFeats, courseFeats, matchFeats, circuitFeat, courtesyFeat, ladyFeat, rankLine } from './achievements.js';
 import { Hit, sweepCapCap, sweepCapObb, capCapGap, capObbGap } from './collide.js';
 import { createNet, makeCode, cleanCode, validCode, failText, preloadNet } from './net.js';
 import * as ranks from './ranks.js';
+import * as account from './account.js';
 import { cleanName, Remote, SEND_HZ, packProfile, cleanProfile, onlineOd, cleanRoom, onlineModeIds, packRider, cleanState, applyRider, mirrorVec, MIRROR_RESULT, cleanRes, cleanNear, clampNum } from './online.js';
 
 const $ = (id) => document.getElementById(id);
@@ -147,6 +150,7 @@ window.addEventListener('resize', resize);
 const S = { mode: 'menu', time: 0, timeScale: 1, excite: 0.12, slowT: 0, shake: 0, fp: false, muted: (() => { try { return localStorage.getItem('tilt.sound') === 'off'; } catch (e) { return false; } })(), introT: 0, skipHold: 0, skipWanted: { me: false, them: false }, online: false, menuAng: 0.6, paused: false, menuView: 'main' };
 let profile = loadProfile();
 ranks.setNameSource(() => profile.name);
+ranks.setAuthSource(() => account.token());
 /** Joust a friend (see src/net.js, src/online.js and the 'online' block below): the link, who is host, the friend's interpolated rider. */
 const NET = { mid: '', oppPlay: null, net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0 };
 let world = null, worldKey = -1, venueIdx = -1, player = null, opp = null, M = null, C = null, R = null;
@@ -191,10 +195,10 @@ let skipKey = false;                          // Space / Enter held (the intro i
 const dirP = () => (player ? player.dir : 1);          // which way you are riding this course
 const gapNow = () => (opp.z - player.z) * dirP();        // metres still between you (negative once passed)
 
-function loadProfile() {
+function loadProfile(from = null) {      // from: a profile built from the server's account (src/account.js), else the guest's local save
   const d = JSON.parse(JSON.stringify(DEFAULT_PROFILE));
   try {
-    const p = JSON.parse(localStorage.getItem('tilt.profile'));
+    const p = from || JSON.parse(localStorage.getItem('tilt.profile'));
     if (p && p.arms) {
       const m = Object.assign(d, p);
       if (!m.owned.horses.includes(m.horse)) m.owned.horses.push(m.horse);
@@ -202,7 +206,7 @@ function loadProfile() {
       if (!(m.courses >= 3)) m.courses = 5;
       if (!m.arts) m.arts = {};
       if (!m.skills) m.skills = {};
-      fixRetinue(m); ensureFeats(m);
+      fixRetinue(m); ensureFeats(m); career.ensureCareer(m);
       // circuits saved before the roster changed: the invented Sir Aldric is now the real Sir Thomas Clifford, and new knights get a row
       if (m.table && m.table.rows) { const ren = { aldric: 'clifford' }; for (const r of m.table.rows) if (ren[r.id]) r.id = ren[r.id]; for (const x of m.table.results || []) if (ren[x.opp]) x.opp = ren[x.opp];
         m.table.rows = m.table.rows.filter(r => r.id === 'you' || KNIGHTS.some(k => k.id === r.id)); for (const k of KNIGHTS) if (!m.table.rows.some(r => r.id === k.id)) m.table.rows.push({ id: k.id, p: 0, w: 0, d: 0, l: 0, sp: 0 }); }
@@ -235,7 +239,10 @@ function rollLate() {
 }
 /** The sum of one number from every man's temper (calm, rest, welcome) who is here this course. */
 const crew = (k) => S.online ? 0 : Object.keys(profile.retinue || {}).reduce((a, id) => { const r = profile.retinue[id]; return a + (r && !lateMen[id] && TRAITS[r.trait] ? TRAITS[r.trait][k] || 0 : 0); }, 0);
-function saveProfile() { try { localStorage.setItem('tilt.profile', JSON.stringify(profile)); } catch (e) { /* ignore */ } }
+function saveProfile() {
+  if (account.signedIn()) { account.queueSave(profile); return; }      // a signed-in player's profile lives in the cloud (gold, renown and owned items only ever come from the server); the guest's local save is left alone
+  try { localStorage.setItem('tilt.profile', JSON.stringify(profile)); } catch (e) { /* ignore */ }
+}
 
 // ------------------------------------------------------------------ world / riders
 let worldScans = false;      // did the current world get the scanned trees and props (they may still be downloading when the menu first shows)
@@ -425,6 +432,7 @@ function betweenColour(royalKey) {
   if (C && C.remarkQueued) return;      // the two replay remarks (yours, then his) are this gap's colour
   if (M.ladyPending) { M.ladyPending = false; if (!herald('ladyFavour', 0.6)) say('A lady sends down her sleeve. Your nerve returns.', 'THE GALLERY', 3, { delay: 0.6, free: true, ttl: 6, phases: 'after' }); return; }
   if (!M.circuit || !HERALD || !voice.colourOk()) return;
+  if (M.tourn && M.course >= 2 && M.score[0] !== M.score[1] && (M.stakeAt || 0) < M.course - 1 && Math.random() < 0.7) { M.stakeAt = M.course; if (herald('stakes', 1.2, { pool: M.score[0] > M.score[1] ? STAKES.lead : STAKES.trail })) return; }
   const tk = nextTeach();
   const order = [tk, royalKey, M.usedFacts.size < HERALD.facts.length ? 'facts' : null, 'turnAbout'].filter(k => k && k !== voice.lastCat);
   if (order.length) { if (order[0] === tk) teach(tk, 1.2); else if (HOSTKIND[order[0]] && hostSay(HOSTKIND[order[0]], 1.2)) return; else herald(order[0], 1.2); }
@@ -580,7 +588,10 @@ function introLines() {
   const vars = { venue: M.V.name, city: M.V.city, year: M.V.year, himFull: hailName(od), land: od.land, him: od.short, you: profile.name, arms: `${tinct(profile.arms.c1)} and ${tinct(profile.arms.c2)}` };
   const L = (at, text, who, hold, extra = {}) => voice.later(at, () => say(fill(text, vars), who, 3, Object.assign({ phases: 'intro', ttl: 6, hold, gapAfter: 0.7 }, extra)));
   const hugh = (at, text, hold) => L(at, text, ANNOUNCER.label, hold, { speak: true, speaker: speakerOf.hugh, voice: 'hugh', onShown() { ceremony.speak(hold); } });
-  L(6.0, pick(hl.open), host.label, 3.6, { speak: true, speaker: speakerOf.king, voice: 'king' });                       // the host stands at 5.4 (cue below)
+  const TO = M.tourn;
+  if (TO) { vars.size = TO.size; vars.round = TO.name; }
+  L(6.0, pick(TO && TO.kind === 'final' && HOST_FINAL[host.id] ? HOST_FINAL[host.id] : hl.open), host.label, 3.6, { speak: true, speaker: speakerOf.king, voice: 'king' });                       // the host stands at 5.4 (cue below)
+  if (TO) { hugh(10.4, pick(STAKES[TO.kind]), 3.6); if (TO.rematch) hugh(14.2, pick(STAKES.rematch), 3.6); else if (TO.first && TO.round === 0) hugh(14.2, pick(STAKES.first), 3.6); }
   hugh(19.4, pick(INTRO.venue), 3.4); hugh(23.5, pick(INTRO.names), 3.3);
   const pu = ret.pursuivant && typeof ret.pursuivant === 'object' ? ret.pursuivant : null, mine = pu ? 'pursuivant' : 'squire', man = ret[mine];
   L(27.5, boastFor('him', od.id), 'HIS HERALD', 3.8, { speak: true, speaker: speakerOf.oppHerald, voice: 'herald' });
@@ -668,7 +679,7 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
   initAudio(); G.physLog = [];
   setVenue(vIdx, practice);
   if (!practice && MODES[modeId || VENUES[vIdx].mode || 'planken'].bridge && !bridge) { bridge = newBridge(oppId); oppId = bridge.queue[0]; }      // a fresh pas d'armes: the queue is drawn once
-  const V = VENUES[vIdx], od = practice ? QUINTAIN_DEF : onl ? NET.od : KNIGHTS.find(k => k.id === oppId);
+  const V = VENUES[vIdx], od = practice ? QUINTAIN_DEF : onl ? NET.od : KNIGHTS.find(k => k.id === oppId) || FIELD.find(k => k.id === oppId);
   rebuildPlayer(); disposeRider(opp); player.visorUp = false; player.helmOff = false;
   if (bridge && bridge.keep) bridgeRestoreHarness(bridge.keep);
   if (practice) { opp = new Quintain(scene, LANE_X, 0); opp.setSide(1); } else if (onl) { opp = makeRider(Object.assign({}, od, { horseDef: HORSES[od.horse], armourDef: harness(od.armour, od.helm), lance: od.lance }), -1, false); opp.setCaparison(od.cap || 'livery'); opp.remote = true; opp.setPose(START_Z, -1); } else { opp = makeRider(od, -1, false); opp.setPose(START_Z, -1); }
@@ -681,8 +692,14 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
   M = { V, vIdx, od, circuit, practice, mode, PT, courses: mode.fixedCourses ?? (mode.noExtra && !mode.pickCourses ? 4 : (!practice && courses) || COURSES_PER_MATCH), bridge: bridge || null, course: 0, score: [0, 0], marks: [[], []], favour: V.home * 0.8, fav: { commons: V.home + welcome, court: V.home * 0.6 + welcome }, stamina: 1,
     agit: 0.15 + (1 - player.horseDef.nerve) * 0.3, focus: 1, fouls: 0, breaks: [0, 0], result: null, online: !!onl, hpO: { horse: 1, body: 1 }, oTilts: 0, hp: { horse: 1, body: 1 }, bodyS: { p: { arm: 0, wind: 0 }, o: { arm: 0, wind: 0 } }, taught: {}, lesson: practice ? Math.min(profile.lesson || 0, LESSONS.length - 1) : -1,
     kit: modeKit(practice ? null : mode), shyN: [0, 0], shieldOff: [0, 0], sights: [0, 0], maxDef: 0, tilts: 0, usedFacts: new Set(), ladyPending: false, teachPick: null,
+    dr: { heavy: [0, 0], drops: [0, 0], swapped: [false, false], batterAt: -9, dazeT: 0, dazeDur: 1, dazeK: 0, oDazeT: 0, cond: ['FIT', 'FIT'], yielded: false },      // drama (see PHYS.drama): heavy blows taken, lances dropped, spare helm used, the daze, the last condition
     stats: [0, 1].map(() => ({ broken: 0, attaint: 0, helm: 0, miss: 0, top: 0, best: 0 })), tech: { sight: 0, lance: 0, horse: 0, will: 0, n: 0 } };
+  if (circuit && !onl && !practice && !bridge) { const dt = career.describe(profile); if (dt && dt.opp === od.id) M.tourn = dt; }      // a knockout tournament: the round, and what is at stake
   if (onl) { M.mid = NET.mid; M.oppRid = LOBBY.friend ? LOBBY.friend.rid : ''; }
+  if (account.signedIn() && !practice && !onl) {      // a signed-in player's match is timed and paid by the server: it starts its own clock now (a bridge is one match across its bouts)
+    if (M.bridge && M.bridge.spId) M.spId = M.bridge.spId;
+    else { M.spId = account.spStart({ venue: vIdx, mode: mode.id, courses: M.bridge ? 20 : M.courses + 2, circuit: !!circuit }); if (M.bridge) M.bridge.spId = M.spId; }
+  }
   if (bridge && bridge.keep) { const k = bridge.keep; M.stamina = k.stamina; M.hp.horse = k.horse; M.hp.body = k.body; M.agit = k.agit; M.focus = Math.min(k.focus, k.body); M.fav = Object.assign({}, k.fav); M.favour = k.favour; if (k.bodyS) Object.assign(M.bodyS.p, k.bodyS); }      // the bridge: nothing is mended between bouts
   if (M.kit.shieldTall > 1) { player.tallShield(M.kit.shieldTall); if (!practice) opp.tallShield(M.kit.shieldTall); }      // the Renntartsche: the same tall shield for both
   M.retUsed = new Set(); field.setup(profile.retinue, profile.arms, practice, practice ? null : { name: od.short, arms: od.arms });
@@ -719,7 +736,7 @@ function beginCourse(first = false) {
     rd: { p: false, o: !!M.practice, oAt: 0.8 + Math.random() * 1.4, w: 0, sig: false, warned: false, plan: null },   // the raise: you, him, when he raises, wait since both are up, marshal's signal given, warned once
     beat: null, mont: null, montDone: false, judged: false, resultArgs: null, colourLater: false,
     afterT: 0, carded: false, verdict: false, verdictT: 0, replayed: false, tech: null, cine: null, ev: { couch: null, brace: null, impact: null, taps: [] },
-    turn: { p: { stage: 'run', th: 0 }, o: { stage: 'run', th: 0 } }, rec: { f: [], ev: [] }, hitT: null,
+    turn: { p: { stage: 'run', th: 0 }, o: { stage: 'run', th: 0 } }, rec: { f: [], ev: [], hits: [] }, hitT: null,
     o: { q: clamp((od.skill + DIFFICULTY[profile.difficulty ?? 1].ai) * 0.85 + Math.random() * 0.25, 0, 1), top: lerp(GAIT_SPEED[3], HORSES[od.horse].top, clamp(od.drive + (Math.random() - 0.5) * 0.12, 0, 1)), zone: Math.random() < od.skill * 0.3 ? 'helm' : (Math.random() < 0.75 ? 'shield' : 'body'),
       bias: new THREE.Vector2((Math.random() - 0.5), (Math.random() - 0.5)), seed: Math.random() * 50, brace: Math.random() < lerp(0.25, 0.9, od.skill), go: 0.25 + Math.random() * 0.35,
       guard: Math.random() < lerp(0.08, 0.5, od.skill), rattled: 1, retarget: false, knock: new THREE.Vector2() },
@@ -740,7 +757,7 @@ function beginCourse(first = false) {
   const rs = restShare(M.courses);       // a long match gives a little more rest between courses (see REST in data.js)
   M.stamina = clamp(M.stamina + REST.stamina + REST.longStamina * rs + crew('rest') + (man('groom') ? man('groom').stamina : 0), 0, 1);
   if (!first) for (const b of [M.bodyS.p, M.bodyS.o]) { b.wind *= PHYS.body.windRest; b.arm *= PHYS.body.armRest; }      // the breath comes back between courses; a jarred arm hardly
-  if (!first && M.online) M.hpO.body = clamp(M.hpO.body + REST.body * rs, 0, 1);      // (the friend's body, kept by the host: see strike)
+  if (!first) M.hpO.body = clamp(M.hpO.body + REST.body * rs, 0, 1);      // (his body, kept here offline and by the host online: see strike)
   if (!first) { M.hp.body = clamp(M.hp.body + REST.body * rs, 0, 1); M.agit = clamp(M.agit - crew('calm'), 0, 1); if (man('groom')) M.agit = clamp(M.agit - man('groom').calm, 0, 1); if (man('armourer')) M.hp.body = clamp(M.hp.body + man('armourer').mend, 0, 1); if (man('farrier')) M.hp.horse = clamp(M.hp.horse + man('farrier').heal, 0, 1); player.mend(man('armourer') ? PHYS.damage.mend : 0, man('squire') ? PHYS.damage.squireShield : 0); } M.focus = clamp(M.focus + 0.35 + (sk('nerve') ? SKILLS.nerve.refill : 0) + 0.3 * Math.max(0, M.fav.commons), 0, M.hp.body); M.agit = clamp(M.agit - 0.1, 0, 1);
   S.mode = 'ready'; S.slowT = 0; bobHist.y = bobHist.v = bobHist.a = 0;
   $('banner').classList.add('hidden'); $('hud').classList.remove('hidden'); $('card').classList.add('hidden');
@@ -759,7 +776,8 @@ function beginCourse(first = false) {
   }
   if (first && M.circuit) voice.later(3.2, () => teach('teachSalute', 0, { free: true }));      // the one lesson before the first course
   if (M.fav.commons > 0.5) audio.crowd('chant', 0.8);
-  C.hp0 = M.hp.body; C.dNote = [];
+  C.hp0 = M.hp.body; C.dNote = []; C.hpO0 = M.hpO.body; C.heavyHit = [null, null]; C.tendFor = [false, false];
+  if (!first) dramaBetween();
   field.begin({ heavy: gapHeavy, horseHurt: M.hp.horse < 0.8, cheer() { react('salute', 0, false); } });      // the groom to the bridle, the pursuivant with the banner, and so on
   if (first) retinueSpeak(gapSit, 0.5);      // later courses: your men speak as you ride back to them (rideOut)
   if (M.bondUp) setTimeout(() => toast('BOND', `Your ${player.horseDef.name.toLowerCase()} trusts you more with every course. Bond ${BOND_NAMES[bondLevel(profile.bond[profile.horse])]}: steadier and bolder.`), 1500);
@@ -773,7 +791,7 @@ function startCharge() {
   if (M.agit > 0.7 && Math.random() < 0.6) { player.rear = 0.01; C.rearT = 0.9; audio.whinny(0, 3); }      // the rear is seen, not told: the charge is silent
 }
 function spur() {
-  if (S.paused || S.mode === 'replay') return;
+  if (S.paused || S.mode === 'replay' || S.yieldAsk) return;
   if (S.mode === 'ready') {
     const R = C.rd;
     if (C.beat) return;      // the squire is at your helm
@@ -859,11 +877,12 @@ const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2(0.12, 0.05); 
 let focusHeld = false;
 const arm = new LanceArm();          // your lance arm
 const aimMouse = new THREE.Vector2(0.12, 0.05);
+const _dm = new THREE.Vector2();
 const bobHist = { y: 0, v: 0, a: 0 };  // vertical motion of your saddle, for the lance to feel
 
 /** How hard the horse's motion and your own state throw the lance about (multiplier on the arm physics). */
 function armScale() {
-  return (0.85 + 0.15 * player.armourDef.weight) * LANCES[profile.lance || 'standard'].sway * DIFFICULTY[profile.difficulty ?? 1].sway * (1 + (sk('shield') ? SKILLS.shield.sway : 0.35) * player.guard) * (1.25 - 0.25 * M.hp.body) * (sk('arm') ? SKILLS.arm.sway : 1) * (1 + PHYS.damage.helmWobble * player.dmg.helm);      // a dented helm adds a slight wobble to the aim
+  return (0.85 + 0.15 * player.armourDef.weight) * LANCES[profile.lance || 'standard'].sway * DIFFICULTY[profile.difficulty ?? 1].sway * (1 + (sk('shield') ? SKILLS.shield.sway : 0.35) * player.guard) * (1.25 - 0.25 * M.hp.body) * (sk('arm') ? SKILLS.arm.sway : 1) * (1 + PHYS.damage.helmWobble * player.dmg.helm) * (1 + DR.dazeAim * dazeFrac());      // a dented helm adds a slight wobble to the aim
 }
 
 const _qa = new THREE.Quaternion();
@@ -1095,10 +1114,14 @@ function signalStep(Pl, u) {
 }
 /** The go: the shout, a horn, the flags down and a roar from the stands. */
 function giveSignal(Pl) {
-  C.rd.sig = true; say('Laissez-les aller!', 'THE MARSHAL', 2, { key: 'signal', urgent: true, prompt: true, phases: 'ready', ttl: 3 });
+  C.rd.sig = true;
+  // the herald's cry, as the marshal's signal: text and the herald's voice (drama: "Laissez-aller!")
+  say('Laissez-aller!', ANNOUNCER.label, 2, { key: 'signal', urgent: true, prompt: true, phases: 'ready', ttl: 3, speak: profile.herald !== false, speaker: speakerOf.hugh, voice: 'hugh', onShown() { ceremony.speak(3); } });
   if (!Pl.horns) fanfare('short'); flagmen.sweep(); audio.crowd('cheer', 0.55 + 0.1 * Math.min(4, M.course));
 }
 
+/** One recorded frame of the course: both riders as they stand at course time t. */
+function recFrame(t) { C.rec.f.push({ t, p: player.snapshot(), o: opp.snapshot() }); if (C.rec.f.length > 520) C.rec.f.shift(); }
 function updateRide(dt, dtReal) {
   const H = player.horseDef, A = player.armourDef, D = dirP();
   const gap = gapNow();
@@ -1244,7 +1267,8 @@ function updateRide(dt, dtReal) {
   const gap2 = gapNow();
   if (live && gap2 > 0.5) {
     aimMouse.x = damp(aimMouse.x, mouse.x, 16 * Math.sqrt(PHYS.lanceArm.refKg / lanceOf(true).kg), dt); aimMouse.y = damp(aimMouse.y, mouse.y, 16 * Math.sqrt(PHYS.lanceArm.refKg / lanceOf(true).kg), dt);
-    ray.setFromCamera(G.auto ? mouse : aimMouse, camera);
+    if (dazeFrac() > 0.01) { const dz = dazeFrac() * 0.045; _dm.set(aimMouse.x + Math.sin(S.time * 7.1) * dz, aimMouse.y + Math.cos(S.time * 5.3) * dz); }      // a ringing head: the point drifts
+    ray.setFromCamera(G.auto ? mouse : dazeFrac() > 0.01 ? _dm : aimMouse, camera);
     opp.zoneWorld('body', _zc);
     const o = ray.ray.origin, d = ray.ray.direction;
     const t = d.z * D > 0.02 ? clamp((_zc.z - o.z) / d.z, 3, 140) : 140;
@@ -1266,7 +1290,7 @@ function updateRide(dt, dtReal) {
   }
   if (S.mode === 'charge' && !C.oL.done && gap2 > 0.5 && !S.online) {
     player.zoneWorld(O.zone, _a);
-    const amp = lerp(0.5, 0.11, clamp(od.skill + DIFFICULTY[profile.difficulty ?? 1].ai, 0, 1)) * (1 + 0.5 * clamp(M.fav.commons, 0, 1)) * O.rattled * (1 + PHYS.body.oppArm * M.bodyS.o.arm + PHYS.body.oppWind * M.bodyS.o.wind) * (1 + PHYS.kit.wander * (1 - M.kit.rest));      // no lance rest: his point wanders too
+    const amp = lerp(0.5, 0.11, clamp(od.skill + DIFFICULTY[profile.difficulty ?? 1].ai, 0, 1)) * (1 + 0.5 * clamp(M.fav.commons, 0, 1)) * O.rattled * (1 + DR.oppDaze * clamp(M.dr.oDazeT, 0, 1)) * (1 + PHYS.body.oppArm * M.bodyS.o.arm + PHYS.body.oppWind * M.bodyS.o.wind) * (1 + PHYS.kit.wander * (1 - M.kit.rest));      // no lance rest: his point wanders too
     _a.x += amp * (wobble(S.time * 1.7, O.seed) * 0.7 + O.bias.x * 0.9) + O.knock.x;
     _a.y += amp * (wobble(S.time * 2.1, O.seed + 9) * 0.7 + O.bias.y * 0.9) + O.knock.y;
     O.knock.multiplyScalar(Math.exp(-5 * dt));
@@ -1296,7 +1320,7 @@ function updateRide(dt, dtReal) {
   } else if (after) aftermath(dtReal);
 
   // keep the last few seconds for instant replay
-  if ((S.mode === 'charge' || (after && C.afterT < 2.6)) && !C.replayed && !R && !S.online) { C.rec.f.push({ t: C.t, p: player.snapshot(), o: opp.snapshot() }); if (C.rec.f.length > 520) C.rec.f.shift(); }
+  if ((S.mode === 'charge' || (S.mode === 'after' && C.afterT < 2.6)) && !C.replayed && !R && !S.online) recFrame(C.t);
 
   if (C.cut) { C.cut.t -= dtReal; if (C.cut.ots > 0) C.cut.ots -= dtReal; if (C.cut.t <= 0) { C.cut = null; $('royalCap').classList.add('hidden'); if (C.verdict && !M.result && S.mode !== 'charge') $('verdict').classList.remove('hidden'); } }
   // The quintain's sandbag is a real thing swinging round on its arm: be gone before it comes about, or it catches you in the back.
@@ -1316,6 +1340,72 @@ function updateRide(dt, dtReal) {
   S.excite = Math.max(S.excite, 0.12 + antic * 0.4);
 }
 
+// ------------------------------------------------------------------ the victory lap (single player): the winner rides to the royal box, the loser to his tent
+const LAP_END = 9.8, LAP_CUT1 = 4.4, LAP_CUT2 = 7.2;
+const lapOk = () => !S.online && !M.practice && !M.void && !/yield|forfeit/.test(M.result || '') && G.lap !== false && !(M.bridge && !M.bridge.final);
+/** Settle a drawn knockout match: more lances broken, else the marshals draw lots. */
+function settleTie() {
+  const bw = M.breaks[0] - M.breaks[1], win = bw > 0 || (bw === 0 && Math.random() < 0.5);
+  M.result = win ? 'win' : 'loss'; M.note = bw ? `Level on points: ${win ? profile.name : M.od.short} broke more lances` : 'Level on points and lances: the marshals draw lots'; M.tied = true;
+}
+function lapStart() {
+  const res = M.result, draw = res === 'draw', W = res.startsWith('win') || draw ? player : opp, L = W === player ? opp : player;
+  if (W.unhorsed || !W.root) return false;
+  C.cut = null; C.mont = null; $('royalCap').classList.add('hidden'); $('verdict').classList.add('hidden');
+  const wp = W.root.position, sg = Math.sign(wp.z) || 1, wx = wp.x >= 0;
+  const lp = L.root.position, lsx = Math.sign(lp.x) || 1, lsz = Math.sign(lp.z) || sg;
+  C.lap = { t: 0, W, L, draw, shot: 0, arrived: false, saluted: false, ended: false,
+    w: { wps: wx ? [[7, 0]] : [[-7, sg * 50], [3, sg * 55], [7, sg * 32], [7, 0]], i: 0, vmax: 9, finalYaw: Math.PI / 2 },
+    l: { wps: [[lsx * 13, lsz * 70]], i: 0, vmax: 3.8, finalYaw: null } };
+  const win = res.startsWith('win'), TO = M.tourn, pf = TO && win ? career.purseFactor(TO.rounds, TO.round) : 1;
+  const marks = Math.round(purse(M.vIdx, win ? res : 'win', M.circuit) * (win || !TO ? pf : 1));
+  fanfare(win ? 'victory' : draw ? 'short' : 'defeat');
+  react(win ? 'win' : draw ? 'salute' : 'loss', 1, false); if (world.setRoyalMood && M.circuit) world.setRoyalMood(win ? 'rise' : 'applaud');
+  const pool = draw ? STAKES.lapDraw : win ? (TO && TO.kind === 'final' ? STAKES.lapPrize : STAKES.lapPurse) : STAKES.lapOut;
+  const text = fill(pick(pool), { you: profile.name, him: M.od.short, venue: M.V.name, marks });
+  if (profile.herald !== false) voice.later(2.2, () => say(text, ANNOUNCER.label, 3, { phases: ['after', 'end'], ttl: 6, speak: true, speaker: speakerOf.hugh, voice: 'hugh', onShown() { ceremony.speak(4); } }));
+  C.lapped = true; $('hud').classList.add('hidden'); if (W === player) player.raiseT = 0;
+  return true;
+}
+/** One rider on his waypoints: pure pursuit with a limited turn rate, eased speed, and a halt on the last point. */
+function lapRider(j, st, dt) {
+  const r = j.root;
+  if (!st.init) { st.init = true; st.yaw = r.rotation.y; st.v = j.speed || 0; j.manualPos = true; }
+  const wp = st.wps[st.i], last = st.i === st.wps.length - 1, dx = wp[0] - r.position.x, dz = wp[1] - r.position.z, dist = Math.hypot(dx, dz);
+  if (!last && dist < 4) { st.i++; return; }
+  let want = Math.atan2(dx, dz); if (last && st.finalYaw != null && dist < 1.4) want = st.finalYaw;
+  const dy = wrapA(want - st.yaw), vmax = last ? clamp(dist * 0.8, 0, st.vmax) : st.vmax, vt = Math.abs(dy) > 1.0 ? Math.min(vmax, 3.5) : vmax;
+  st.v += clamp(vt - st.v, -5 * dt, 3 * dt);
+  st.yaw += clamp(dy, -clamp(2.6 - st.v * 0.17, 0.8, 2.6) * dt, clamp(2.6 - st.v * 0.17, 0.8, 2.6) * dt);
+  r.position.x += Math.sin(st.yaw) * st.v * dt; r.position.z += Math.cos(st.yaw) * st.v * dt; r.rotation.y = st.yaw; r.rotation.z = damp(r.rotation.z, 0, 4, dt);
+  j.speed = st.v; j.manualPos = true; st.dist = dist;
+  st.done = last && dist < 1.3 && st.v < 0.5 && (st.finalYaw == null || Math.abs(wrapA(st.finalYaw - st.yaw)) < 0.15);
+}
+function lapEnd() { C.lap.ended = true; C.lapDone = true; $('hud').classList.remove('hidden'); ceremony.skipUI(false); S.skipHold = 0; skipKey = false; }
+function lapStep(dt) {
+  const P = C.lap; P.t += dt;
+  S.skipHold = skipKey ? S.skipHold + dt : Math.max(0, S.skipHold - dt * 2.5); ceremony.skipUI(true, S.skipHold / SKIP_HOLD);
+  if (S.skipHold >= SKIP_HOLD || P.t >= LAP_END) { lapEnd(); return; }
+  const W = P.W, L = P.L, w = P.w, wr = W.root;
+  if (!L.unhorsed) lapRider(L, P.l, dt);
+  // the cut to the box hides a long way round: the winner is put on the last stretch if he is still far off
+  if (P.t >= LAP_CUT1 && !P.cut1) { P.cut1 = true; if (w.i < w.wps.length - 1 || (w.dist || 0) > 16) { w.i = w.wps.length - 1; const sg = Math.sign(wr.position.z) || 1; wr.position.set(7, 0, sg * 14); w.yaw = Math.atan2(0, -sg); wr.rotation.y = w.yaw; w.v = 6; w.init = true; } }
+  lapRider(W, w, dt);
+  if (P.t >= LAP_CUT2 - 0.8 && !w.done && !P.arrived) { wr.position.set(7, 0, 0); w.yaw = Math.PI / 2; wr.rotation.y = w.yaw; w.v = 0; W.speed = 0; w.done = true; }
+  if (w.done && !P.arrived) { P.arrived = true; W.raiseT = 1; }
+  if (P.arrived && !P.saluted) { P.saluted = true; react('salute', W === player ? 1 : -1, false); if (world.setRoyalMood) world.setRoyalMood('applaud'); if (!P.draw && L !== player) L.raiseT = 0; if (P.draw) L.raiseT = 1; }
+}
+/** How far a rider's saddle sits above the stock 1.71 m of the old fixed camera heights (a destrier's rider is higher, a rouncey's lower). */
+const seatDy = (j) => ((j && j.seatY) || 1.71) - 1.71;
+function lapCamera() {
+  const P = C.lap, W = P.W, L = P.L, dw = seatDy(W), dl = seatDy(L), p = W.root.position, shot = P.t < LAP_CUT1 ? 1 : P.t < LAP_CUT2 ? 2 : 3;
+  const snap = P.shot !== shot; P.shot = shot; let fov = 40;
+  if (shot === 1) { const sx = Math.sign(p.x) || 1, c = Math.cos(P.w.yaw || 0); want.set(-sx * 4.5 + p.x * 0.2, 1.7 + dw, p.z - c * 5); wantLook.set(p.x, 1.7 + dw, p.z + c * 1.5); fov = 40; }
+  else if (shot === 2) { want.set(-2.5, 2.1 + dw, -6.5); wantLook.set(9.2, 2.5 + dw, 0); fov = 40; }
+  else { const q = L.root.position, y = P.l.yaw || 0; want.set(q.x - Math.sin(y) * 7 + 3, 2.1 + dl, q.z - Math.cos(y) * 7); wantLook.set(q.x + Math.sin(y) * 3, 1.6 + dl, q.z + Math.cos(y) * 3); fov = 36; }
+  return { snap, fov };
+}
+
 /** What happens once both lances are spent: replay, the verdict, the royal gallery, then wheel about for the next course. */
 function aftermath(dtReal) {
   C.afterT += dtReal; recMeta();
@@ -1329,6 +1419,7 @@ function aftermath(dtReal) {
     if (!M.practice) {
       if (!C.montDone) { C.montDone = true; startMontage(); }      // a big moment gets the reaction montage first
       if (C.mont) { stepMontage(dtReal); return; }
+      if (!C.batDone) { C.batDone = true; startBatter(); if (C.mont) { stepMontage(dtReal); return; } }      // the battered knight: a close-up after a heavy blow
       if (!C.judged) { C.judged = true; raiseJudges(replay); }      // with a replay the flags go up under it (their caption stays on screen); without, the camera visits the table
       if (C.cut && C.cut.kind === 'judges') return;      // the camera stays on the judges while the flags go up
     }
@@ -1337,8 +1428,17 @@ function aftermath(dtReal) {
   }
   if (!C.replayed) return;
   if (!M.practice && judges.busy()) return;      // the flags are up; Hugh's call follows them
-  if (M.result) { if (!C.carded) { C.carded = true; showCard(); } return; }
-  if (!C.verdict) { C.verdict = true; C.verdictT = 0; showVerdict(); betweenColour(royalReaction()); }
+  if (injuriesOn() && !C.tendDone && (M.result ? /yield/.test(M.result) : C.turn.p.stage === 'done')) { C.tendWait = (C.tendWait || 0) + dtReal; if (!voice.cur || C.tendWait > 6) { C.tendDone = true; startTend(); } else if (M.result || C.verdict) return; }      // (waits for the herald's long result call to finish, at most 6 s)      // the surgeon, once the man stands at his mark (or at once if he is to be stopped)
+  if (C.mont) { stepMontage(dtReal); return; }
+  if (M.result) {
+    if (!C.carded) {
+      if (M.tourn && M.result === 'draw' && !M.tied) settleTie();      // a knockout has no draws
+      if (!C.lapDone && lapOk()) { if (!C.lap && !lapStart()) C.lapDone = true; if (C.lap && !C.lap.ended) { lapStep(dtReal); return; } }
+      C.carded = true; showCard();
+    }
+    return;
+  }
+  if (!C.verdict) { C.verdict = true; C.verdictT = 0; showVerdict(); betweenColour(royalReaction()); voice.later(1.0, tallyCall); }
   C.verdictT += dtReal;
   if (S.online) netReady(C.turn.p.stage === 'done' && C.verdictT > (C.seenReplay ? 0.8 : 1.6) && !field.serving());      // the host starts the next course once both are at their marks
   else if (C.turn.p.stage === 'done' && (C.turn.o.stage === 'done' || M.practice) && C.verdictT > (C.seenReplay ? 0.8 : 1.6) && !field.serving()) beginCourse(false);
@@ -1397,7 +1497,10 @@ function ribbonBurst(m, n) {
   else for (let i = 0; i < 10; i++) fx.ribbons(_a.set(m.cs * (13 + Math.random() * 6), 3 + Math.random() * 2.5, m.zc + (Math.random() - 0.5) * 16), n);
 }
 function stepMontage(dtReal) {
-  const m = C.mont; m.t += dtReal;
+  const m = C.mont;
+  if (m.kind === 'batter') return stepBatter(m, dtReal);
+  if (m.kind === 'tend') return stepTend(m, dtReal);
+  m.t += dtReal;
   const i = Math.min(2, Math.floor(m.t / MONT_CUT));
   if (i !== m.i) {
     m.i = i;
@@ -1447,7 +1550,7 @@ function releaseCall(Cc) {
 // the other man's hit volumes (which move too) and against the other lance. The frame is cut into slices of at most 1/120 s and 0.1 m of
 // relative motion; each pair is swept slice by slice to its first contact. All contacts of the frame are then resolved in order of time,
 // so whoever's point arrived first strikes first (and spoils the other's stroke through C.shock), with no rule about who "leads".
-let frameId = 0;
+let frameId = 0, HG = null;      // HG: the exact moment and place of the contact being resolved (see resolvePoint)
 const _ch = new Hit(), _ch2 = new Hit(), _hv = new THREE.Vector3(), _hf = new THREE.Vector3(), _hc = new THREE.Vector3(), _hd = new THREE.Vector3(), _hn = new THREE.Vector3(), _ho = new THREE.Vector3();
 const bbHit = (a, b) => a.lo[0] <= b.hi[0] + 0.06 && a.hi[0] >= b.lo[0] - 0.06 && a.lo[1] <= b.hi[1] + 0.06 && a.hi[1] >= b.lo[1] - 0.06 && a.lo[2] <= b.hi[2] + 0.06 && a.hi[2] >= b.lo[2] - 0.06;
 const dv3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -1553,7 +1656,11 @@ function resolvePoint(e, evs, dt) {
   _hn.set(e.n[0], e.n[1], e.n[2]);
   const geo = { m: clamp(L / h.cr, 0, 1), dir: _b.clone(), out: _ho.clone(), centre: _hd.clone(), r: h.cr, n: _hn.clone(), p: new THREE.Vector3(e.p[0], e.p[1], e.p[2]), part: e.part };
   logPhys(isP ? 'p' : 'o', 'point', e, cent);
-  strike(Aj, Bj, e.zone, cent, st, isP, off, geo);
+  { const q = e.q, k = e.toi, ext = LANCE_REACH - PHYS.lanceChain.edges[PHYS.lanceChain.edges.length - 1];      // where the visible tip was at the instant of contact: the chain stops 4 cm short of the coronel's end, so go on along the shaft
+    const end = (c) => { const dx = c.bx - c.ax, dy = c.by - c.ay, dz = c.bz - c.az, l = Math.hypot(dx, dy, dz) || 1; return [c.bx + dx / l * ext, c.by + dy / l * ext, c.bz + dz / l * ext]; };
+    const a = end(q.p), b = end(q.c);
+    HG = { tip: [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k], t: C.t - dt * (1 - k), p: e.p.slice() }; }
+  strike(Aj, Bj, e.zone, cent, st, isP, off, geo); HG = null;
 }
 function resolveShaft(e) {
   const { X, Y, st, isP, h, q } = e;
@@ -1638,7 +1745,9 @@ let NFX = null;      // online host: what the guest needs to show this stroke (s
 function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   st.done = true;
   const nfx = NFX = S.online && NET.host && !M.practice ? {} : null; if (nfx) (C.nfx || (C.nfx = {}))[isP ? 'p' : 'o'] = nfx;
-  if (C.hitT === null) C.hitT = C.t;
+  if (!R && !S.online && !C.replayed && C.rec.preT !== C.t) { C.rec.preT = C.t; recFrame(C.t - 1e-4); }      // the riders as they stand when the contact falls, before the blow has done anything to them (the frame's own record comes at its end, after the blow)
+  const tHit = HG ? HG.t : C.t; if (C.hitT === null) C.hitT = tHit;      // (the contact's own instant, not the end of the frame it fell in)
+  if (!R) { const tp = Aj.tipWorld(new THREE.Vector3()); C.rec.hits.push({ t: tHit, te: C.t, isP, zone, tip: HG ? HG.tip : [tp.x, tp.y, tp.z], at: HG ? HG.p : null }); }
   voice.mark('strike');
   const closing = Aj.speed + Bj.speed;
   let q, boost = 1, forceBreak = false;
@@ -1757,18 +1866,19 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   { const st2 = M.stats[isP ? 0 : 1]; if (broke) st2.broken++; else st2.attaint++; if (zone === 'helm') st2.helm++; st2.best = Math.max(st2.best, power); }
   const visorHit = zone === 'helm' && !!Bj.visorUp;      // struck on the helm with the visor raised: the blow goes in under the brow
   { const bodyHit = (D_) => power * 0.2 * (1.35 - (zone === 'helm' ? D_.armourDef.helmProt ?? D_.armourDef.protection : D_.armourDef.protection) * 0.65) * (zone === 'helm' ? 1.3 : 1) * (visorHit ? 2 : 1);
-    if (!isP) M.hp.body = Math.max(0, M.hp.body - bodyHit(player)); else if (M.online) M.hpO.body = Math.max(0, M.hpO.body - bodyHit(opp)); }
+    if (!isP) M.hp.body = Math.max(0, M.hp.body - bodyHit(player)); else M.hpO.body = Math.max(0, M.hpO.body - bodyHit(opp)); }      // (his body is kept offline too: his condition, see PHYS.drama)
   if (unhorse) {
     pts = M.PT.unhorse; code = 'u'; text = `UNHORSED ${whom}`;
     // he keeps most of his horse's speed, less what the blow took from him, and slides off the back rather than being thrown up
     const vz = Bj.dir * Math.max(0.5, Bj.speed * 0.72 - hit.J / (PHYS.riderKg + ((Bj.armourDef.kg ?? PHYS.armourKg[Bj.armourDef.id] ?? 28))));
     const uv = new THREE.Vector3(Math.sign(Bj.root.position.x) * (0.6 + Math.random() * 0.8), 0.7 + power * 0.5, vz), us = -(2.6 + power * 1.2);
     Bj.unhorse(uv, us); if (nfx) nfx.un = [uv.x, uv.y, uv.z, us];
-    C.cine = Bj; S.slowT = 2.0; if (!isP) M.hp.body = Math.max(0, M.hp.body - 0.4); else if (M.online) M.hpO.body = Math.max(0, M.hpO.body - 0.4);
+    C.cine = Bj; S.slowT = 2.0; if (!isP) M.hp.body = Math.max(0, M.hp.body - 0.4); else M.hpO.body = Math.max(0, M.hpO.body - 0.4);
   }
   st.res = { zone, pts, code, text, broke, unhorse, power, cent, off, glanced, skid: st.skid || null, spoiled: st.spoiled || 0, turned: !!st.turned, E: hit.E, J: hit.J, v: closing, theta: hit.theta, thetaMax: hit.thetaMax };
   const kind = unhorse ? 'unhorse' : broke && zone === 'helm' ? 'helm' : broke ? 'break' : glanced || st.turned ? 'glance' : 'attaint';
   crowdStroke(kind, isP ? 1 : -1);
+  dramaStrike(Aj, Bj, zone, hit, st, isP, broke, unhorse, glanced);
   // say it plainly, right where the eye is
   const Z = zone.toUpperCase(), sgn = pts > 0 ? `+${pts}` : `${pts}`;
   // One big callout per strike, the most important (the director in callout() keeps the best of the two blows); the rest is in the verdict.
@@ -1780,6 +1890,160 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
     if (unhorse) herald(isP ? 'shoutDown' : 'shoutFall'); else if (broke) herald('shout');
     // the result itself is ONE combined call for both riders, once both lances are spent (finishCourse -> resultCall)
   }
+}
+
+// ------------------------------------------------------------------ drama: injuries, the surgeon, yielding, spare lances, a dropped lance, a ringing helm
+// All numbers are in PHYS.drama (src/data.js). ONLINE: none of this runs (injuriesOn() is false when S.online). Both screens would have to agree on blows,
+// conditions, a yield, a spare helm and a dropped lance, and the host's messages carry none of them; the existing online rules (body <= 0.02 ends it by yield,
+// as netApplyCourse mirrors) are left exactly as they were. The herald's "Laissez-aller!" and the tally are cosmetic and local, so they run everywhere.
+const DR = PHYS.drama;
+const injuriesOn = () => !!M && !S.online && !M.practice;
+const COND_RANK = { FIT: 0, DOUBTFUL: 1, UNFIT: 2 };
+/** FIT / DOUBTFUL / UNFIT for one man (0 you, 1 him), from his body, the jolt in arm and wind, and the heavy blows he has taken. */
+function conditionOf(side) {
+  const hp = side ? M.hpO.body : M.hp.body, b = side ? M.bodyS.o : M.bodyS.p, n = M.dr.heavy[side];
+  if (hp <= DR.unfitBody || (b.arm >= DR.unfitArm && b.wind >= DR.unfitWind)) return 'UNFIT';
+  if (hp <= DR.doubtBody || (b.arm >= DR.doubtArm && b.wind >= DR.doubtWind) || (n >= DR.heavyN && hp < DR.heavyBody2)) return 'DOUBTFUL';
+  return 'FIT';
+}
+/** The lances a man has left, the one in his hand included: one in hand, DR.spares spare, one more spare for each course beyond four. */
+const lancesLeft = (side) => 1 + DR.spares + Math.max(0, M.courses - 4) - M.breaks[side];
+function outOfLances() {
+  const a = lancesLeft(0) <= 0, b = lancesLeft(1) <= 0, d = M.score[0] - M.score[1];
+  M.result = d > 0 ? 'win' : d < 0 ? 'loss' : a && b ? 'draw' : a ? 'loss' : 'win';
+  M.note = a && b ? 'Neither man has a lance left to ride' : a ? 'You have no lance left to ride' : `${M.od.short} has no lance left to ride`;
+}
+/** The AI yields when UNFIT, and sometimes when DOUBTFUL and far behind. */
+function aiYields() {
+  const c = conditionOf(1); if (c === 'FIT') return false;
+  if (c === 'UNFIT') { M.note = `${M.od.short} is too hurt to ride on and yields`; return true; }
+  if (M.course >= 2 && M.score[0] - M.score[1] >= DR.aiBehind && Math.random() < DR.aiYield) { M.note = `${M.od.short}, hurt and far behind, yields the joust`; return true; }
+  return false;
+}
+/** How dazed you are, 0..1 (fades over the daze's seconds). */
+const dazeFrac = () => (M && M.dr.dazeT > 0 ? clamp(M.dr.dazeT / M.dr.dazeDur, 0, 1) * M.dr.dazeK : 0);
+function dazeStep(dtReal) {
+  if (!M) { post.setDaze(0); return; }
+  const dr = M.dr; if (dr.dazeT > 0) dr.dazeT = Math.max(0, dr.dazeT - dtReal); if (dr.oDazeT > 0) dr.oDazeT = Math.max(0, dr.oDazeT - dtReal);
+  post.setDaze(S.mode === 'replay' || S.paused ? 0 : dazeFrac() * DR.dazeBlur);
+}
+/** The lance falls from the hand. */
+function dropLance(J, side) {
+  const a = J.lance.localToWorld(new THREE.Vector3(0, 0, 0.3)), b = J.lance.localToWorld(new THREE.Vector3(0, 0, LANCE_REACH));
+  J.dropLance(); fxShaft(a, b, new THREE.Vector3(0, 0, J.dir * J.speed * 0.5)); M.dr.drops[side]++; M.stats[side].drops = (M.stats[side].drops || 0) + 1;
+  callout(side === 0 ? 'YOU DROPPED YOUR LANCE' : 'HE DROPPED HIS LANCE', side === 0 ? 'bad' : 'good', 4.5);
+}
+function maybeDrop(J, side, power, jarred) {
+  if (J.lanceBroken || J.lanceDropped || M.dr.drops[side] >= DR.dropMax || power < DR.dropPower || jarred < DR.dropArm) return;
+  if (Math.random() < DR.dropChance * (0.5 + (jarred - DR.dropArm) / (1 - DR.dropArm))) dropLance(J, side);
+}
+/** What a stroke does to the two men's condition: heavy blows counted, the helm ringing, the daze, the lance that falls from a jarred hand. */
+function dramaStrike(Aj, Bj, zone, hit, st, isP, broke, unhorse, glanced) {
+  if (!injuriesOn() || (zone !== 'helm' && zone !== 'body' && zone !== 'shield')) return;
+  const P = hit.power, bi = isP ? 1 : 0, ai = isP ? 0 : 1, soft = glanced || st.turned || st.skid, helm = zone === 'helm';
+  const heavy = unhorse || (!soft && ((helm && (broke || P >= DR.heavyHelm)) || (zone === 'body' && P >= DR.heavyBody)));
+  if (heavy) { M.dr.heavy[bi]++; const h = C.heavyHit[bi]; if (!h || P > h.p) C.heavyHit[bi] = { who: bi, zone, helm, p: P }; }
+  if (unhorse || P >= DR.tendPower) C.tendFor[bi] = true;
+  if (helm) {      // the ring: a sampled sound; the daze follows
+    Bj.helm.getWorldPosition(_hd); const [hd] = hear(_hd); audio.helmRing(P * (soft ? 0.5 : 1), bi === 0 ? 1.2 : hd);
+    const secs = clamp((DR.dazeBase + DR.dazePower * P * DR.dazeHelm) * (soft ? 0.5 : 1) * (heavy ? 1.15 : 0.8), 0.8, DR.dazeMax);
+    if (bi === 0) { const dr = M.dr; dr.dazeDur = Math.max(dr.dazeT, secs); dr.dazeT = dr.dazeDur; dr.dazeK = heavy ? 0.9 : 0.55; }
+    else M.dr.oDazeT = Math.max(M.dr.oDazeT, secs);
+  }
+  // a lance that holds drives the shock back through the hand: with the arm jarred it may fall (the striker), or a man thrown far back may let go (the struck, once his own stroke is spent)
+  if (!broke && !unhorse && P >= DR.dropPower) {
+    maybeDrop(Aj, ai, P, M.bodyS[isP ? 'p' : 'o'].arm);
+    if ((isP ? C.oL : C.pL).done) { const lean = hit.thetaMax > 0 ? clamp(hit.theta / hit.thetaMax, 0, 1) : 0; maybeDrop(Bj, bi, P, Math.max(M.bodyS[isP ? 'o' : 'p'].arm, lean >= DR.dropLean ? DR.dropArm + (lean - DR.dropLean) / (1 - DR.dropLean) * (1 - DR.dropArm) : 0)); }
+  }
+}
+/** The spare helm, once a match, for a helm that is badly smashed. True if fitted. */
+function swapHelm(i) {
+  const J = i ? opp : player; if (!J || !J.dmg || M.dr.swapped[i] || J.dmg.helm < DR.helmSwapAt) return false;
+  J.refitHelm(); M.dr.swapped[i] = true; audio.armourClank(0.8);
+  return true;
+}
+/** Between courses (beginCourse): a smashed helm not yet replaced is swapped; conditions are noted. */
+function dramaBetween() {
+  if (!injuriesOn()) return;
+  for (const i of [0, 1]) if (swapHelm(i)) toast('SPARE HELM', i ? `${M.od.short}'s squire fits him a fresh helm.` : 'Your squire fits the spare helm. It is the only one.', 4);
+  M.dr.cond = [conditionOf(0), conditionOf(1)];
+}
+
+// ---- the battered knight: a short close-up of the struck man's helm and harness after a heavy blow (a C.mont of kind 'batter': hold Space / touch to skip, like the montage)
+function startBatter() {
+  if (!injuriesOn() || (G.auto && !G.dramaAuto) || !C.heavyHit) return;
+  let h = null; for (const x of C.heavyHit) if (x && (!h || x.p > h.p)) h = x;
+  const J = h && (h.who ? opp : player);
+  if (!h || J.unhorsed || J.going || M.course - M.dr.batterAt < DR.batterGap) return;
+  M.dr.batterAt = M.course;
+  C.mont = { kind: 'batter', t: 0, who: h.who, zone: h.zone, helm: h.helm, shot: -1 };
+  $('verdict').classList.add('hidden'); $('royalCap').classList.add('hidden');
+}
+function stepBatter(m, dtReal) {
+  m.t += dtReal; const sh = m.t < DR.battered * 0.6 ? 0 : 1;
+  if (sh !== m.shot) { m.shot = sh; C.cut = { kind: 'batter', who: m.who, helm: m.helm, sub: sh, t: 9 }; }
+  if (m.t >= DR.battered) endMontage();
+}
+
+// ---- the surgeon: a pause to tend a man after a very heavy blow, a worsening condition, or a smashed helm
+function tendReason(i) {
+  const dr = M.dr, cond = conditionOf(i), drop = i ? C.hpO0 - M.hpO.body : C.hp0 - M.hp.body, J = i ? opp : player;
+  if (C.tendFor[i] || drop >= DR.tendBody) return 'blow';
+  if (COND_RANK[cond] > COND_RANK[dr.cond[i]]) return 'cond';
+  if (J.dmg && J.dmg.helm >= DR.helmSwapAt && !dr.swapped[i]) return 'helm';
+  return null;
+}
+function startTend() {
+  if (!injuriesOn() || (G.auto && !G.dramaAuto)) return;
+  const r = [tendReason(0), tendReason(1)], who = r[0] ? 0 : r[1] ? 1 : -1;
+  if (who < 0) { M.dr.cond = [conditionOf(0), conditionOf(1)]; return; }
+  const cond = conditionOf(who), nm = M.od.short; M.dr.cond = [conditionOf(0), conditionOf(1)];
+  C.mont = { kind: 'tend', t: 0, who, cond, reason: r[who], stage: 0 };
+  C.cut = { kind: 'tend', who, t: 99 };
+  $('verdict').classList.add('hidden'); $('royalCap').classList.add('hidden');
+  const swapped = swapHelm(who);
+  const A = who ? M.hpO : M.hp, bs = who ? M.bodyS.o : M.bodyS.p; A.body = clamp(A.body + 0.03, 0, 1); bs.wind *= 0.7; if (!who) M.agit = clamp(M.agit - 0.2, 0, 1);      // wine and water, the helm off a moment (D4 of docs/forfeits-research.md)
+  const line1 = who ? (cond === 'UNFIT' ? `The surgeon kneels by ${nm}.` : `The surgeon runs to ${nm}.`) : cond === 'FIT' ? 'The surgeon is at your stirrup. "A hard knock. Breathe."' : 'The surgeon is at your stirrup.';
+  const line2 = cond === 'UNFIT' ? (who ? '"He cannot ride on." The judges agree.' : '"I forbid it, my lord. You are not fit to ride."')
+    : cond === 'DOUBTFUL' ? (who ? '"He may ride on. I would not."' : `"You may ride on, my lord. I would not." You may yield (${touchMode ? 'tap YIELD' : 'Y'}).`) : null;
+  const sp = { stop: true, speak: true, voice: 'master', phases: ['after', 'ready', 'end'], ttl: 9 };      // tier 1: nothing outranks the surgeon
+  const spare = who ? `${nm}'s armourer fits the spare helm.` : 'Your armourer fits the spare helm.';
+  const next = line2 ? [line2, 'THE SURGEON'] : null; if (swapped && line2) toast('SPARE HELM', spare, 4);      // the second line follows once the first has been shown
+  voice.later(0.2, () => say(swapped && !line2 ? spare : line1, 'THE SURGEON', 1, Object.assign({ urgent: true, onShown() { if (next) voice.later(2.2, () => say(next[0], next[1], 1, sp)); } }, sp)));
+  audio.armourClank(0.6);
+}
+function stepTend(m, dtReal) {
+  m.t += dtReal;
+  if (m.t >= DR.tend) { endMontage(); M.dr.cond = [conditionOf(0), conditionOf(1)]; }
+}
+
+// ---- yielding: between courses, key Y or the button, with a confirm
+function yieldOk() { return injuriesOn() && !!C && S.mode === 'ready' && !S.paused && !C.rd.p && !C.beat && !C.act && !M.result && M.course >= 2 && !R; }
+function openYield() {
+  if (!yieldOk() || S.yieldAsk) return;
+  S.yieldAsk = true; $('yieldAsk').classList.remove('hidden'); audio.ui('select');
+}
+function closeYield() { S.yieldAsk = false; $('yieldAsk').classList.add('hidden'); }
+function doYield() {
+  closeYield(); if (!injuriesOn() || !C || M.result) return;
+  M.yielded = true; M.result = 'loss-yield'; M.dr.yielded = true; M.note = 'You yielded the joust';
+  S.mode = 'after'; C.pL.done = C.oL.done = true; C.carded = C.verdict = C.replayed = C.montDone = C.judged = C.tendDone = true; C.countDue = false;
+  for (const st of [C.pL, C.oL]) if (!st.res) st.res = { zone: 'none', pts: 0, code: 'm', text: '' };
+  C.pts = [0, 0]; if (!C.tech) C.tech = techSnapshot(null, 0);
+  C.mont = null; C.cut = null; $('verdict').classList.add('hidden'); $('royalCap').classList.add('hidden');
+  showCard();
+}
+$('yieldBtn').addEventListener('click', (e) => { e.stopPropagation(); openYield(); });
+$('yieldYes').addEventListener('click', (e) => { e.stopPropagation(); doYield(); });
+$('yieldNo').addEventListener('click', (e) => { e.stopPropagation(); closeYield(); });
+
+/** The herald calls the tally of lances after each course: "Sir X, two lances broken; Sir Y, one." */
+function tallyCall() {
+  if (!M || M.practice || M.result) return;
+  const a = M.breaks[0], b = M.breaks[1], w = (n) => n === 0 ? 'no lance broken' : n === 1 ? 'one lance broken' : `${numW(n)} lances broken`, nm = /^(Sir|Lord|Dame)\b/.test(profile.name) ? profile.name : `Sir ${profile.name}`, him = M.od.short;
+  const text = `${nm}, ${w(a)}; ${him}, ${b === 0 ? 'none' : b === 1 ? 'one' : numW(b)}.`;
+  const o = { text, tier: 3, kind: 'verdict', cap: 'combined', free: true, speak: true, phases: ['after', 'ready'], ttl: 9, cat: 'tally' };
+  if (!herald('tally', 0, o)) say(text, ANNOUNCER.label, 3, Object.assign(o, { speak: false }));
 }
 
 // ---- armour damage: which region a hit volume belongs to, how hard it marks, and the marks on the model (jouster.js damage())
@@ -1894,8 +2158,10 @@ function finishCourse() {
   else if ((M.oFouls || 0) >= (M.mode.horseOut || 2)) { M.result = 'win-dq'; M.how = 'his striking your horse'; }
   else if (M.mode.sightWin && (M.sights[0] >= M.mode.sightWin) !== (M.sights[1] >= M.mode.sightWin)) { M.result = M.sights[0] >= M.mode.sightWin ? 'win' : 'loss'; M.how = 'three strokes in the sight of the helm'; }
   else if (M.mode.firstBreak && brk(p) !== brk(o)) M.result = brk(p) ? 'win' : 'loss';      // sudden death: the first lance broken decides it; both in one course settles nothing
-  else if (M.hp.body <= 0.02) M.result = 'loss-yield';
+  else if (injuriesOn() ? conditionOf(0) === 'UNFIT' : M.hp.body <= 0.02) { M.result = 'loss-yield'; if (injuriesOn()) M.note = 'The surgeon forbids you to ride on'; }      // UNFIT: the judges stop it on the surgeon's word (PHYS.drama)
   else if (M.online && M.hpO.body <= 0.02) M.result = 'win-yield';
+  else if (injuriesOn() && aiYields()) M.result = 'win-yield';
+  else if (injuriesOn() && !M.mode.style && !M.mode.firstBreak && (lancesLeft(0) <= 0 || lancesLeft(1) <= 0)) outOfLances();
   else if (M.mode.firstBreak && M.course >= M.courses) { M.result = 'draw'; M.void = true; }      // no first blood in the courses allowed: the joust is void
   else if (M.mode.style) C.countDue = true;      // the judges' card: the style marks wait for your lance to come up (settleCount, from aftermath)
   else if (M.course >= M.courses) {
@@ -2006,17 +2272,18 @@ function bridgeRecordText(B) {
 function bridgeRecordSpoken(B) { const w = B.wins, l = B.losses; return w > l ? `${profile.name} leads, ${numW(w)} to ${numW(l)}` : w < l ? `The challengers lead, ${numW(l)} to ${numW(w)}` : `The bouts stand level at ${numW(w)} each`; }
 function showCard() {
   const p = C.pL.res, o = C.oL.res, t = C.tech;
+  voice.cutBetween();      // the tally or a colour line still on screen goes when the card comes up
   $('verdict').classList.add('hidden'); $('flashTxt').className = '';
   const B = M.bridge; if (B) bridgeRecord();
   const final = !B || B.final, res = B && final ? (B.held ? 'win' : 'loss') : M.result;      // what the title, the purse and the herald answer to: the bridge's end, or this bout
   const nextOd = B && !final ? KNIGHTS.find(k => k.id === B.queue[B.bout]) : null;
   $('cardTitle').textContent = B ? (final ? (B.held ? 'THE BRIDGE IS HELD' : 'THE BRIDGE IS LOST') : M.result.startsWith('win') ? 'BOUT WON' : M.result === 'draw' ? 'BOUT DRAWN' : 'BOUT LOST')
-    : M.void ? 'THE JOUST IS VOID' : { 'win': 'VICTORY', 'win-unhorse': 'VICTORY BY UNHORSING', 'loss': 'DEFEAT', 'loss-unhorse': 'UNHORSED', 'loss-dq': 'DISQUALIFIED', 'win-dq': 'VICTORY — HE IS DISQUALIFIED', 'loss-yield': 'YOU YIELD — TOO BATTERED TO RIDE', 'win-yield': 'VICTORY — HE YIELDS', 'draw': 'HONOURS EVEN', 'practice': 'YOU ARE READY FOR THE LISTS' }[M.result];
+    : M.void ? 'THE JOUST IS VOID' : { 'win': 'VICTORY', 'win-unhorse': 'VICTORY BY UNHORSING', 'loss': 'DEFEAT', 'loss-unhorse': 'UNHORSED', 'loss-dq': 'DISQUALIFIED', 'win-dq': 'VICTORY — HE IS DISQUALIFIED', 'loss-yield': M.yielded ? 'YOU YIELD THE JOUST' : 'YOU YIELD — TOO BATTERED TO RIDE', 'win-yield': 'VICTORY — HE YIELDS', 'draw': 'HONOURS EVEN', 'practice': 'YOU ARE READY FOR THE LISTS' }[M.result];
   $('cardReplays').classList.toggle('hidden', !recList().length);
   if (S.online && M.result && NET.net) rematchHint(); else
   $('cardHint').textContent = nextOd ? `The next challenger is ${nextOd.short} · ${touchMode ? 'TAP' : 'SPACE / CLICK'} to meet him` : touchMode ? 'TAP to continue' : 'SPACE / CLICK to continue';
   if (M.how) voice.later(0.4, () => say(`The prize is given for ${M.how}.`, 'THE JUDGES', 1, { ttl: 8 }));
-  const base = `${profile.name} ${M.score[0]} — ${M.score[1]} ${M.od.short}`;
+  const base = `${M.tourn ? M.tourn.name + ' · ' : ''}${profile.name} ${M.score[0]} — ${M.score[1]} ${M.od.short}`;
   $('cardSub').textContent = M.result === 'practice' ? 'The master of horse has nothing more to teach you here. Ride the circuit.'
     : B ? (final ? `${B.held ? 'The bridge is held' : 'The bridge is lost'}: ${B.wins} of ${B.n} bouts won · ` : `Bout ${B.bout} of ${B.n} · ${bridgeRecordText(B)} · `) + base
     : M.mode.firstBreak ? (M.note || base) : M.note ? `${base} · ${M.note}` : base;
@@ -2024,18 +2291,22 @@ function showCard() {
   const [pw] = plain(p, C.pL, true), [ow] = plain(o, C.oL, false);
   $('cardCols').innerHTML = `<div class="who"><span class="pts">${fmt(C.pts[0])}</span><h4>${profile.name.toUpperCase()}</h4><div class="res">${pw}</div></div>
     <div class="who"><span class="pts">${M.practice ? '' : fmt(C.pts[1])}</span><h4>${M.od.short.toUpperCase()}</h4><div class="res">${M.practice ? '' : ow}</div></div>`;
+  if (M.yielded) $('cardCols').innerHTML = `<div class="who"><span class="pts"></span><h4>${profile.name.toUpperCase()}</h4><div class="res">YIELDED THE JOUST</div></div><div class="who"><span class="pts"></span><h4>${M.od.short.toUpperCase()}</h4><div class="res">HOLDS THE FIELD</div></div>`;
   const T = M.tech, pc = (k) => Math.round(T[k] / Math.max(1, T.n) * 100);
   const row = (k, name) => `<div class="trow"><b>${name}</b><div class="tb"><i style="width:${pc(k)}%"></i></div><span>${pc(k)}</span></div>`;
   $('cardRows').innerHTML = row('sight', 'AIM') + row('lance', 'LANCE') + row('horse', 'HORSE') + row('will', 'LEAN IN');
   const a = M.stats[0], b = M.stats[1], f = (l, x, y) => `<div class="fact"><span>${x}</span><i>${l}</i><span>${y}</span></div>`;
   $('cardFacts').innerHTML = M.practice ? '' : `<h6>MATCH FACTS</h6>` + f('LANCES BROKEN', a.broken, b.broken) + f('TOUCHES', a.attaint, b.attaint) + f('HELM STRIKES', a.helm, b.helm) + f('CLEAN MISSES', a.miss, b.miss)
+    + (injuriesOn() ? f('CONDITION', conditionOf(0), conditionOf(1)) + f('LANCES DROPPED', M.dr.drops[0], M.dr.drops[1]) + f('LANCES LEFT', Math.max(0, lancesLeft(0)), Math.max(0, lancesLeft(1))) : '')
     + f('TOP SPEED', `${Math.round(a.top * 3.6)} km/h`, `${Math.round(b.top * 3.6)} km/h`) + f('HARDEST STROKE', `${Math.round(a.best * PHYS.refJ)} J`, `${Math.round(b.best * PHYS.refJ)} J`);
   $('cardTimeline').style.display = 'none';
   $('card').classList.remove('hidden');
   const win = res.startsWith('win') || res === 'practice';
-  fanfare(win ? 'victory' : res === 'draw' ? 'short' : 'defeat');
-  react(win ? 'win' : 'loss', 1, false);      // the card and the herald speak; no crowd line on top
-  if (world.setRoyalMood && M.circuit) world.setRoyalMood(win ? 'rise' : 'applaud');
+  if (!C.lapped) {      // (after a victory lap the fanfare, the crowd and the royal box have already answered)
+    fanfare(win ? 'victory' : res === 'draw' ? 'short' : 'defeat');
+    react(win ? 'win' : 'loss', 1, false);      // the card and the herald speak; no crowd line on top
+    if (world.setRoyalMood && M.circuit) world.setRoyalMood(win ? 'rise' : 'applaud');
+  }
   retinueSpeak(win ? 'won' : res === 'draw' ? null : 'lost', 0.85, 5.5);
   { // Hugh's call: the rules-only modes word their own (the pools speak of "the cheque"); the rest use the pools
     let text = null; const him = M.od.short, wl = (a, b) => win ? a : b;
@@ -2048,27 +2319,31 @@ function showCard() {
     const hk = win ? 'win' : res === 'draw' ? 'draw' : 'loss';
     voice.later(0.8, () => text ? herald(hk, 0, { text }) : herald(hk));
   }
-  if (win && M.circuit) voice.later(12, () => herald('prize'));
+  if (win && M.circuit && !M.tourn) voice.later(12, () => herald('prize'));
   if (!M.practice && !M.online && final) {      // (online: no purse, no renown, no feats)
     // the reckoning: what the day brought in, what it cost, and what it added to your name
+    const onAcct = account.signedIn() && M.spId;      // signed in: the server pays (see spPaid below); the local reckoning is only the guest's
     const rk = reckon({ vIdx: M.vIdx, result: res, circuit: M.circuit, courses: B ? B.tot.courses : M.courses, practice: false, void: !!M.void, bouts: B ? B.wins : 0, lance: profile.lance || 'standard', broken: B ? B.tot.broken : M.breaks[0], helms: B ? B.tot.helm : M.stats[0].helm, body: M.hp.body, horseHp: M.hp.horse,
-      court: M.fav.court, horse: profile.horse, armour: profile.armour, helm: profile.helm, retinue: profile.retinue, oppHorse: M.od.horse, oppArmour: M.od.armour, skills: profile.skills });
+      court: M.fav.court, pf: M.tourn && res.startsWith('win') ? career.purseFactor(M.tourn.rounds, M.tourn.round) : 1, noFees: !!M.tourn && M.tourn.round > 0, final: !!M.tourn && M.tourn.kind === 'final' && res.startsWith('win'), horse: profile.horse, armour: profile.armour, helm: profile.helm, retinue: profile.retinue, oppHorse: M.od.horse, oppArmour: M.od.armour, skills: profile.skills });
     const rb = rankOf(profile.renown);
-    settle(profile, rk); M.reckoning = rk;
+    if (!onAcct) settle(profile, rk);
+    M.reckoning = rk;
+    if (!M.tourn && !res.startsWith('win') && res !== 'draw' && !M.bridge && !M.void) { profile.lostTo = profile.lostTo || {}; profile.lostTo[M.od.id] = (profile.lostTo[M.od.id] || 0) + 1; }
     const won = res.startsWith('win');      // the feats of the match (their renown is paid before the rank is read)
     showFeats(matchFeats(profile, { won, venue: M.V.id, mode: M.mode.id, opp: M.od.id, cleanSheet: M.score[0] > 0 && M.score[1] <= 0, comeback: M.maxDef >= 3, ironSeat: M.stats[1].best < 0.75,
       sightWin: !!M.mode.sightWin && M.result === 'win' && !!M.how }));
     saveProfile();
     const rankUp = rankOf(profile.renown) > rb;
     const sgn = (n) => (n > 0 ? '+' : '−') + Math.abs(n);
-    $('cardFacts').innerHTML += `<h6>THE RECKONING</h6>` + rk.lines.map(l => `<div class="led ${l[1] < 0 ? 'neg' : ''}"><span>${l[0]}</span><span>${sgn(l[1])}</span></div>`).join('')
+    if (onAcct) { $('cardFacts').innerHTML += `<h6>THE RECKONING</h6><div id="acctReckon"><div class="led note"><span>The clerk is counting…</span></div></div>`; spPaid(M, res, B); }
+    else $('cardFacts').innerHTML += `<h6>THE RECKONING</h6>` + rk.lines.map(l => `<div class="led ${l[1] < 0 ? 'neg' : ''}"><span>${l[0]}</span><span>${sgn(l[1])}</span></div>`).join('')
       + `<div class="led sum ${rk.total < 0 ? 'neg' : ''}"><span>${rk.total < 0 ? 'The day cost you' : 'The day brought you'}</span><span>${Math.abs(rk.total)} marks</span></div>`
       + `<div class="led note"><span>${purseText(profile.gold)} &nbsp;·&nbsp; +${rk.renown} renown</span></div>`
       + rankBar(profile.renown);
     if (rankUp) announceRank(true); else if (M.rankPending) rankSay(rankOf(profile.renown));      // the card is up: the notice may show
   }
   if (B) $('cardFacts').innerHTML += `<h6>THE BRIDGE</h6>` + B.log.map((b, i) => f(`BOUT ${i + 1} · ${b.short.toUpperCase()}`, b.res.startsWith('win') ? 'won' : b.res === 'draw' ? 'drawn' : 'lost', `${b.score[0]} — ${b.score[1]}`)).join('');
-  if (M.circuit) recordCircuit();
+  if (M.tourn) recordTournament();
   if (S.online) rankReport();
 }
 
@@ -2089,7 +2364,10 @@ function replayGeom() {
   const f = R.f; let k = f.findIndex(fr => fr.t >= R.tImp); if (k < 0) k = f.length - 1;
   R.z = (f[k].p.pz + (f[k].o.pz ?? 0)) / 2; R.side = Math.sign(f[k].p.px) || -1; R.pd = f[k].p.dir || 1; if (M.practice) R.z = 0;      // where the lances met, the side of the tilt you ride on, which way you ride
 }
-const ANGLES = ['LOW SIDE', 'CHASE', 'REVERSE', 'CRANE', 'IMPACT', 'FALL'];      // 0-4 are the five angles (V cycles them); 5 is the follow-the-fallen-man camera of an unhorsing replay
+const ANGLES = ['LOW SIDE', 'CHASE', 'REVERSE', 'CRANE', 'IMPACT', 'FALL', 'YOUR EYES', 'HIS EYES', 'FREE'];      // 0-4 are the five fixed angles; 5 is the follow-the-fallen-man camera of an unhorsing replay; 6 and 7 look through your visor slit and his; 8 is the free camera
+const CYC = [0, 1, 2, 3, 4, 6, 7, 8];      // what V cycles (and the highlight list offers); the fall camera is only cut to by the automatic replay
+const viewList = () => CYC.filter(a => a !== 7 || !M.practice);      // (the quintain has no eyes)
+const SPEEDS = [1, 0.5, 0.25, 0.1], spdTxt = (v) => v === 0.5 ? '½×' : v === 0.25 ? '¼×' : v === 0.1 ? '0.1×' : '1×';
 /** The camera passes of the automatic replay (EA FC goal-replay style): one angle for an ordinary course, two for a break, three for a helm break or an unhorsing. Times are relative to the impact. */
 function planPasses() {
   const f = R.f, p = C.pL.res, o = C.oL.res, real = (r) => !!r && r.broke && !r.foul && r.zone !== 'horse';
@@ -2109,20 +2387,38 @@ function passSpeed(P, d) {
 }
 function startReplay(opt = {}) {
   const f = C.rec.f, tImp = C.hitT ?? C.ev.impact ?? f[f.length - 1].t;
-  R = { f, ev: C.rec.ev, tImp, i: 0, e: 0, liveP: player.snapshot(), liveO: opp.snapshot(), back: S.mode, live: !opt.frozen, hl: false, course: M.course, fxDt: 0, rate: 1, shot: 0, pass: 0, t: 0, t0: 0, t1: 1 };
+  R = { f, ev: C.rec.ev, tImp, i: 0, e: 0, liveP: player.snapshot(), liveO: opp.snapshot(), back: S.mode, live: !opt.frozen, hl: false, course: M.course, fxDt: 0, rate: 1, shot: 0, pass: 0, t: 0, t0: 0, t1: 1, spd: 1, pause: false, hits: C.rec.hits };
   replayGeom(); R.passes = planPasses(); setPass(0);
   if (!R.live) player.replaying = opp.replaying = true;      // a live replay dresses the riders afresh each frame (replayDress), so that his ride-out turn goes on underneath
   fx.clear(); showMarks(R.t, R.course);
   S.mode = 'replay'; S.slowT = 0; S.timeScale = 1;
   $('replayTag').classList.remove('hidden'); $('replayKeys').classList.remove('hidden'); $('hud').classList.add('hidden'); $('verdict').classList.add('hidden'); if (!(C.capT > 0)) $('royalCap').classList.add('hidden');
-  $('replayKeys').innerHTML = touchMode ? '' : '<kbd>V</kbd> change view &nbsp;&nbsp; <kbd>SPACE</kbd> skip &nbsp;&nbsp; <kbd>ESC</kbd> menu';
+  $('rplCtl').classList.remove('hidden'); rplSync();
   // what each lance did, drawn at the bottom corners while the replay runs
   const p = C.pL.res, o = C.oL.res;
   if (p) { drawHitMap($('rhitYou'), p, C.pL.near, { quintain: M.practice, arms: M.od.arms }); $('rwhatYou').textContent = plain(p, C.pL, true)[0]; $('replayYou').classList.remove('hidden'); }
   if (o && !M.practice) { drawHitMap($('rhitHim'), o, C.oL.near, { arms: profile.arms }); $('rwhatHim').textContent = plain(o, C.oL, false)[0]; $('replayHim').classList.remove('hidden'); }
   if (C.resultArgs && !M.practice) C.colourLater = true; else replayColour();      // exactly one colour line, ~1.5 s in (no more if you watch it again); after Hugh's call if that is still to come
 }
-function replayTag() { $('replayTag').textContent = `${R.hl ? 'COURSE ' + R.course : R.passes.length > 1 ? `REPLAY ${R.pass + 1}/${R.passes.length}` : 'INSTANT REPLAY'} · ${ANGLES[R.shot]}`; }
+function replayTag() { const vb = $('rplCtl').querySelector('button[data-k="view"]'); if (vb) vb.textContent = `VIEW · ${ANGLES[R.shot]}`; $('replayTag').textContent = `${R.hl ? 'COURSE ' + R.course : R.passes.length > 1 ? `REPLAY ${R.pass + 1}/${R.passes.length}` : 'INSTANT REPLAY'} · ${ANGLES[R.shot]} · ${R.pause ? 'PAUSED · ' : ''}${spdTxt(R.spd)}`; }
+/** Everything that shows the replay's state: the tag, the key hints and the control bar. */
+function rplSync() {
+  if (!R) return; replayTag();
+  const k = (c, t) => `<kbd>${c}</kbd> ${t}`;
+  $('replayKeys').innerHTML = touchMode ? '' : [k('V', 'angle'), R.hl ? k('SPACE', R.pause ? 'play' : 'pause') : k('SPACE', 'skip'), '<kbd>1</kbd>–<kbd>4</kbd> speed', k(',</kbd><kbd>.', 'step'), R.hl ? k('←</kbd><kbd>→', 'scrub') : '', R.shot === 8 ? k('WASD', 'move') + ' ' + k('R', 'reset') : 'drag: free camera', k('ESC', R.hl ? 'back' : 'menu')].filter(Boolean).join(' &nbsp;&nbsp; ');
+  for (const b of $('rplCtl').querySelectorAll('button[data-s]')) b.classList.toggle('on', +b.dataset.s === R.spd);
+  $('rplPause').textContent = R.pause ? 'PLAY' : 'PAUSE'; $('rplPause').classList.toggle('on', !!R.pause);
+}
+/** Set the playback speed (1, 0.5, 0.25 or 0.1 of the replay's own pace). */
+function rplSpeed(v) { if (!R) return; R.spd = v; rplSync(); }
+/** One frame (1/60 s of the recording) forward or back; pauses first. */
+function rplStep(n) {
+  if (!R) return; R.pause = true;
+  const t = R.t + n / 60;
+  if (n < 0) replaySeek(t); else { R.t = Math.min(t, R.hl ? R.t1 : R.t1 - 1e-3); R.stepFx = n / 60; }
+  rplSync();
+}
+function rplPause(v) { if (!R) return; R.pause = v ?? !R.pause; rplSync(); }
 /** Start camera pass n of the automatic replay: the frames and fx events rewind to its start and the camera cuts. */
 function setPass(n) {
   const P = R.passes[n]; R.pass = n; R.shot = P.shot; R.t0 = P.t0; R.t1 = P.t1; R.cut = true; replaySeek(P.t0); replayTag();
@@ -2133,19 +2429,43 @@ function replaySeek(t) {
 /** V during a replay: the next of the five angles (the fall camera of an unhorsing hands back to the first). */
 function replayView() {
   if (!R) return;
-  R.shot = (R.shot + 1) % 5; R.cut = true; if (R.hl) S.rplShot = R.shot; replayTag();
+  const L = viewList(); R.shot = L[(L.indexOf(R.shot) + 1) % L.length]; R.cut = true; if (R.hl) S.rplShot = R.shot; rplSync();
+}
+/** The free camera: it orbits a centre (the impact point to start with) at a distance; WASD move the centre, the mouse and the wheel turn and zoom. */
+function freeInit(fromCam) {
+  const h = R.hits && R.hits[0], c = h ? new THREE.Vector3(...h.tip) : new THREE.Vector3(0, 1.9 + (seatDy(player) + seatDy(opp)) / 2, R.z);
+  R.free = { c0: c.clone(), c, yaw: Math.atan2(R.side * 0.93, -R.pd * 0.36), pitch: 0.12, dist: 6.5 };
+  if (fromCam) { const v = camPos.clone().sub(c), d = v.length(); if (d > 0.5) { R.free.dist = clamp(d, 1.2, 30); R.free.pitch = clamp(Math.asin(clamp(v.y / d, -1, 1)), -0.1, 1.4); R.free.yaw = Math.atan2(v.x, v.z); } }
+}
+function freeOrbit(dx, dy) {
+  if (!R) return; if (R.shot !== 8) { R.shot = 8; R.cut = false; freeInit(true); if (R.hl) S.rplShot = 8; rplSync(); }
+  const f = R.free; f.yaw -= dx * 0.006; f.pitch = clamp(f.pitch + dy * 0.005, -0.1, 1.4);
+}
+function freeZoom(k) {
+  if (!R) return; if (R.shot !== 8) { R.shot = 8; R.cut = false; freeInit(true); if (R.hl) S.rplShot = 8; rplSync(); }
+  R.free.dist = clamp(R.free.dist * k, 1.2, 30);
+}
+function freeMove(dt) {
+  const f = R.free, m = R.mv; if (!f || !m) return;
+  const fw = (m.w ? 1 : 0) - (m.s ? 1 : 0), rt = (m.d ? 1 : 0) - (m.a ? 1 : 0), up = (m.e ? 1 : 0) - (m.q ? 1 : 0), sp = 5 * dt * (0.5 + f.dist / 8);
+  f.c.x += (-Math.sin(f.yaw) * fw + Math.cos(f.yaw) * rt) * sp; f.c.z += (-Math.cos(f.yaw) * fw - Math.sin(f.yaw) * rt) * sp; f.c.y = clamp(f.c.y + up * sp, 0.3, 8);
+  f.c.x = clamp(f.c.x, -11, 11); f.c.z = clamp(f.c.z, -45, 45);
 }
 function updateReplay(dtReal, dt) {
   if (R.live) {      // his ride-out turn (and yours, until you take the rein) goes on in game time underneath: undress the riders, run the course's own logic, dress them again later in the frame
     replayUndress(); const m = S.mode; S.mode = R.back; updateRide(dt, dtReal); S.mode = m;
   }
+  const sp = R.spd || 1;
   if (R.hl) {
-    if (!R.pause) { R.t += dtReal; if (R.t >= R.t1) replaySeek(R.t0); }
-    R.fxDt = R.pause ? 0 : dtReal;
+    if (!R.pause) { R.t += dtReal * sp; if (R.t >= R.t1) replaySeek(R.t0); }
+    R.fxDt = R.pause ? 0 : dtReal * sp;
   } else {
-    const P = R.passes[R.pass]; R.rate = passSpeed(P, R.t - R.tImp); R.t += dtReal * R.rate; R.fxDt = dtReal * R.rate;
+    const P = R.passes[R.pass]; R.rate = passSpeed(P, R.t - R.tImp) * sp; if (R.pause) R.rate = 0;
+    R.t += dtReal * R.rate; R.fxDt = dtReal * R.rate;
     if (R.t >= P.t1) { if (R.pass < R.passes.length - 1) setPass(R.pass + 1); else endReplay(); }
   }
+  if (R && R.stepFx) { R.fxDt = R.stepFx; R.stepFx = 0; }      // a single frame step: the effects move on by that frame too
+  if (R && R.shot === 8 && R.free) freeMove(dtReal);
 }
 /** Put the riders into the replay pose for this frame (a live replay first saves how they really stand). */
 function replayDress() {
@@ -2173,30 +2493,48 @@ function replayUndress() {
 /** The replay cameras, each a function of the recorded frame (R.sp, R.so: you and he at replay time R.t). */
 function replayCam() {
   const sp = R.sp, so = R.so, D = R.pd, sd = R.side, z0 = R.z, u = clamp((R.t - (R.tImp - 1)) / 2, 0, 1), mx = (sp.px + so.px) / 2, mz = (sp.pz + so.pz) / 2;
+  const dP = seatDy(player), dO = seatDy(opp), dM = (dP + dO) / 2;      // camera heights follow the saddles
   switch (R.shot) {
     case 1: {      // CHASE: tight behind your rider, looking down the lists at the man coming in
       const fx = Math.sin(sp.ry), fz = Math.cos(sp.ry);
-      want.set(sp.px - fx * 3.3 + sd * 0.55, 2.3, sp.pz - fz * 3.3); wantLook.set(lerp(sp.px, so.px, 0.4) + fx * 5, 1.8, sp.pz + fz * 9); return 52;
+      want.set(sp.px - fx * 3.3 + sd * 0.55, 2.3 + dP, sp.pz - fz * 3.3); wantLook.set(lerp(sp.px, so.px, 0.4) + fx * 5, 1.8 + dP, sp.pz + fz * 9); return 52;
     }
     case 2: {      // REVERSE: behind the opponent, looking at you come in
       const fx = Math.sin(so.ry), fz = Math.cos(so.ry), s = smoothstep(R.tImp - 0.3, R.tImp + 0.2, R.t);
-      want.set(so.px - fx * 4.6 - sd * 0.5, 2.5, so.pz - fz * 4.6); wantLook.set(lerp(sp.px, mx, s), 1.85, lerp(sp.pz, mz, s)); return 46;
+      want.set(so.px - fx * 4.6 - sd * 0.5, 2.5 + dO, so.pz - fz * 4.6); wantLook.set(lerp(sp.px, mx, s), 1.85 + dP, lerp(sp.pz, mz, s)); return 46;
     }
     case 3: want.set(sd * 3.2, 6.8 + 3.2 * u, z0 - D * (16 - 6 * u)); wantLook.set(0, 1.3, mz); return 40;      // CRANE: high, down the tilt as they meet
-    case 4: want.set(sd * 4.6, 2.15, z0 - D * 0.5); wantLook.set(-sd * 0.1, 1.9, lerp(z0, mz, 0.6)); return 29 - 7 * u;      // IMPACT: helm and shield level, a long lens
+    case 4: want.set(sd * 4.6, 2.15 + dM, z0 - D * 0.5); wantLook.set(-sd * 0.1, 1.9 + dM, lerp(z0, mz, 0.6)); return 29 - 7 * u;      // IMPACT: helm and shield level, a long lens
     case 5: { const F = R.fall; want.set(F.x + R.fx0 * 2.3, Math.max(0.9, F.y + 0.7), F.z - R.fdir * 3.4 + R.fdir * u * 0.8); wantLook.set(F.x, Math.max(0.35, F.y * 0.6), F.z); return 38; }
-    default: want.set(sd * (7.4 - u * 1.2), 2.0, z0 - D * (2.6 - u * 2.2)); wantLook.set(-sd * 0.2, 1.95, z0 + D * u * 0.6); return 34;      // LOW SIDE at the tilt
+    case 6: case 7: {      // YOUR EYES / HIS EYES: through the visor slit, as the live first-person view sees it, looking at the man coming in
+      const me = R.shot === 6 ? player : opp, ot = R.shot === 6 ? opp : player;
+      me.helm.getWorldPosition(want); want.y += 0.17; const fw = _a.set(0, 0, 1).applyQuaternion(me.root.quaternion); want.addScaledVector(fw, 0.05);
+      ot.helm.getWorldPosition(_b); _b.y -= 0.05; _c.subVectors(_b, want); const ahead = _c.dot(fw), k = smoothstep(0.5, 5, ahead);
+      const a0 = Math.atan2(fw.x, fw.z), sgn = Math.abs(Math.sin(a0 + 0.22) * 20 + want.x) < Math.abs(Math.sin(a0 - 0.22) * 20 + want.x) ? 1 : -1;      // the glance down the lists leans toward the tilt, as in the live view
+      _d.set(want.x + Math.sin(a0 + sgn * 0.22) * 20, want.y - 0.3, want.z + Math.cos(a0 + sgn * 0.22) * 20);
+      wantLook.lerpVectors(_d, _b, k); return 68;
+    }
+    case 8: {      // FREE: orbiting the impact point, kept above the ground and out of the stands
+      if (!R.free) freeInit(false);
+      const f = R.free, cp = Math.cos(f.pitch);
+      want.set(f.c.x + Math.sin(f.yaw) * cp * f.dist, f.c.y + Math.sin(f.pitch) * f.dist, f.c.z + Math.cos(f.yaw) * cp * f.dist);
+      want.x = clamp(want.x, -11.6, 11.6); want.z = clamp(want.z, -48, 48); want.y = clamp(want.y, 0.45, 16);
+      wantLook.copy(f.c); return 42;
+    }
+    default: want.set(sd * (7.4 - u * 1.2), 2.0 + dM, z0 - D * (2.6 - u * 2.2)); wantLook.set(-sd * 0.2, 1.95 + dM, z0 + D * u * 0.6); return 34;      // LOW SIDE at the tilt
   }
 }
 /** Dents, shield marks and the plume as they were at replay time t of the given course (nothing before its blow). */
 function showMarks(t, course) { const k = (course ?? M.course) * 1000 + t; player.showDamage(k); if (opp.showDamage) opp.showDamage(k); }
-function hideReplayUi() { for (const id of ['replayTag', 'replayKeys', 'replayYou', 'replayHim', 'hlBack']) $(id).classList.add('hidden'); }
+/** Leaving a replay: the helms are shown again and the visor mask goes. */
+function rplFpOff() { if (player) player.helm.visible = true; if (opp && opp.helm) opp.helm.visible = true; $('helmMask').style.display = 'none'; }
+function hideReplayUi() { for (const id of ['replayTag', 'replayKeys', 'replayYou', 'replayHim', 'hlBack', 'rplCtl']) $(id).classList.add('hidden'); }
 function endReplay() {
   if (!R) return;
   if (R.hl) { closeHL(); return; }
   if (R.live) replayUndress(); else { player.applySnap(R.liveP); opp.applySnap(R.liveO); }
   showMarks(Infinity);
-  player.replaying = opp.replaying = false; player.update(0); opp.update(0);
+  player.replaying = opp.replaying = false; player.update(0); opp.update(0); rplFpOff();
   fx.clear(); S.mode = R.back; R = null;
   if (C) { C.replayed = true; C.seenReplay = true; C.cutWas = true; C.cineCut = false; C.fovSnap = true; trimRec(C.rec); }      // cut straight back to your rider, wherever he is in the turn
   $('replayTag').textContent = 'INSTANT REPLAY';
@@ -2238,17 +2576,17 @@ function openHL(idx, shot) {
   const rec = M && M.recs && M.recs[idx]; if (!rec || !rec.p || rec.f.length < 8 || !player || !opp) return;
   if (R && !R.hl) endReplay();
   const f = rec.f, old = R && R.hl ? R : null;      // (another course picked while a highlight plays keeps the real poses saved by the first)
-  R = { f, ev: rec.ev, tImp: rec.tImp, i: 0, e: 0, liveP: old ? old.liveP : player.snapshot(), liveO: old ? old.liveO : opp.snapshot(), back: old ? old.back : S.mode, live: false, hl: true, course: rec.n, pause: false, shot: shot ?? S.rplShot ?? 0, fxDt: 0, rate: 1, vis: old ? old.vis : ['hud', 'verdict', 'royalCap'].filter(id => !$(id).classList.contains('hidden')) };
+  R = { f, ev: rec.ev, tImp: rec.tImp, i: 0, e: 0, liveP: old ? old.liveP : player.snapshot(), liveO: old ? old.liveO : opp.snapshot(), back: old ? old.back : S.mode, live: false, hl: true, course: rec.n, pause: false, shot: shot ?? S.rplShot ?? 0, fxDt: 0, rate: 1, spd: old ? old.spd : 1, hits: rec.hits, vis: old ? old.vis : ['hud', 'verdict', 'royalCap'].filter(id => !$(id).classList.contains('hidden')) };
   replayGeom(); R.t0 = Math.max(f[0].t, R.tImp - 3.2); R.t1 = f[f.length - 1].t; replaySeek(R.t0); R.cut = true; S.rplShot = R.shot;
   player.replaying = opp.replaying = true; fx.clear();
   S.mode = 'replay'; S.hl = true; document.body.classList.add('rpl-open');
   for (const id of ['hud', 'verdict', 'royalCap', 'replayYou', 'replayHim', 'pmenu', 'banner']) $(id).classList.add('hidden');
-  $('replayTag').classList.remove('hidden'); $('replayKeys').classList.remove('hidden'); $('hlBack').classList.remove('hidden'); replayTag(); hlKeys();
+  $('replayTag').classList.remove('hidden'); $('replayKeys').classList.remove('hidden'); $('hlBack').classList.remove('hidden'); $('rplCtl').classList.remove('hidden'); if (!viewList().includes(R.shot)) R.shot = 0; rplSync();
 }
-function hlKeys() { $('replayKeys').innerHTML = touchMode ? '' : `<kbd>V</kbd> angle &nbsp;&nbsp; <kbd>SPACE</kbd> ${R && R.pause ? 'play' : 'pause'} &nbsp;&nbsp; <kbd>←</kbd><kbd>→</kbd> scrub &nbsp;&nbsp; <kbd>ESC</kbd> back`; }
+const hlKeys = rplSync;
 function closeHL() {
   if (!R || !R.hl) return;
-  showMarks(Infinity); player.applySnap(R.liveP); opp.applySnap(R.liveO); player.replaying = opp.replaying = false; player.update(0); opp.update(0);
+  showMarks(Infinity); player.applySnap(R.liveP); opp.applySnap(R.liveO); player.replaying = opp.replaying = false; player.update(0); opp.update(0); rplFpOff();
   fx.clear(); S.mode = R.back; S.hl = false; for (const id of R.vis) $(id).classList.remove('hidden'); R = null; hideReplayUi();
   showReplayList();
 }
@@ -2261,7 +2599,7 @@ function hlSelect(d) {
 function showReplayList() {
   const L = recList(), el = $('pmList');
   if (S.rplSel == null || !L.some(([, i]) => i === S.rplSel)) S.rplSel = L.length ? L[L.length - 1][1] : null;
-  el.innerHTML = `<h3>REPLAYS</h3>` + (L.length ? `<div class="rlist">` + L.map(([r, i], n) => `<div class="rrow${i === S.rplSel ? ' sel' : ''}" data-i="${i}"><span class="rt">${touchMode ? '' : `<kbd>${n + 1}</kbd>`}${recTitle(r)}</span><span class="ra">${ANGLES.slice(0, 5).map((a, j) => `<button data-i="${i}" data-a="${j}">${a}</button>`).join('')}</span></div>`).join('') + `</div>` : `<p class="rnone">No course has been ridden yet.</p>`)
+  el.innerHTML = `<h3>REPLAYS</h3>` + (L.length ? `<div class="rlist">` + L.map(([r, i], n) => `<div class="rrow${i === S.rplSel ? ' sel' : ''}" data-i="${i}"><span class="rt">${touchMode ? '' : `<kbd>${n + 1}</kbd>`}${recTitle(r)}</span><span class="ra">${viewList().map((j) => `<button data-i="${i}" data-a="${j}">${ANGLES[j]}</button>`).join('')}</span></div>`).join('') + `</div>` : `<p class="rnone">No course has been ridden yet.</p>`)
     + `<div class="rfoot">${touchMode ? '' : '<span><kbd>1</kbd>–<kbd>9</kbd> play &nbsp; <kbd>V</kbd> angle &nbsp; <kbd>SPACE</kbd> pause &nbsp; <kbd>←</kbd><kbd>→</kbd> scrub</span>'}<button class="btn" id="pmBack">Back</button></div>`;
   $('pmenu').classList.remove('hidden'); $('pmMain').classList.add('hidden'); el.classList.remove('hidden'); $('banner').classList.add('hidden'); $('card').classList.add('hidden'); document.body.classList.add('rpl-open');
 }
@@ -2296,12 +2634,13 @@ function nextBout() {
   endMatch(); startMatch(vIdx, B.queue[B.bout - 1], false, false, 'bridge', 0, B);
 }
 function endMatch(keepLink = false) {
+  ceremony.skipUI(false);
   if (S.online && !keepLink) netLeave();
   if (world && world.setTilt) world.setTilt(true);
   for (const id of ['card', 'hud', 'verdict', 'lesson', 'royalCap', 'replayTag', 'replayKeys', 'replayYou', 'replayHim']) $(id).classList.add('hidden');
   $('helmMask').style.display = 'none'; $('flashTxt').className = '';
   if (window.speechSynthesis) window.speechSynthesis.cancel();
-  voice.reset(); strikeCall = null;
+  voice.reset(); speech.hide(); $('ticker').classList.remove('on'); $('ticker').textContent = ''; strikeCall = null; S.yieldAsk = false; $('yieldAsk').classList.add('hidden');
   if (R) { player.replaying = false; R = null; }
   S.hl = false; S.rpl = false; S.paused = false; document.body.classList.remove('rpl-open'); for (const id of ['pmenu', 'pmList', 'hlBack']) $(id).classList.add('hidden');
   if (world && world.crowd && world.crowd.spotlight) world.crowd.spotlight(-1);
@@ -2310,23 +2649,25 @@ function endMatch(keepLink = false) {
   if (worldKey === -2) setVenue(Math.max(0, venueIdx));      // back from the training ground to the tournament venue
 }
 
-// ------------------------------------------------------------------ circuit table
-function newTable() { return { round: 0, rows: [{ id: 'you', p: 0, w: 0, d: 0, l: 0, sp: 0 }, ...KNIGHTS.map(k => ({ id: k.id, p: 0, w: 0, d: 0, l: 0, sp: 0 }))], results: [] }; }
-function recordCircuit() {
-  const T = profile.table || (profile.table = newTable());
-  const row = (id) => T.rows.find(r => r.id === id);
-  const give = (a, b, res, sa, sb) => { const ra = row(a), rb = row(b); ra.sp += sa; rb.sp += sb; if (res > 0) { ra.w++; ra.p += 3; rb.l++; } else if (res < 0) { rb.w++; rb.p += 3; ra.l++; } else { ra.d++; rb.d++; ra.p++; rb.p++; } };
-  const res = M.result.startsWith('win') ? 1 : M.result === 'draw' ? 0 : -1;
-  give('you', M.od.id, res, M.breaks[0], M.breaks[1]);
-  T.results.push({ venue: M.vIdx, res: M.result, score: [...M.score] });
-  const rest = KNIGHTS.filter(k => k.id !== M.od.id).sort(() => Math.random() - 0.5);
-  for (let i = 0; i + 1 < rest.length; i += 2) {
-    const a = rest[i], b = rest[i + 1];
-    const sa = a.skill + a.seat * 0.4 + Math.random() * 0.7, sb = b.skill + b.seat * 0.4 + Math.random() * 0.7;
-    give(a.id, b.id, Math.abs(sa - sb) < 0.08 ? 0 : sa > sb ? 1 : -1, Math.round(a.skill * 4 * Math.random() + 0.3), Math.round(b.skill * 4 * Math.random() + 0.3));
+// ------------------------------------------------------------------ the career (src/career.js): knockout tournaments
+function newTable() { return { round: 0, rows: [], results: [] }; }      // (the old league table, kept as an empty shell for older callers)
+/** Your tournament match is over: move the draw on, say what it means on the card, and award the honour. */
+function recordTournament() {
+  const TO = M.tourn, won = M.result.startsWith('win'), r = career.recordMatch(profile, won, M.score, M.od.id); M.tres = r; if (!r) return;
+  const V = M.V, line = (a, b) => `<div class="fact"><span>${a}</span><i></i><span>${b}</span></div>`;
+  let head, note;
+  if (r.champion) { head = `YOU WIN THE TOURNAMENT`; note = `Champion of ${V.name}. The honour is yours.`; }
+  else if (r.out) { head = `OUT IN THE ${TO.name.toUpperCase()}`; note = `The tournament at ${V.name} ends here. The winner is ${(career.knightById(profile.season.t.winner) || { short: 'another' }).short}.`; }
+  else { head = `THROUGH TO THE ${r.next.toUpperCase()}`; note = `${TO.name} won. The draw moves on.`; }
+  $('cardFacts').innerHTML += `<h6>${head}</h6><div class="led note"><span>${note}</span></div>`;
+  $('cardHint').textContent = (touchMode ? 'TAP' : 'SPACE / CLICK') + (r.out || r.champion ? ' to leave the lists' : ' to see the draw');
+  if (r.champion) {
+    const lastV = TO.last, rb = rankOf(profile.renown);
+    toast('HONOUR', `Champion of ${V.name}`, 6);
+    if (lastV) showFeats(circuitFeat(profile));
+    if (rankOf(profile.renown) > rb) announceRank(true);
   }
-  T.round++; profile.venue = T.round; saveProfile();
-  if (T.round >= VENUES.length) { const top = [...T.rows].sort((a, b) => b.p - a.p || b.sp - a.sp)[0]; if (top && top.id === 'you') { const rb = rankOf(profile.renown); showFeats(circuitFeat(profile)); if (rankOf(profile.renown) > rb) announceRank(true); } }
+  saveProfile();
 }
 
 // ------------------------------------------------------------------ autopilot (testing / demo)
@@ -2345,7 +2686,7 @@ function doBrace() { if (S.mode !== 'charge' || C.braceCd > 0) return; C.braceT 
 // The HOST decides every stroke with the ordinary strike code (his rider against the interpolated friend) and tells the guest ('st' per stroke, 'course' when both are spent);
 // the guest never collides: he shows what he is told, mirrored (netApplyStroke, netApplyCourse). The host also gives the marshal's signal ('plan', 'sig') and starts each next course
 // ('next') once the guest says he is at his mark ('rdy'). Messages: hi (profile) · room / start (host's settings) · skip (intro vote) · s · plan · sig · st · course · rdy · next · tilt · ka · bye.
-const LOBBY = { phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 }, pub: false, quick: false, qt: 0, fromList: false, rooms: [], relays: { open: 0, total: 0, failed: false }, watching: false, venueSet: false };
+const LOBBY = { find: null, mm: null, phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 }, pub: false, quick: false, qt: 0, fromList: false, rooms: [], relays: { open: 0, total: 0, failed: false }, watching: false, venueSet: false };
 // The public list (src/lobby.js, loaded only when the online screen opens): LOBBY.phase 'list' shows LOBBY.rooms; a PUBLIC room waiting for a challenger is announced; Quick match = look for ~3 s, join the oldest, else host a public room.
 let lobbyP = null, lobbyObj = null;
 const lobbyApi = () => lobbyP || (lobbyP = import('./lobby.js').then((m) => (lobbyObj = m.createLobby())));
@@ -2378,14 +2719,14 @@ function netWire(n) {
 }
 window.addEventListener('pagehide', () => { if (lobbyObj) lobbyObj.stop(); if (NET.net) { try { NET.net.send({ t: 'bye' }); } catch (e) { /* ignore */ } } });
 const HOST_FAIL = "Couldn't reach the room server. Check your connection and try again.";
-async function lobbyCreate(pub = false, quick = false) {
+async function lobbyCreate(pub = false, quick = false, fixedCode = '') {
   netClose(); LOBBY.pub = !!pub; LOBBY.quick = !!quick; LOBBY.fromList = false; const my = NET.token; NET.host = true; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.phase = 'hostWait'; lobbyShow();
   for (let i = 0; i < 6; i++) {
-    const n = NET.net = createNet(), code = makeCode(); netWire(n);
+    const n = NET.net = createNet(), code = fixedCode || makeCode(); netWire(n);
     try { await n.host(code); } catch (e) {
       if (my !== NET.token) return;
       n.onOpen = n.onMessage = n.onClose = null; try { n.close(); } catch (e2) { /* ignore */ } NET.net = null;
-      if (e && e.message === 'taken') continue;
+      if (e && e.message === 'taken' && !fixedCode) continue;
       LOBBY.phase = 'failed'; LOBBY.err = HOST_FAIL; lobbyShow(); return;
     }
     if (my !== NET.token) return;
@@ -2396,13 +2737,14 @@ async function lobbyCreate(pub = false, quick = false) {
 async function lobbyJoin(raw, opts = {}) {
   const code = cleanCode(raw);
   if (!validCode(code)) { LOBBY.err = 'A room code is five letters.'; lobbyShow(); return false; }
-  netClose(); const my = NET.token; NET.host = false; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = code; LOBBY.pub = false; LOBBY.fromList = !!opts.listed || !!opts.quick; LOBBY.phase = opts.quick ? 'quickLook' : 'joining'; lobbyShow();
+  netClose(); const my = NET.token; NET.host = false; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = code; LOBBY.pub = false; LOBBY.fromList = !!opts.listed || !!opts.quick; LOBBY.phase = opts.quick ? 'quickLook' : opts.mm ? 'mmConnect' : 'joining'; lobbyShow();
   const n = NET.net = createNet(); netWire(n);
   try { await n.join(code); } catch (e) {
     if (my !== NET.token) return false;
     n.onOpen = n.onMessage = n.onClose = null; try { n.close(); } catch (e2) { /* ignore */ } NET.net = null; clearInterval(NET.ka);
     const gone = e && e.message === 'notfound';
     if (opts.quick) { LOBBY.phase = 'quickLook'; lobbyShow(); return false; }
+    if (opts.mm) return false;      // (Find match: the host may not be ready yet; the caller tries again)
     if (opts.listed) { LOBBY.phase = 'list'; LOBBY.err = gone ? 'That room is no longer open.' : failText(e); lobbyShow(); return false; }
     LOBBY.phase = 'joinInput'; LOBBY.err = failText(e); lobbyShow(); return false;
   }
@@ -2435,12 +2777,14 @@ async function lobbyQuick() {
 }
 /** Back, one step up inside the online screen (from the first page: out to the main menu). */
 function lobbyBack() {
+  if (LOBBY.find || (LOBBY.mm && !M)) { mmCancel(); return; }
   if (LOBBY.phase === 'choose') { lobbyLeave(); return; }
   const priv = LOBBY.phase === 'joinInput' || LOBBY.phase === 'joining' || (LOBBY.phase === 'joined' && !LOBBY.fromList) || ((LOBBY.phase === 'hostWait' || LOBBY.phase === 'hostReady' || LOBBY.phase === 'failed') && !LOBBY.quick && !LOBBY.pub);
   LOBBY.qt++; stopWatch(); netLeave(); LOBBY.friend = null; LOBBY.err = ''; LOBBY.quick = false; LOBBY.pub = false; LOBBY.fromList = false; LOBBY.phase = priv ? 'friend' : 'choose'; lobbyShow();
 }
 function lobbySetPublic(b) { if (!NET.host || LOBBY.phase !== 'hostWait') return; LOBBY.pub = !!b; lobbyShow(); }
 function lobbyOpen() {
+  LOBBY.find = LOBBY.mm = null;
   ranks.syncName();      // (the rank server: make the key, register, send the name; fails silently)
   netClose(); stopWatch(); NET.host = false; LOBBY.qt++; LOBBY.phase = 'choose'; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.pub = LOBBY.quick = LOBBY.fromList = false; preloadNet(); import('./lobby.js').then((m) => m.preloadLobby()).catch(() => {});
   if (!LOBBY.venueSet) LOBBY.room.v = Math.min(profile.venue || 0, VENUES.length - 1);      // (Quick match opens the lists you last rode in)
@@ -2459,6 +2803,7 @@ function lobbyRide() {
 }
 /** The host's 'start': the room's settings and a fresh match id (random 128 bits; both players sign their reports with it, see src/ranks.js). */
 function startMsg() {
+  if (LOBBY.mm && !LOBBY.mm.used) { LOBBY.mm.used = true; NET.mid = LOBBY.mm.matchId; LOBBY.room = { v: LOBBY.mm.venue, m: LOBBY.mm.mode, c: LOBBY.mm.courses }; return Object.assign(roomMsg('start'), { mid: NET.mid }); }      // Find match: the server chose the match id and the rules
   const b = crypto.getRandomValues(new Uint8Array(16)); NET.mid = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
   return Object.assign(roomMsg('start'), { mid: NET.mid });
 }
@@ -2473,6 +2818,7 @@ function startOnlineMatch() {
 function onNetClose() {
   if (M && S.online) { netForfeit(); return; }
   const wasHost = NET.host;
+  if (LOBBY.mm && !LOBBY.mm.used) { netClose(); LOBBY.friend = null; LOBBY.mm = null; LOBBY.phase = 'choose'; LOBBY.err = 'Your opponent left before the joust.'; lobbyShow(); return; }
   if (wasHost && (LOBBY.phase === 'hostReady')) { LOBBY.friend = null; LOBBY.phase = 'hostWait'; lobbyShow(); }      // the room stays open for another friend
   else if (!wasHost) {
     const filled = LOBBY.fromList && !LOBBY.friend;      // joined from the list and thrown out at once: somebody else got there first
@@ -2488,15 +2834,20 @@ function onNetMessage(m) {
   if (!m || typeof m !== 'object') return;
   if (m.t === 'hi') {
     const f = cleanProfile(m); if (!f || M) return;
+    if (LOBBY.mm && !LOBBY.mm.used && LOBBY.mm.opp && LOBBY.mm.opp.rid) f.rid = LOBBY.mm.opp.rid;      // Find match: the opponent's rank id is the server's, not what he says
     LOBBY.friend = f; friendLookup();
-    if (NET.host) { LOBBY.phase = 'hostReady'; netSend(roomMsg()); } else LOBBY.phase = 'joined';
+    if (NET.host) { LOBBY.phase = 'hostReady'; netSend(roomMsg()); if (LOBBY.mm && !LOBBY.mm.used) setTimeout(() => lobbyRide(), 1200); } else LOBBY.phase = 'joined';
     lobbyShow(); return;
   }
-  if (m.t === 'rid') { if (LOBBY.friend && !LOBBY.friend.rid && !M) { LOBBY.friend.rid = HEX(m.rid, 16); friendLookup(); } return; }
+  if (m.t === 'rid') { if (LOBBY.friend && !LOBBY.friend.rid && !M && !LOBBY.mm) { LOBBY.friend.rid = HEX(m.rid, 16); friendLookup(); } return; }
   if (m.t === 'play') { const mid = HEX(m.mid, 32), sig = typeof m.sig === 'string' && m.sig.length < 200 ? m.sig : ''; if (mid && sig) NET.oppPlay = { mid, sig }; return; }
   if (!M && !NET.host) {
     if (m.t === 'room') { LOBBY.room = cleanRoom(m); if (!M) setVenue(LOBBY.room.v); lobbyShow(); return; }
-    if (m.t === 'start' && LOBBY.friend) { LOBBY.room = cleanRoom(m); NET.mid = HEX(m.mid, 32); startOnlineMatch(); return; }
+    if (m.t === 'start' && LOBBY.friend) {
+      if (LOBBY.mm && !LOBBY.mm.used) { LOBBY.mm.used = true; LOBBY.room = { v: LOBBY.mm.venue, m: LOBBY.mm.mode, c: LOBBY.mm.courses }; NET.mid = LOBBY.mm.matchId; }      // Find match: the server's match and rules, whatever the host says
+      else { LOBBY.room = cleanRoom(m); NET.mid = HEX(m.mid, 32); }
+      startOnlineMatch(); return;
+    }
   }
   if (m.t === 'start' && M && M.result && S.online && !NET.host && LOBBY.friend) {      // the host began the rematch: follow him even if his vote went astray
     NET.againMe = NET.againThem = false; endMatch(true); NET.remote.reset(); NET.rem = null; LOBBY.room = cleanRoom(m); NET.mid = HEX(m.mid, 32); startOnlineMatch(); return;
@@ -2723,23 +3074,115 @@ function rankReport() {
     if (!r) return;
     if (r.status === 'pending') r = await ranks.awaitConfirm(m.mid, 8000);
     if (!r || r.status !== 'confirmed' || M !== m) return;
-    const line = `${r.division}${r.provisional ? '?' : ''} · ${r.after} (${r.delta >= 0 ? '+' : '−'}${Math.abs(r.delta)})`;
-    $('cardSub').textContent += ' · ' + line;
+    const line = r.after === undefined ? 'unranked' : `${r.division}${r.provisional ? '?' : ''} · ${r.after} (${r.delta >= 0 ? '+' : '−'}${Math.abs(r.delta)})`;
+    $('cardSub').textContent += ' · ' + line + (r.gold ? ` · +${r.gold} marks` : '');
+    if (r.gold && account.signedIn()) account.fetchMe();      // the purse the server paid for it
   }).catch(() => {});
 }
-const onlineApi = { get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic };
+// ------------------------------------------------------------------ Find match: the server's queue pairs two players (ranked needs a signed-in account), then the usual PeerJS room carries the match
+/** LOBBY.find = the search (ticket, start time); LOBBY.mm = the match once made: { matchId, code, role, venue, mode, courses, ranked, opp:{name, division, rating, rid} }. */
+async function lobbyFind(ranked) {
+  netClose(); stopWatch(); const my = ++LOBBY.qt; NET.host = false; LOBBY.quick = LOBBY.pub = LOBBY.fromList = false; LOBBY.friend = null; LOBBY.code = ''; LOBBY.err = ''; LOBBY.mm = null;
+  if (ranked && !account.signedIn()) { LOBBY.phase = 'choose'; LOBBY.err = 'Ranked play needs a signed-in account.'; lobbyShow(); return; }
+  const f = LOBBY.find = { ranked: !!ranked, t0: performance.now(), ticket: '' }; LOBBY.phase = 'finding'; lobbyShow();
+  await ranks.ensure().catch(() => null);      // (the rank key: unranked guests are matched on it too)
+  if (LOBBY.qt !== my) return;
+  const j = await account.mmJoin(ranked, profile.name);
+  if (LOBBY.qt !== my) { if (j.ticket) account.mmLeave(j.ticket); return; }
+  if (j.error) { LOBBY.find = null; LOBBY.phase = 'choose'; LOBBY.err = j.error; lobbyShow(); return; }
+  f.ticket = j.ticket; let st = j;
+  const iv = setInterval(() => { if (LOBBY.qt !== my) clearInterval(iv); else if (LOBBY.phase === 'finding') lobbyShow(); }, 1000);      // (the searching panel's clock)
+  try {
+    while (st.state !== 'matched') {
+      if (st.state === 'gone') { LOBBY.find = null; LOBBY.phase = 'choose'; LOBBY.err = 'The queue lost your place. Try again.'; lobbyShow(); return; }
+      if (performance.now() - f.t0 > 5 * 60000) { account.mmLeave(f.ticket); LOBBY.find = null; LOBBY.phase = 'choose'; LOBBY.err = 'No opponent found. Try again in a while.'; lobbyShow(); return; }
+      await sleep(1500); if (LOBBY.qt !== my) return;
+      const n = await account.mmPoll(f.ticket); if (n) st = n;      // (a lost poll is just asked again; the server forgets somebody silent for 15 s)
+    }
+  } finally { clearInterval(iv); }
+  account.mmLeave(f.ticket); LOBBY.find = null;
+  LOBBY.mm = st; LOBBY.phase = 'found'; lobbyShow();
+  await sleep(2500); if (LOBBY.qt !== my) return;
+  mmConnect(st, my);
+}
+/** Connect to the matched opponent: the host opens the room the server named, the guest joins it (trying again while the host is still opening it). */
+async function mmConnect(m, my) {
+  LOBBY.room = { v: m.venue, m: m.mode, c: m.courses }; LOBBY.venueSet = true; setVenue(m.venue);
+  const t0 = performance.now(), dead = () => LOBBY.qt !== my || !LOBBY.mm || M || LOBBY.friend;
+  const giveUp = (why) => { if (LOBBY.qt !== my || M) return; netClose(); LOBBY.mm = null; LOBBY.friend = null; LOBBY.phase = 'choose'; LOBBY.err = why; lobbyShow(); };
+  if (m.role === 'host') { await lobbyCreate(false, false, m.code); if (LOBBY.qt !== my) return; }
+  else {
+    LOBBY.phase = 'mmConnect'; lobbyShow();
+    while (!dead() && performance.now() - t0 < 25000) { if (await lobbyJoin(m.code, { mm: true })) break; await sleep(1500); }
+    if (LOBBY.qt === my && !LOBBY.friend && !NET.net) return giveUp('Could not reach your opponent. Try again.');
+  }
+  for (let i = 0; i < 100 && !M && LOBBY.qt === my && LOBBY.mm; i++) await sleep(250);      // (until the joust begins)
+  if (!M && LOBBY.qt === my && LOBBY.mm && !LOBBY.mm.used) giveUp('Your opponent did not connect. Try again.');
+}
+function mmCancel() {
+  LOBBY.qt++; if (LOBBY.find && LOBBY.find.ticket) account.mmLeave(LOBBY.find.ticket);
+  LOBBY.find = null; LOBBY.mm = null; netLeave(); LOBBY.friend = null; LOBBY.err = ''; LOBBY.code = ''; LOBBY.phase = 'choose'; lobbyShow();
+}
+// ------------------------------------------------------------------ the account (src/account.js)
+/** A signed-in player's single-player match is over: tell the server how it ended, and show what it paid. The server decides every amount. */
+async function spPaid(m, res, B) {
+  const say = (html) => { const e = document.getElementById('acctReckon'); if (e) e.innerHTML = html; };
+  const id = await m.spId;
+  if (!id) return say(`<div class="led neg"><span>The server could not be reached: this match is not counted.</span></div>`);
+  const c = (n) => Math.max(-99, Math.min(99, n | 0));
+  const r = await account.spFinish(id, { result: res, score: B ? [c(B.wins), c(B.n - B.wins)] : [c(m.score[0]), c(m.score[1])], courses: B ? c(B.tot.courses) : Math.max(1, c(m.course)), broken: c(B ? B.tot.broken : m.breaks[0]), helms: c(B ? B.tot.helm : m.stats[0].helm) });
+  if (!r.ok) return say(`<div class="led neg"><span>The marshals would not count this match (${String(r.error).replace(/[<>&]/g, '')}).</span></div>`);
+  const rb = rankOf(profile.renown);
+  if (r.wallet) { profile.gold = r.wallet.gold; profile.renown = r.wallet.renown; }
+  const sgn = (n) => (n > 0 ? '+' : '−') + Math.abs(n);
+  say((r.capped && !r.gold ? `<div class="led neg"><span>You have won all the purses you can for today. Come back tomorrow.</span></div>` : `<div class="led"><span>${m.circuit ? 'Prize purse, less your entry' : 'Prize purse'}</span><span>${sgn(r.gold)}</span></div>`)
+    + `<div class="led sum"><span>The day brought you</span><span>${r.gold} marks</span></div><div class="led note"><span>${purseText(profile.gold)} &nbsp;·&nbsp; +${r.renown} renown</span></div>` + rankBar(profile.renown));
+  if (rankOf(profile.renown) > rb) announceRank(true);
+}
+/** The server's account of this player arrived: the profile is rebuilt from it (gold, renown and owned items are the server's). */
+function applyAccount(me) {
+  profile = loadProfile(account.buildProfile(me)); S.fp = !!profile.firstPerson;
+  if (!M && player) rebuildPlayer();
+  if (typeof menus !== 'undefined' && menus.root.classList.contains('on')) menus.show(menus.root.dataset.name);
+  ranks.syncName();
+}
+account.on('sync', applyAccount);
+account.on('change', (inn) => { if (!inn) location.reload(); });      // signed out (or the session ended): back to the guest's own save
+const accountApi = { signedIn: account.signedIn, info: account.info, providers: account.providers, signIn: account.signIn, signOut: account.signOut, message: () => account.message, clearMessage: () => account.setMessage(''), fail: (m) => account.setMessage(m), async buy(item) {
+  const r = await account.buy(item);
+  if (r.ok) { const me = await account.fetchMe(); if (!me) profile.gold = r.wallet.gold; }
+  return r;
+} };
+const onlineApi = { find: lobbyFind, get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic };
 
 // ------------------------------------------------------------------ input
+/** Keys common to every replay: 1-4 speed, , and . step a frame, K pauses (the automatic one skips on Space), and the free camera's WASD / arrows (R resets it). True when it took the key. */
+function rplKey(e) {
+  const k = e.code, d = /^Digit([1-4])$/.exec(k);
+  if (d) { rplSpeed(SPEEDS[+d[1] - 1]); return true; }
+  if (k === 'Comma') { rplStep(-1); return true; }
+  if (k === 'Period') { rplStep(1); return true; }
+  if (k === 'KeyK') { rplPause(); return true; }
+  if (R.shot === 8) {
+    if (k === 'KeyR') { R.free = null; freeInit(false); return true; }
+    const m = R.mv || (R.mv = {}), map = { KeyW: 'w', KeyS: 's', KeyA: 'a', KeyD: 'd', KeyQ: 'q', KeyE: 'e', ArrowUp: 'w', ArrowDown: 's' };
+    if (map[k]) { m[map[k]] = true; return true; }
+  }
+  return false;
+}
 window.addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
   const k = e.code;
+  if (S.yieldAsk) { if (k === 'KeyY' || k === 'Enter') doYield(); else if (k === 'KeyN' || k === 'Escape' || k === 'Backspace') closeYield(); e.preventDefault(); return; }      // the yield confirm swallows every key
   if (M && S.paused && R && R.hl) {      // a highlight playing from the pause menu
+    if (rplKey(e)) { e.preventDefault(); return; }
     if (k === 'KeyV') replayView();
-    else if (k === 'Space' || k === 'Enter') { R.pause = !R.pause; hlKeys(); }
-    else if (k === 'ArrowLeft' || k === 'ArrowRight') { R.pause = true; hlKeys(); replaySeek(R.t + (k === 'ArrowLeft' ? -0.25 : 0.25)); }
+    else if (k === 'Space' || k === 'Enter') rplPause();
+    else if (k === 'ArrowLeft' || k === 'ArrowRight') { R.pause = true; rplSync(); replaySeek(R.t + (k === 'ArrowLeft' ? -0.25 : 0.25)); }
     else if (k === 'Escape' || k === 'KeyP' || k === 'Backspace') closeHL();
     e.preventDefault(); return;
   }
+  if (S.mode === 'replay' && R && !R.hl && !S.paused && rplKey(e)) { e.preventDefault(); return; }      // the automatic replay: speed, step, the free camera's keys
   if (M && S.rpl && S.paused) {      // the Replays list
     if (/^Digit[1-9]$/.test(k)) { const L = recList()[+k[5] - 1]; if (L) openHL(L[1]); e.preventDefault(); return; }
     if (k === 'ArrowUp' || k === 'ArrowDown') { hlSelect(k === 'ArrowUp' ? -1 : 1); e.preventDefault(); return; }
@@ -2755,13 +3198,14 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'KeyT') keys.throw = true;
   else if (k === 'KeyQ') { if (!keys.guard && C) C.guardAge = 0; keys.guard = true; }
   else if (k === 'KeyC') keys.look = true;
-  else if (k === 'Space' || k === 'Enter') { e.preventDefault(); if (S.mode === 'intro' || (C && (C.mont || C.beat))) { skipKey = true; return; } if (e.repeat) return; if (S.mode === 'charge' && k === 'Space') doBrace(); else advance(); }
+  else if (k === 'Space' || k === 'Enter') { e.preventDefault(); if (S.mode === 'intro' || (C && (C.mont || C.beat || (C.lap && !C.lap.ended)))) { skipKey = true; return; } if (e.repeat) return; if (S.mode === 'charge' && k === 'Space') doBrace(); else advance(); }
   else if (k === 'KeyV') { if (S.mode === 'replay') replayView(); else { S.fp = !S.fp; profile.firstPerson = S.fp; saveProfile(); } }
   else if (k === 'KeyM') setSound(S.muted);
   else if (k === 'KeyN') { if (S.mode === 'menu' && !e.repeat) musicNext(); }
   else if (k === 'KeyR') { if (M && S.paused && !S.rpl) openReplays('pause'); else if (M && !S.paused && M.result && C && C.carded && S.mode === 'after') openReplays('card'); else if (C && S.mode === 'after' && C.replayed && C.rec.f.length > 20 && !C.cut && !R && !S.online) startReplay({ frozen: true }); }
   else if (k === 'KeyE' || k === 'Digit4') { if (S.mode === 'ready') interlude(4); else if (C && player.speed < 2.6 && C.patCd <= 0 && S.mode === 'charge') { C.patCd = 1.2; M.agit = clamp(M.agit - 0.22, 0, 1); audio.snort(0); } }
   else if (k === 'KeyX' || k === 'Digit1') { if (S.mode === 'ready') interlude(1); else if (C && S.mode === 'after' && opp && opp.unhorsed && !C.courtesy) { C.courtesy = true; react('salute', 1, false); discover('courtesy'); withFeats(() => courtesyFeat(profile)); say('You salute your fallen foe. The gallery approves.', 'THE GALLERY', 2, { prompt: true, phases: 'after' }); } }
+  else if (k === 'KeyY') openYield();
   else if (k === 'KeyG') ladyEye();      // not in the key hints: found by accident, or from the squire's mutter
   else if (k === 'Digit2') interlude(2);
   else if (k === 'Digit3') interlude(3);
@@ -2771,11 +3215,14 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => {
   const k = e.code;
+  if (R && R.mv) { const m = { KeyW: 'w', KeyS: 's', KeyA: 'a', KeyD: 'd', KeyQ: 'q', KeyE: 'e', ArrowUp: 'w', ArrowDown: 's' }[k]; if (m) R.mv[m] = false; }
   if (k === 'Space' || k === 'Enter') skipKey = false;
   if (k === 'KeyS' || k === 'ArrowDown') keys.rein = false; else if (k === 'KeyA' || k === 'ArrowLeft') keys.left = false; else if (k === 'KeyD' || k === 'ArrowRight') keys.right = false;
   else if (k === 'KeyF') focusHeld = false; else if (k === 'KeyT') keys.throw = false; else if (k === 'KeyQ') keys.guard = false; else if (k === 'KeyC') keys.look = false;
 });
+let rplDrag = null;      // a mouse button held down on a replay: a drag turns the free camera, a click is the old "next angle"
 window.addEventListener('mousemove', (e) => {
+  if (rplDrag && !touchMode) { const dx = e.clientX - rplDrag.x, dy = e.clientY - rplDrag.y; rplDrag.x = e.clientX; rplDrag.y = e.clientY; rplDrag.moved += Math.abs(dx) + Math.abs(dy); if (rplDrag.moved > 5 && R) freeOrbit(dx, dy); return; }
   if (touchMode) return;      // a finger moves the aim by dragging (src/touch.js); the synthetic mouse move must not jump it
   if (G.auto && S.mode === 'charge') return;
   mouse.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
@@ -2783,11 +3230,13 @@ window.addEventListener('mousemove', (e) => {
 canvas.addEventListener('mousedown', (e) => {
   initAudio();
   if (touchMode) return;
+  if (R && S.mode === 'replay' && e.button === 0) { rplDrag = { x: e.clientX, y: e.clientY, moved: 0 }; return; }
   if (e.button === 0) { if (S.mode === 'charge' || S.mode === 'ready') { if (C) C.couchHeld = true; } else advance(); }
   if (e.button === 2) focusHeld = true;
 });
-window.addEventListener('mouseup', (e) => { if (touchMode) return; if (e.button === 0 && C) C.couchHeld = false; if (e.button === 2) focusHeld = false; });
+window.addEventListener('mouseup', (e) => { if (rplDrag && e.button === 0) { const click = rplDrag.moved <= 5; rplDrag = null; if (click && R) advance(); return; } if (touchMode) return; if (e.button === 0 && C) C.couchHeld = false; if (e.button === 2) focusHeld = false; });
 window.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('wheel', (e) => { if (R && S.mode === 'replay') { e.preventDefault(); freeZoom(Math.exp(clamp(e.deltaY, -300, 300) * 0.0012)); } }, { passive: false });
 $('card').addEventListener('click', advance);
 window.addEventListener('blur', () => { skipKey = false; keys.rein = keys.left = keys.right = keys.guard = keys.look = keys.throw = false; focusHeld = false; if (M && S.mode === 'charge' && !G.manual && !S.online) setPaused(true); });
 
@@ -2803,6 +3252,10 @@ $('pmRide').addEventListener('click', () => setPaused(false));
 $('pmRpl').addEventListener('click', () => openReplays('pause'));
 $('pmLeave').addEventListener('click', () => { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } });
 $('hlBack').addEventListener('click', () => closeHL());
+$('rplCtl').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || !R) return; e.stopPropagation();
+  if (b.dataset.s) rplSpeed(+b.dataset.s); else if (b.dataset.k === 'pp') rplPause(); else if (b.dataset.k === 'back') rplStep(-1); else if (b.dataset.k === 'fwd') rplStep(1); else if (b.dataset.k === 'view') replayView();
+});
 $('cardReplays').addEventListener('click', (e) => { e.stopPropagation(); openReplays('card'); });
 $('pmList').addEventListener('click', (e) => {
   const t = e.target.closest('button, .rrow'); if (!t) return;
@@ -2841,6 +3294,10 @@ function updateHud(force) {
   $('horseBar').style.width = `${M.hp.horse * 100}%`; $('horseBar').style.background = M.hp.horse < 0.4 ? 'var(--red)' : 'var(--green)';
   { const w = 1 - M.bodyS.p.wind; $('breathBar').style.width = `${w * 100}%`; $('breathBar').style.background = w < 0.5 ? 'var(--red)' : 'var(--gold)'; }
   $('bodyBar').style.width = `${M.hp.body * 100}%`; $('bodyBar').style.background = M.hp.body < 0.4 ? 'var(--red)' : 'var(--green)';
+  { const on = injuriesOn(), cs = on ? [conditionOf(0), conditionOf(1)] : ['', ''];      // condition, spare lances and the yield button (drama; offline only)
+    for (const [id, c] of [['condP', cs[0]], ['condO', cs[1]]]) { const e = $(id); if (e.dataset.c !== c) { e.dataset.c = c; e.textContent = c; e.className = `cond ${c.toLowerCase()}`; } }
+    const lt = on ? (lancesLeft(0) <= 0 ? 'NO LANCE LEFT' : `SPARE LANCES ${Math.max(0, lancesLeft(0) - 1)}`) : ''; if ($('lanceLeft').textContent !== lt) $('lanceLeft').textContent = lt;
+    $('yieldBtn').classList.toggle('hidden', !yieldOk()); }
   const steady = clamp(1 - C.sway / 0.07, 0, 1);
   $('armBar').style.width = `${steady * 100}%`; $('armBar').style.background = steady < 0.4 ? 'var(--red)' : 'var(--gold)';
   $('focusBar').style.width = `${M.focus * 100}%`;
@@ -2906,6 +3363,15 @@ function updateReticle() {
 
 function updateMask() {
   const m = $('helmMask');
+  const rfp = S.mode === 'replay' && R && R.sp && (R.shot === 6 || R.shot === 7), who = R && R.shot === 7 ? opp : player, snap = R && R.shot === 7 ? R.so : R && R.sp;      // a replay through somebody's visor: his mask, as the snapshot has him
+  if (rfp) {
+    if (snap.unhorsed || snap.visorUp || snap.helmOff) { if (m.style.display !== 'none') m.style.display = 'none'; return; }
+    const vis = who.armourDef.vision, frog = who.armourDef.helm === 'frogmouth' || (who === player && M.kit.bolted);
+    const half = (5 + vis * 30) * (1 - PHYS.damage.helmView * (who.dmg ? who.dmg.helm : 0)), c = 47 - (snap.brace || 0) * (frog ? 36 : 8);
+    m.style.display = 'block';
+    m.style.background = `linear-gradient(to bottom, #050505 0, #050505 ${c - half}%, rgba(5,5,5,0) ${c - half + 3}%, rgba(5,5,5,0) ${c + half - 3}%, #050505 ${c + half}%, #050505 100%)`;
+    return;
+  }
   const on = (M && C && player && C.cut && C.cut.kind === 'visor') || S.fp && M && C && (S.mode === 'ready' || S.mode === 'charge' || S.mode === 'after') && !player.unhorsed && !C.cut && !(C.cine) && !player.visorUp && !player.helmOff;      // visor up or helm off: the full view
   if (!on) { if (m.style.display !== 'none') m.style.display = 'none'; return; }
   const vis = player.armourDef.vision, frog = player.armourDef.helm === 'frogmouth' || M.kit.bolted;      // the bolted Stechhelm: the slit sits high, so sit up at the last moment to see
@@ -2934,13 +3400,14 @@ function dofDepth(x, y, z) { camera.getWorldDirection(_df); return _dv.set(x, y,
 function dofAim() {
   let f = null, r = 2, am = 1;
   if (S.mode === 'replay' && R && R.sp && R.so) {
-    if (R.shot === 5 && R.fall) { f = dofDepth(R.fall.x, Math.max(0.5, R.fall.y), R.fall.z); r = 2.2; }
+    if (R.shot >= 6) { /* through a visor slit, or the free camera: no depth of field */ }
+    else if (R.shot === 5 && R.fall) { f = dofDepth(R.fall.x, Math.max(0.5, R.fall.y), R.fall.z); r = 2.2; }
     else { const a = dofDepth(R.sp.px, 1.5, R.sp.pz), b = dofDepth(R.so.px, 1.5, R.so.pz); f = (a + b) / 2; r = Math.abs(a - b) / 2 + 3.2; }
     am = R.shot === 3 ? 0.3 : 0.85;      // the crane is a wide shot: hardly any
   } else if (S.mode === 'intro') { f = camPos.distanceTo(camLook); r = Math.max(4, f * 0.4); }
   else if (C && C.cut && !(C.cut.ots > 0)) {
     const k = C.cut.kind;
-    if (k === 'judges' || k === 'royal' || k === 'opp' || k === 'lady' || (k === 'react' && (C.cut.sub === 'squire' || C.cut.sub === 'lady'))) { f = camPos.distanceTo(camLook); r = Math.max(3.5, f * 0.35); }
+    if (k === 'judges' || k === 'royal' || k === 'opp' || k === 'lady' || k === 'batter' || k === 'tend' || (k === 'react' && (C.cut.sub === 'squire' || C.cut.sub === 'lady'))) { f = camPos.distanceTo(camLook); r = Math.max(3.5, f * 0.35); }
   } else if (C && C.cut && C.cut.ots > 0 && C.cut.kind !== 'visor') { f = dofDepth(player.root.position.x, 1.8, player.root.position.z); r = 2; }
   if (f != null && !(f > 0.5)) f = null;
   am *= clamp((54 - camera.fov) / 22, 0, 1);      // wide lenses (establishing shots, the stands) get little or none; long lenses on the knights get it all
@@ -2969,10 +3436,12 @@ function updateCamera(dtReal) {
   } else if (S.mode === 'intro') {
     const t = S.introT, on = t < 4.2 ? opp : player, a = (on === opp ? t : t - 4.2) * 0.3 - 0.95, dd = on.dir || -1;
     const c = on.root.position;
-    want.set(c.x + Math.sin(a) * 6.2 * dd, 1.7 + (on === opp ? t : t - 4.2) * 0.16, c.z + Math.cos(a) * 6.2 * dd);
-    wantLook.set(c.x, 1.75, c.z); rate = 4; wantFov = 40; snap = Math.abs(t - 4.2) < 0.05 || t < 0.05;
+    want.set(c.x + Math.sin(a) * 6.2 * dd, on.seatY - 0.05 + (on === opp ? t : t - 4.2) * 0.16, c.z + Math.cos(a) * 6.2 * dd);
+    wantLook.set(c.x, on.seatY + 0.05, c.z); rate = 4; wantFov = 40; snap = Math.abs(t - 4.2) < 0.05 || t < 0.05;
   } else if (S.mode === 'replay' && R) {
     wantFov = replayCam(); rate = 30; if (!R.camSet || R.cut) { R.camSet = true; R.cut = false; snap = true; fov = wantFov; }
+  } else if (C && C.lap && !C.lap.ended && S.mode === 'after') {
+    const r = lapCamera(); wantFov = r.fov; rate = 4; snap = snap || r.snap;
   } else if (C && C.cut) {
     const k = C.cut.kind, p = player.root.position;
     if (C.cut.ots > 0) {      // over your shoulder: your knight from behind, looking the way he is addressing
@@ -2985,11 +3454,11 @@ function updateCamera(dtReal) {
     else if (k === 'helmfit') {      // the squire at your stirrup reaching up to your helm, from in front and outside
       player.helm.getWorldPosition(_b); const sq = field.where('squire', _d), fw = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion), pp = player.root.position;
       let ox = sq ? sq.x - pp.x : -Math.sign(pp.x) || -1, oz = sq ? sq.z - pp.z : 0; const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol; const t = C.beat ? C.beat.t : 0;
-      want.set(pp.x + ox * 3.3 + fw.x * (2.1 - 0.3 * t), 1.8, pp.z + oz * 3.3 + fw.z * (2.1 - 0.3 * t)); wantLook.set(_b.x + ox * 0.5, _b.y - 0.35, _b.z + oz * 0.5); wantFov = 34;
+      want.set(pp.x + ox * 3.3 + fw.x * (2.1 - 0.3 * t), player.seatY - 0.03, pp.z + oz * 3.3 + fw.z * (2.1 - 0.3 * t)); wantLook.set(_b.x + ox * 0.5, _b.y - 0.35, _b.z + oz * 0.5); wantFov = 34;
     }
     else if (k === 'visor') {      // through your own visor slit, down the lists at the man you will meet (the mask is drawn in updateMask)
       player.helm.getWorldPosition(want); want.y += 0.17; const fw = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion); want.addScaledVector(fw, 0.05);
-      wantLook.set(opp.root.position.x, 2.2, opp.root.position.z); wantFov = 52;
+      wantLook.set(opp.root.position.x, opp.seatY + 0.37, opp.root.position.z); wantFov = 52;
     }
     else if (k === 'react') {      // the reaction montage: the stands, your squire, a lady of the gallery
       const sub = C.cut.sub;
@@ -3001,9 +3470,21 @@ function updateCamera(dtReal) {
       }
       else { const q = C.cut.pos, sx = Math.sign(q.x) || 1; want.set(q.x - sx * 6.5, q.y + 0.6, q.z + 1.2); wantLook.set(q.x, q.y, q.z); wantFov = 22; }
     }
+    else if (k === 'batter' || k === 'tend') {      // the battered knight: close on his helm or breast, then pulled back; the surgeon's beat: him at his mark, the camera slowly in
+      const J = C.cut.who ? opp : player, fw = _a.set(0, 0, 1).applyQuaternion(J.root.quaternion), out = Math.sign(J.root.position.x) || 1;
+      J.torso.getWorldPosition(_c); J.helm.getWorldPosition(_b);
+      if (k === 'batter') {
+        const T = C.cut.helm ? _b : _c;
+        if (C.cut.sub === 0) { want.set(T.x + fw.x * 1.9 + out * 1.0, T.y + 0.15, T.z + fw.z * 1.9); wantLook.copy(T); wantFov = 26; }
+        else { want.set(_c.x + fw.x * 3.6 + out * 2.0, _c.y + 0.5, _c.z + fw.z * 3.6); wantLook.set(_c.x, _c.y + 0.25, _c.z); wantFov = 34; }
+      } else {
+        const u = C.mont ? clamp(C.mont.t / DR.tend, 0, 1) : 0, dd = 3.6 - 1.0 * u;
+        want.set(_c.x + fw.x * dd * 0.7 + out * dd * 0.75, _c.y + 0.35, _c.z + fw.z * dd * 0.7); wantLook.set(_c.x, _c.y + 0.3, _c.z); wantFov = 36;
+      }
+    }
     else if (k === 'commons') { want.set(p.x * 0.4, 2.3, p.z + D * 3.5); wantLook.set(-Math.sign(p.x) * 10.5, 1.3, p.z - D * 1.5); wantFov = 46; }
     else if (k === 'lady') { const q = C.cut.pos, sx = Math.sign(q.x) || 1; want.set(q.x - sx * 6.5, q.y + 0.6, q.z + 1.2); wantLook.set(q.x, q.y, q.z); wantFov = 22; }
-    else if (k === 'opp') { const o = opp.root.position; want.set(o.x * 0.2, 2.1, o.z - (opp.dir || -1) * -7); wantLook.set(o.x, 2.0, o.z); wantFov = 26; }
+    else if (k === 'opp') { const o = opp.root.position; want.set(o.x * 0.2, opp.seatY + 0.27, o.z - (opp.dir || -1) * -7); wantLook.set(o.x, opp.seatY + 0.17, o.z); wantFov = 26; }
     else { player.head.getWorldPosition(wantLook); want.set(wantLook.x - Math.sign(p.x) * 2.2, wantLook.y + 0.3, wantLook.z + D * 1.6); wantFov = 40; }
     rate = 30; { const sh = C.cut.ots > 0 ? 1 : 2; if (C.cut.shot !== sh) { C.cut.shot = sh; snap = true; } } C.cutWas = true;
   } else if (C && C.cine && (S.mode === 'after' || S.slowT > 0)) {
@@ -3020,23 +3501,23 @@ function updateCamera(dtReal) {
     wantLook.set(want.x + Math.sin(dirYaw) * 20, want.y + pit * 20 * (1 - lk * 0.6), want.z + Math.cos(dirYaw) * 20);
     rate = 40; wantFov = 72; own = true;
   } else {
-    const p = player.root.position, hs = player.hs, lk = player.look, bob = (player.bob || 0);
+    const p = player.root.position, sy = player.seatY, lk = player.look, bob = (player.bob || 0);      // camera heights hang off where the rider sits (his horse's real size), not a fixed number
     const fwd = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion);
     if (autoCam) {      // the scripted ride-back: a lazy follow cam with its own damped yaw, looking a little ahead of where the horse is going
       const cx = Math.sin(FC.yaw), cz = Math.cos(FC.yaw), lag = Math.abs(wrapA(FC.hd - FC.yaw)), la = clamp(player.speed * 1.1, 0, 4.5) + 1.5 * FC.b, t = S.time, dist = 4.4 + 0.9 * Math.min(lag, 1.5);
       // handheld: a few centimetres and a fraction of a degree, very slow
       const hx = Math.sin(t * 0.37) * 0.04 + Math.sin(t * 0.91 + 1.3) * 0.02, hy = Math.sin(t * 0.29 + 2) * 0.03 + Math.sin(t * 0.77) * 0.015, hz = Math.sin(t * 0.43 + 4) * 0.04;
-      _b.set(p.x - cx * dist + cz * 0.6 + hx, 2.8 * hs + bob * 0.6 + hy, p.z - cz * dist - cx * 0.6 + hz);
+      _b.set(p.x - cx * dist + cz * 0.6 + hx, (sy + 1.08) + bob * 0.6 + hy, p.z - cz * dist - cx * 0.6 + hz);
       _c.set(p.x + Math.sin(FC.hd) * la - hz * 0.5, 1.8 + hy, p.z + Math.cos(FC.hd) * la + hx * 0.5);
       // eased in from the charge cam
-      want.set(p.x + D * 0.72, 2.72 * hs + bob * 1.1, p.z - D * 3.5).lerp(_b, FC.b); wantLook.set(p.x + D * 1.25, 1.95, p.z + D * 30).lerp(_c, FC.b); rate = lerp(9, 4.5, FC.b);
-    } else if (player.manualPos) { want.set(p.x - fwd.x * 4.2 + fwd.z * 0.6, 2.9 * hs, p.z - fwd.z * 4.2 - fwd.x * 0.6); wantLook.set(p.x + fwd.x * 12, 1.9, p.z + fwd.z * 12); rate = 3.2; }
+      want.set(p.x + D * 0.72, (sy + 1.0) + bob * 1.1, p.z - D * 3.5).lerp(_b, FC.b); wantLook.set(p.x + D * 1.25, 1.95, p.z + D * 30).lerp(_c, FC.b); rate = lerp(9, 4.5, FC.b);
+    } else if (player.manualPos) { want.set(p.x - fwd.x * 4.2 + fwd.z * 0.6, (sy + 1.18), p.z - fwd.z * 4.2 - fwd.x * 0.6); wantLook.set(p.x + fwd.x * 12, 1.9, p.z + fwd.z * 12); rate = 3.2; }
     else {
       const th = player.brace;      // thrusting: the camera closes in and swings a little wide, so the body going forward is seen
-      want.set(p.x + D * (0.72 + 0.55 * th), 2.72 * hs + bob * 1.1 - 0.28 * th, p.z - D * (3.5 - 0.8 * th));
+      want.set(p.x + D * (0.72 + 0.55 * th), (sy + 1.0) + bob * 1.1 - 0.28 * th, p.z - D * (3.5 - 0.8 * th));
       wantLook.set(p.x + D * 1.25, 1.95 + bob * 0.5, p.z + D * 30); rate = 9;
       if (lk > 0.02) {   // swing round in front of the rider to see what is behind him
-        want.lerp(_b.set(p.x + D * 2.0, 2.5 * hs, p.z + D * 4.6), lk); wantLook.lerp(_c.set(p.x - D * 0.4, 1.9, p.z - D * 22), lk); rate = 12;
+        want.lerp(_b.set(p.x + D * 2.0, (sy + 0.78), p.z + D * 4.6), lk); wantLook.lerp(_c.set(p.x - D * 0.4, 1.9, p.z - D * 22), lk); rate = 12;
       }
     }
     if (C && C.cutWas) { C.cutWas = false; snap = true; }
@@ -3055,8 +3536,9 @@ function updateCamera(dtReal) {
   camera.lookAt(camLook);
   dofAim();
   if (own && player && M) camera.rotation.z += Math.sin(player.phase * TAU + 1) * 0.006 * clamp(player.speed / 11, 0, 1);   // the roll of the gallop
-  const fpNow = (own && S.fp) || !!(C && C.cut && C.cut.kind === 'visor');
-  if (player) player.helm.visible = !fpNow;
+  const fpNow = (own && S.fp) || !!(C && C.cut && C.cut.kind === 'visor'), rs = S.mode === 'replay' && R ? R.shot : 0;
+  if (player) player.helm.visible = !fpNow && rs !== 6;      // (your own helm is not drawn from inside it; nor his, in his eyes)
+  if (opp && opp.helm) opp.helm.visible = rs !== 7;
 }
 
 // ------------------------------------------------------------------ main loop
@@ -3089,7 +3571,7 @@ G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) 
 function frame(dtReal) {
   touch.update();
   if (S.paused && !S.online) {      // (online the pause menu opens but the match goes on)
-    if (R && R.hl) { S.time += dtReal; updateReplay(dtReal, dtReal); replayDress(); updateCamera(dtReal); post.render(dtReal); }      // a highlight plays while the match stands still
+    if (R && R.hl) { S.time += dtReal; updateReplay(dtReal, dtReal); replayDress(); updateCamera(dtReal); updateMask(); post.render(dtReal); }      // a highlight plays while the match stands still
     else post.render(0);
     return;
   }
@@ -3151,6 +3633,7 @@ function frame(dtReal) {
   hudT -= dtReal; if (hudT <= 0) { hudT = 0.05; updateHud(false); }
   updateReticle(); updateMask();
   voice.update(dtReal); flushCall(); pumpToast();
+  dazeStep(dtReal);
   post.setFocus(S.focusOn ? 1 : 0); post.setSpeed(M && player && S.mode === 'charge' ? clamp((player.speed - 6.2) / 3, 0, 1) * 0.5 : 0);
   post.render(dtReal);
 }
@@ -3158,11 +3641,11 @@ function frame(dtReal) {
 // ------------------------------------------------------------------ boot
 const previews = createPreviews();
 const stable = createStable();
-const touch = initTouch({ S, mouse, openReplays: () => openReplays('pause'), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
+const touch = initTouch({ S, mouse, rpl: { active: () => !!R && S.mode === 'replay', orbit: (dx, dy) => freeOrbit(dx, dy), zoom: (k) => freeZoom(k) }, openReplays: () => openReplays('pause'), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
   leave() { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } } });
 const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
-  get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, newTable, online: onlineApi,
-  resetCircuit() { profile.table = newTable(); profile.venue = 0; saveProfile(); },
+  get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, newTable, online: onlineApi, account: accountApi,
+  resetCircuit() { career.newSeasonFor(profile); profile.venue = 0; saveProfile(); },
   startPractice(restart) { if (restart) { profile.lesson = 0; saveProfile(); } startMatch(Math.max(0, venueIdx), null, false, true); },
   setVenue, musicVol, setMusic, musicNext, musicMine, voicesOn, setVoices, checkFeats() { withFeats(() => checkFeats(profile)); }, ui: (k) => { initAudio(); audio.ui(k); }, S, onShow: (name) => { S.menuView = name; },
 });
@@ -3176,6 +3659,7 @@ $('soundBtn').addEventListener('click', () => setSound(S.muted));
   };
   window.addEventListener('pointerdown', wake); window.addEventListener('keydown', wake);
 }
+G.drama = { conditionOf, lancesLeft, startTend, startBatter, doYield, openYield, swapHelm, dropLance: (side = 0) => dropLance(side ? opp : player, side), yieldOk, aiYields };
 G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
 resize();
 const firstVenue = Math.min(profile.venue || 0, VENUES.length - 1);
@@ -3197,6 +3681,7 @@ setVenue(Math.min(profile.venue || 0, VENUES.length - 1));
 rebuildPlayer();
 menus.show('main');
 tick();
+(async () => { const fresh = await account.handleReturn(); if (fresh) await account.afterSignIn(); else if (account.signedIn()) await account.fetchMe(); if (fresh || account.message) menus.show('account'); })().catch((e) => console.warn('[account]', e));      // back from Google / Discord with ?auth=, or a returning signed-in player
 window.__tiltUp = true;      // the menu is up (the watchdog in index.html stops waiting)
 try { performance.mark('tilt-menu'); } catch (e) { /* ignore */ }
 const hideLoading = () => { const l = $('loading'); if (l) { l.classList.add('done'); setTimeout(() => l.remove(), 900); } };

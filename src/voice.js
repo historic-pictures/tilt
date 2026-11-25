@@ -102,6 +102,9 @@ export function createVoice(host) {
   function pump() {
     const P = host.phase();
     if (V.cur && V.t >= V.cur.endAt) endCur('done');
+    // the result card is up: a between-courses line (the tally, a colour line) that was still showing goes; only the card's own lines stay
+    if (V.cur && P === 'end' && V.cur.phases && !V.cur.phases.includes('end') && V.cur.group !== 'result') endCur('cut');
+    if (P === 'menu' && V.cur) endCur('cut');
     // the charge is silent: whatever was up goes (the marshal's signal may finish its own breath)
     if (V.cur && P === 'charge' && V.cur.key !== 'signal') endCur('cut');
     if (V.cur && P === 'strike' && V.cur.tier > 1 && V.cur.key !== 'signal') endCur('cut');
@@ -135,6 +138,12 @@ export function createVoice(host) {
   V.mark = function mark(what) { if (what === 'strike' && V.strikeT === null) V.strikeT = V.t; };
   /** May a between-courses colour line still be shown this course? */
   V.colourOk = function colourOk() { return V.course - V.lastColourCourse >= 2; };
+  /** The result card comes up: the between-courses line on screen (the tally, a colour line) and any waiting for the 'after' beat go; lines for the card stay. */
+  V.cutBetween = function cutBetween() {
+    const ok = (L) => L.group === 'result' || !L.phases || L.phases.includes('end');
+    if (V.cur && !ok(V.cur)) endCur('cut');
+    if (V.wait && !ok(V.wait)) { drop(V.wait, 'card up'); V.wait = null; }
+  };
   /** Clear everything (match start / end). */
   V.reset = function reset() {
     timers.length = 0; if (V.wait) drop(V.wait, 'reset'); V.wait = null; if (V.cur) endCur('cut'); host.hide();

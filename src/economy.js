@@ -13,15 +13,17 @@ export function reckon(m) {
   if (m.practice) return { lines, total: 0, renown: 0 };
   const sk = m.skills || {}, won = m.result.startsWith('win'), men = m.retinue || {}, fx = (id) => menFx(id, men[id]);
   if (m.bouts) add(`Purse for ${m.bouts} bout${m.bouts > 1 ? 's' : ''} won at the bridge`, m.bouts * purse(m.vIdx, 'win', m.circuit) * (won ? 1 : 0.5));      // Keep the Bridge: a purse for every bout you won (half if the bridge was lost)
-  else if (!m.void) add('Prize purse', purse(m.vIdx, m.result, m.circuit));      // a void joust (Sudden Death with no lance broken) pays no purse
+  else if (!m.void) add(m.final ? 'Tournament prize' : 'Prize purse', purse(m.vIdx, m.result, m.circuit) * (m.pf || 1));      // a void joust (Sudden Death with no lance broken) pays no purse
   if (m.court > 0.2) add('Gift of the gallery', ECON.giftPerFavour * m.court * (sk.largesse ? SKILLS.largesse.gift : 1));
   if (m.circuit) {
     if (m.result === 'win-unhorse') add('Ransom of his horse and harness', ECON.ransom * worthOf(m.oppHorse, m.oppArmour));
     if (m.result === 'loss-unhorse') add('Ransom of your horse and harness', -ECON.ransom * worthOf(m.horse, m.armour, m.helm));
-    add('Entry to the lists', -entryFee(m.vIdx));
-    add('Squires, grooms and lodging', -ECON.retinue);
-    add('Stabling and fodder', -(ECON.keep[m.horse] ?? 2));
-    add('Wages of your retinue', -Object.keys(men).reduce((a, id) => a + (RETINUE[id] ? wageOf(id, men[id]) : 0), 0));
+    if (!m.noFees) {      // (a tournament charges its costs once, at its first round: m.noFees on the rest)
+      add('Entry to the lists', -entryFee(m.vIdx));
+      add('Squires, grooms and lodging', -ECON.retinue);
+      add('Stabling and fodder', -(ECON.keep[m.horse] ?? 2));
+      add('Wages of your retinue', -Object.keys(men).reduce((a, id) => a + (RETINUE[id] ? wageOf(id, men[id]) : 0), 0));
+    }
   }
   if (m.broken) add(`Lances broken (${m.broken})`, -m.broken * (ECON.lance[m.lance] ?? 3) * k);
   add(men.armourer ? 'Iron and rivets for your armourer' : 'The armourer', -(1 - m.body) * ECON.repair * harnessWorth(m.armour, m.helm) * (men.armourer ? fx('armourer').repair : 1));

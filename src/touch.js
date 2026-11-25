@@ -72,7 +72,14 @@ export function initTouch(h) {
   });
   layer.addEventListener('pointermove', (e) => {
     const r = pts.get(e.pointerId); if (!r) return; e.preventDefault();
-    const dx = e.clientX - r.x, dy = e.clientY - r.y; r.x = e.clientX; r.y = e.clientY; r.moved += Math.hypot(dx, dy);
+    const dx = e.clientX - r.x, dy = e.clientY - r.y, rp = h.rpl && h.rpl.active() ? h.rpl : null;
+    if (rp && pts.size >= 2) {      // a replay: two fingers pinch to zoom the free camera
+      let o = null; for (const [id, q] of pts) if (id !== e.pointerId) { o = q; break; }
+      const d0 = Math.hypot(r.x - o.x, r.y - o.y); r.x = e.clientX; r.y = e.clientY; const d1 = Math.hypot(r.x - o.x, r.y - o.y);
+      r.moved += 99; if (d0 > 8 && d1 > 8) rp.zoom(d0 / d1); return;
+    }
+    r.x = e.clientX; r.y = e.clientY; r.moved += Math.hypot(dx, dy);
+    if (rp) { if (r.moved >= 10) rp.orbit(dx, dy); return; }      // a replay: one finger turns the free camera (a tap still changes the angle)
     if (aim === null && r.moved >= 6) { aim = e.pointerId; r.aim = true; }      // any finger, anywhere: the first one to slide becomes the aiming finger
     if (r.aim && !S.paused) { h.mouse.x = clamp(h.mouse.x + dx / window.innerWidth * AIM_SENS, -1, 1); h.mouse.y = clamp(h.mouse.y - dy / window.innerHeight * AIM_SENS, -1, 1); }
   });

@@ -37,6 +37,7 @@ const GradeShader = {
     uImpact: { value: 0 },
     uFocus: { value: 0 },
     uSpeed: { value: 0 },
+    uDaze: { value: 0 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -46,7 +47,7 @@ const GradeShader = {
     }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse;
-    uniform float uTime, uImpact, uFocus, uSpeed;
+    uniform float uTime, uImpact, uFocus, uSpeed, uDaze;
     varying vec2 vUv;
 
     void main() {
@@ -56,6 +57,18 @@ const GradeShader = {
       vec2 dir = c;                  // radial direction (unnormalised, scales with distance)
 
       vec3 col = texture2D(tDiffuse, vUv).rgb;
+
+      // --- Daze (a ringing helm): the picture sways and softens for a second or two ---
+      if (uDaze > 0.002) {
+        vec2 w = vec2(sin(uTime * 5.3 + vUv.y * 7.0), cos(uTime * 4.1 + vUv.x * 6.0)) * 0.011 * uDaze;
+        vec2 bl = vec2(0.016, 0.01) * uDaze;
+        vec3 a = texture2D(tDiffuse, vUv + w).rgb;
+        a += texture2D(tDiffuse, vUv + w + vec2(bl.x, 0.0)).rgb;
+        a += texture2D(tDiffuse, vUv + w - vec2(bl.x, 0.0)).rgb;
+        a += texture2D(tDiffuse, vUv + w + vec2(0.0, bl.y)).rgb;
+        a += texture2D(tDiffuse, vUv + w - vec2(0.0, bl.y)).rgb;
+        col = mix(col, a * 0.2, clamp(uDaze, 0.0, 1.0) * 0.85);
+      }
 
       // --- Impact: chromatic aberration + short radial zoom streak ---
       if (uImpact > 0.002) {
@@ -196,7 +209,7 @@ export function createPost(renderer, scene, camera, opts = {}) {
     bloom: null,
     smaa: null,
     // targets / current values
-    tImpact: 0, tFocus: 0, tSpeed: 0,
+    tImpact: 0, tFocus: 0, tSpeed: 0, tDaze: 0, daze: 0,
     dofOn: false, dofAmt: 0, dofMax: 1, dofF: 10, dofR: 2, dt: 0.016,
     impact: 0, focus: 0, speed: 0,
     time: 0,
@@ -294,12 +307,14 @@ export function createPost(renderer, scene, camera, opts = {}) {
         : Math.max(state.tImpact, state.impact - 6 * dt);
       state.focus = ease(state.focus, state.tFocus, 5, dt);
       state.speed = ease(state.speed, state.tSpeed, 5, dt);
+      state.daze = ease(state.daze, state.tDaze, 6, dt);
       state.time = (state.time + dt) % 1000;
 
       const u = state.grade.uniforms;
       u.uImpact.value = state.impact < 0.003 ? 0 : state.impact;
       u.uFocus.value = state.focus < 0.003 ? 0 : state.focus;
       u.uSpeed.value = state.speed < 0.003 ? 0 : state.speed;
+      u.uDaze.value = state.daze < 0.003 ? 0 : state.daze;
       u.uTime.value = state.time;
       state.film.uniforms.uTime.value = state.time;
       if (state.dof) {
@@ -358,6 +373,7 @@ export function createPost(renderer, scene, camera, opts = {}) {
 
     setImpact(v) { state.tImpact = Math.min(Math.max(v, 0), 1); },
     setFocus(v) { state.tFocus = Math.min(Math.max(v, 0), 1); },
+    setDaze(v) { state.tDaze = Math.min(Math.max(v, 0), 1); },
     setSpeed(v) { state.tSpeed = Math.min(Math.max(v, 0), 1); },
 
     get enabled() { return state.enabled; },

@@ -11,7 +11,7 @@ import { QUINTAIN } from './data.js';
 export class Quintain {
   constructor(scene, x, z) {
     this.scene = scene; this.dir = -1; this.lanceLower = 0; this.brace = 0; this.unhorsed = false; this.lanceBroken = true;
-    this.hs = 1; this.bob = 0; this.phase = 0; this.agit = 0;
+    this.hs = 1; this.seatY = 1.7; this.bob = 0; this.phase = 0; this.agit = 0;
     this.horseDef = { mass: 1, top: 1, accel: 1, name: 'Quintain' }; this.armourDef = { protection: 1, weight: 1 };
     this.spin = 0; this.ang = 0; this.base = 0; this.guard = 0; this.look = 0; this.lane = Math.abs(x);
     const wood = new THREE.MeshStandardMaterial({ color: 0x6b4c2c, roughness: 0.85 });

@@ -15,6 +15,29 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // If it is missing the code-built horse is used instead.
 let HORSE_MODEL = null;
 const MODEL_SCALE = 0.52, MODEL_Z = -0.1;
+const SEAT_BACK = -0.08;      // the saddle sits this far (horse units) behind where the code-built one did: the rigged horse's shoulders are wider and higher, and the knees pushed into them
+const SEAT_RISE = 0.16;       // m: pelvis above the horse's back (saddle tree, pad and the padding of the armoured thigh) — measured, see shots/horses/probe.js
+let MODEL_WITHERS = 0;
+/** Height of the rigged horse's withers above the ground at scale 1 (metres, after MODEL_SCALE), measured once from its idle pose: the top of the
+ *  spine over the shoulder bone (the coat mesh only, so the mane is not counted) above the lowest hoof. */
+function modelWithers() {
+  if (MODEL_WITHERS) return MODEL_WITHERS;
+  const m = cloneSkinned(HORSE_MODEL.scene); m.scale.setScalar(MODEL_SCALE);
+  const mx = new THREE.AnimationMixer(m), c = HORSE_MODEL.animations.find(a => a.name === 'Idle'); if (c) mx.clipAction(c).play(); mx.update(0);
+  m.updateMatrixWorld(true);
+  const v = new THREE.Vector3(); let ground = 1e9, top = 0;
+  // the withers stand over the point of the shoulder; the idle pose's top line has no peak to find (it climbs straight into the neck), so take the bone
+  const sh = m.getObjectByName('FrontShoulderL'), zs = sh ? sh.getWorldPosition(v.clone()).z : 0.7;
+  m.traverse(o => {
+    if (!o.isSkinnedMesh) return;
+    const coat = o.material.name === 'Main', P = o.geometry.attributes.position;
+    for (let i = 0; i < P.count; i++) {
+      o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); ground = Math.min(ground, v.y);
+      if (coat && Math.abs(v.x) < 0.12 && Math.abs(v.z - zs) < 0.06) top = Math.max(top, v.y);
+    }
+  });
+  return MODEL_WITHERS = top - ground;
+}
 const DRAPE_FIT = new Map();   // caparison fit per horse scale + girth: the rigged horse's top and half-width under each drape point
 // horse_smooth.glb: the Quaternius horse welded, subdivided twice and smooth-shaded in Blender (13 Nov), one coat material; same rig and clips.
 export async function preloadHorse(url = 'assets/models/horse_smooth.glb') {
@@ -156,6 +179,7 @@ const _v4 = new THREE.Vector3();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
 const _hm = new THREE.Matrix4(), _hm2 = new THREE.Matrix4(), _dv = new THREE.Vector3(), _hit = new Hit(), _cs = new Cap();
+const _lm = new THREE.Matrix4(), _lm2 = new THREE.Matrix4(), _lp = new THREE.Vector3(), _lq = new THREE.Quaternion(), _ls = new THREE.Vector3();
 /** Bounding box of a capsule over a frame (previous and current pose). */
 function capBounds(p, c, lo, hi) {
   const r = c.r;
@@ -209,7 +233,7 @@ function dentGeo(geo, c, R, D) {
 export class Jouster {
   constructor(scene, arms, dir, laneX, horse = {}, armour = {}) {
     this.scene = scene; this.arms = arms; this.dir = dir; this.lane = Math.abs(laneX); this.guard = 0; this.look = 0; this.manualPos = false; this.replaying = false; this.horseDef = horse; this.armourDef = armour;
-    this.hs = horse.scale ?? 1;
+    this.hs = HORSE_MODEL && horse.withers ? horse.withers / modelWithers() : (horse.scale ?? 1);      // the rigged horse is scaled so its withers stand at the breed's real height (data.js HORSES)
     this.root = new THREE.Group();
     this.root.rotation.y = dir > 0 ? 0 : Math.PI;
     scene.add(this.root);
@@ -229,9 +253,11 @@ export class Jouster {
     this._buildMaterials();
     this._buildHorse();
     if (HORSE_MODEL) this._attachModelHorse();
-    this._buildRider();
+    // the horse's scale goes on before the rider is built: his hit volumes are placed in the finished frame
     const gx = this.hs * (horse.girth ?? 1);
     this.body.scale.set(gx, this.hs, this.hs); this.mount.scale.set(1 / gx, 1 / this.hs, 1 / this.hs);
+    this.seatY = 1.71 * this.hs; if (this.hasModel) this._seatOnBack();
+    this._buildRider();
     this.setPose(0);
   }
 
@@ -460,19 +486,21 @@ export class Jouster {
       { p: [0, 1.25, -0.27], rx: 0.375, ry: 0.4 }, { p: [0, 1.235, 0.0], rx: 0.378, ry: 0.4 }, { p: [0, 1.25, 0.24], rx: 0.378, ry: 0.415 },
     ], this.clothPlain, { segs: 20, arc: [0.02 * Math.PI, 0.96 * Math.PI], caps: false }));
     inner.add(loftMesh([{ p: [0, 1.235, 0.1], rx: 0.36, ry: 0.385 }, { p: [0, 1.24, 0.19], rx: 0.36, ry: 0.39 }], leather, { segs: 20, caps: false }));
-    inner.add(loftMesh([
+    // the war saddle, the rider's seat and the lance-rest pommel ride in `tack`: _seatOnBack() lifts it to rest on the rigged horse's back
+    const tack = this.tack = new THREE.Group(); inner.add(tack);       // seat and pommel marks
+    const saddle = this.saddle = new THREE.Group(); inner.add(saddle);   // the leather itself, which rests on the back (the rider sits a little above it, the thigh padding between)
+    saddle.add(loftMesh([
       { p: [0, 1.665, -0.38], rx: 0.05, ry: 0.03 }, { p: [0, 1.67, -0.28], rx: 0.23, ry: 0.065 },
       { p: [0, 1.655, 0.0], rx: 0.21, ry: 0.058 }, { p: [0, 1.675, 0.3], rx: 0.21, ry: 0.065 }, { p: [0, 1.675, 0.39], rx: 0.05, ry: 0.03 },
     ], leather, { segs: 14 }));
-    inner.add(ball([0, 1.82, -0.34], 0.27, leather, [1, 0.78, 0.2]));     // high cantle
-    inner.add(ball([0, 1.8, 0.37], 0.215, leather, [1, 0.72, 0.22]));     // pommel / bow
-    inner.add(ball([0, 1.8, 0.4], 0.2, this.armour, [0.96, 0.66, 0.1]));  // steel bow plate
-    for (const s of [-1, 1]) inner.add(limb([s * 0.33, 1.6, 0.12], [s * 0.46, 0.86, 0.2], 0.014, 0.014, leather, 5));
+    saddle.add(ball([0, 1.82, -0.34], 0.27, leather, [1, 0.78, 0.2]));     // high cantle
+    saddle.add(ball([0, 1.8, 0.37], 0.215, leather, [1, 0.72, 0.22]));     // pommel / bow
+    saddle.add(ball([0, 1.8, 0.4], 0.2, this.armour, [0.96, 0.66, 0.1]));  // steel bow plate
 
-    this.mount = new THREE.Group(); this.mount.position.set(0, 1.71, -0.02); inner.add(this.mount);
+    this.mount = new THREE.Group(); this.mount.position.set(0, 1.71, -0.02); tack.add(this.mount);
     // reins (re-posed every frame between the bit and the bridle hand)
     this.reins = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 1, 5), leather); m.castShadow = true; this.root.add(m); return m; });
-    this.pommel = new THREE.Object3D(); this.pommel.position.set(0, 1.86, 0.36); inner.add(this.pommel);
+    this.pommel = new THREE.Object3D(); this.pommel.position.set(0, 1.86, 0.36); tack.add(this.pommel);
   }
 
   /** Swap the code-built body, legs, neck, head and tail for the rigged model; keep saddle, cloth, rider and hit zones. */
@@ -526,6 +554,26 @@ export class Jouster {
     this.reins.forEach(r => { r.visible = false; });
     this.hasModel = true;
     this._fitDrapes();
+  }
+
+  /**
+   * Rest the saddle on the rigged horse's real back. The saddle and the seat were built for the old code-built barrel, whose back was ~0.15 m lower
+   * than the rigged horse's, so the rider sat inside the horse. Measure the coat's top line under the seat (idle pose, in the horse's own scale)
+   * and lift the tack group (the rider's mount point) so the rider's pelvis stands SEAT_RISE above it: the thickness of the saddle tree and pad, with the fauld
+   * (0.11 m below the pelvis) just clear of the back. `seatY` is the pelvis height at rest in metres; the chase camera is placed from it.
+   */
+  _seatOnBack() {
+    const hs = this.hs, v = new THREE.Vector3(); this.body.position.y = BY * hs; this.mixer.update(0); this.root.updateMatrixWorld(true);
+    this.tack.position.z = this.saddle.position.z = SEAT_BACK; const sz = (this.mount.position.z + SEAT_BACK) * hs; let top = -1e9;
+    this.model.traverse(o => {
+      if (!o.isSkinnedMesh || o.material.name !== 'Main') return;
+      const P = o.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++) { o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); this.root.worldToLocal(v); if (Math.abs(v.x) < 0.1 && Math.abs(v.z - sz) < 0.08) top = Math.max(top, v.y); }
+    });
+    this.backY = top;
+    this.tack.position.y = (top + SEAT_RISE) / hs - this.mount.position.y;
+    this.saddle.position.y = (top + 0.02) / hs - 1.597;      // the saddle's underside (1.597 in the old horse's frame) on the back
+    this.seatY = top + SEAT_RISE;
   }
 
   /** Re-cut the caparison so the rigged horse's back and flanks (idle and gallop poses) stay under the cloth. */
@@ -584,6 +632,7 @@ export class Jouster {
       rider.add(pl(tube([[ankle[0], ankle[1] + 0.02, ankle[2] - 0.03, 0.05], [ankle[0], ankle[1] - 0.035, ankle[2] + 0.06, 0.052, 0.045], [ankle[0], ankle[1] - 0.05, ankle[2] + 0.2, 0.042, 0.03], [ankle[0], ankle[1] - 0.055, ankle[2] + 0.3, 0.008, 0.008]], P, 10)));
       const spur = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.12, 6), gold); spur.rotation.x = -Math.PI / 2 - 0.2; spur.position.set(ankle[0], ankle[1] - 0.01, ankle[2] - 0.1); rider.add(spur);
       const st = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.012, 6, 14), darkSteel); st.position.set(ankle[0], ankle[1] - 0.05, ankle[2] + 0.07); st.rotation.y = Math.PI / 2; rider.add(st);
+      rider.add(limb([s * 0.3, -0.02, 0.2], [s * 0.46, -0.88, 0.2], 0.014, 0.014, leather, 5));      // the stirrup leather, from the saddle bar to the iron
       if (style !== 'surcoat') { const tasset = ball([s * 0.17, -0.1, 0.125], 0.1, P, [0.95, 1.25, 0.4]); tasset.rotation.set(-0.75, 0, s * 0.35); rider.add(pl(tasset)); }
     }
     // torso: globose breastplate with a nipped waist
@@ -681,9 +730,10 @@ export class Jouster {
     // Placed by where they sit on the horse (root frame), then parented so they move with what they belong to.
     this.root.updateMatrixWorld(true);
     const at = (parent, p, r, name) => { const o = new THREE.Object3D(); parent.add(o); parent.updateMatrixWorld(true); o.position.copy(parent.worldToLocal(this.root.localToWorld(new THREE.Vector3(...p)))); return { o, r, name }; };
+    const hs = this.hs;
     this.solids = this.zones.concat([
-      at(this.root, [0, 1.25, 0.5], 0.34, 'horse'), at(this.root, [0, 1.22, -0.1], 0.36, 'horse'), at(this.root, [0, 1.28, -0.7], 0.34, 'horse'),
-      at(this.rider, [0.2, 1.58, 0.12], 0.14, 'leg'), at(this.rider, [-0.2, 1.58, 0.12], 0.14, 'leg'),
+      at(this.root, [0, 1.25 * hs, 0.5 * hs], 0.34 * hs, 'horse'), at(this.root, [0, 1.22 * hs, -0.1 * hs], 0.36 * hs, 'horse'), at(this.root, [0, 1.28 * hs, -0.7 * hs], 0.34 * hs, 'horse'),
+      at(this.rider, [0.2, this.seatY - 0.13, 0.12], 0.14, 'leg'), at(this.rider, [-0.2, this.seatY - 0.13, 0.12], 0.14, 'leg'),
     ]);
     this._buildHitboxes();
   }
@@ -708,7 +758,10 @@ export class Jouster {
       }
     }
     for (const def0 of PHYS.hitboxes) {
-      const rb = rebased[def0.name], def = rb ? rb.def : def0;
+      const rb = rebased[def0.name];
+      let def = rb ? rb.def : def0;
+      // the horse's body volumes were measured on a horse of scale 1 (the old courser) and are in metres from the ground: size them to this horse
+      if (def.on === 'root' && def.zone === 'horse') { const k = this.hs; def = Object.assign({}, def, { a: def.a.map(v => v * k), b: def.b.map(v => v * k), r: def.r * k, cr: def.cr * k }); }
       const parent = rb ? rb.parent : parts[def.on]; if (!parent) continue;
       const obb = def.shape === 'obb';
       // a volume moved onto the model's bones is what the OTHER man's lance hits; for keeping your own lance clear of your own horse the
@@ -1033,6 +1086,12 @@ export class Jouster {
     this.dlog.push(e); this._rebuild(Infinity);
     return e.plume ? { plume: true } : null;
   }
+  /** The squire fits the spare helm: the dents are gone (the plume stays off if it was lost). */
+  refitHelm() {
+    this.dmg.helm = 0; this.dlog = this.dlog.filter(e => e.region !== 'helm'); this._rebuild(Infinity);
+  }
+  /** The lance falls from the hand: hidden here, the caller throws the falling shaft (main.js dropLance). Back with the next fresh(). */
+  dropLance() { this.lanceDropped = true; this.lance.visible = false; }
   /** Between courses: the armourer takes `f` of the worst region out (dents beaten, shield patched); the squire pulls the shield straight (`sq` share of its askew). Returns the region mended. */
   mend(f, sq = 0) {
     let w = null, wv = 0.03; for (const r in this.dmg) if (this.dmg[r] > wv) { w = r; wv = this.dmg[r]; }
@@ -1118,7 +1177,7 @@ export class Jouster {
   }
   /** A fresh lance in the hand. */
   _mendLance() {
-    this.lanceBroken = false; this.lanceFore.visible = true; this.lanceStump.visible = false;
+    this.lanceDropped = false; this.lance.visible = true; this.lanceBroken = false; this.lanceFore.visible = true; this.lanceStump.visible = false;
     if (this.lanceKept) { this.lance.remove(this.lanceKept); this.lanceKept.geometry.dispose(); this.lanceKept = null; }
   }
 
@@ -1145,9 +1204,22 @@ export class Jouster {
   snapshot() {
     const r = this.root, s = { px: r.position.x, pz: r.position.z, ry: r.rotation.y, rz: r.rotation.z, dir: this.dir, speed: this.speed, phase: this.phase, time: this.time,
       lanceLower: this.lanceLower, ax: this.aimLocal.x, ay: this.aimLocal.y, az: this.aimLocal.z, brace: this.brace, recoil: this.recoil, sideRecoil: this.sideRecoil,
-      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff, shGone: !!this.shGone };
+      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff, shGone: !!this.shGone, lr: this._lanceRel(), ld: !!this.lanceDropped };      // lr: the lance exactly as it was posed, relative to the root (the live pose rests on eased state and on the other man's body, which a replay does not have)
     if (this.unhorsed) { const p = this.rider.position, q = this.rider.quaternion; s.rp = [p.x, p.y, p.z]; s.rq = [q.x, q.y, q.z, q.w]; s.tx = this.torso.rotation.x; }
     return s;
+  }
+  /** The lance's world pose as a position and quaternion in the root's frame. */
+  _lanceRel() {
+    this.root.updateMatrixWorld(true); this.lance.updateWorldMatrix(true, false);
+    _lm.copy(this.root.matrixWorld).invert().multiply(this.lance.matrixWorld).decompose(_lp, _lq, _ls);
+    return [_lp.x, _lp.y, _lp.z, _lq.x, _lq.y, _lq.z, _lq.w];
+  }
+  _lanceFromRel(a) {
+    this.lance.parent.updateWorldMatrix(true, false);
+    _lq.set(a[3], a[4], a[5], a[6]).normalize(); _lp.set(a[0], a[1], a[2]); _ls.copy(this.lance.scale);
+    _lm.compose(_lp, _lq, _ls).premultiply(this.root.matrixWorld);
+    _lm.premultiply(_lm2.copy(this.lance.parent.matrixWorld).invert()).decompose(this.lance.position, this.lance.quaternion, this.lance.scale);
+    this.lance.updateMatrixWorld(true);
   }
   applySnap(s) {
     const r = this.root; r.position.x = s.px; r.position.z = s.pz; r.rotation.y = s.ry; r.rotation.z = s.rz; this.dir = s.dir;
@@ -1155,12 +1227,12 @@ export class Jouster {
     this.brace = s.brace; this.recoil = s.recoil; this.sideRecoil = s.sideRecoil; this.rear = s.rear; this.guard = s.guard; this.look = s.look; this.agit = s.agit;
     this.twist = s.twist || 0; this.headK = s.headK || 0; this.shK = s.shK || 0; this.stag = s.stag || 0;
     this.raise = this.raiseT = s.raise || 0; this.visorUp = !!s.visorUp; this.helmOff = !!s.helmOff; if (!!s.shGone !== !!this.shGone) this.setShieldGone(!!s.shGone);
-    this.lanceFore.visible = !s.lanceBroken; this.lanceStump.visible = s.lanceBroken; if (this.lanceKept) this.lanceKept.visible = s.lanceBroken;
+    this.lance.visible = !s.ld; this.lanceFore.visible = !s.lanceBroken; this.lanceStump.visible = s.lanceBroken; if (this.lanceKept) this.lanceKept.visible = s.lanceBroken;
     if (s.unhorsed) {
       if (this.rider.parent !== this.scene) this.scene.attach(this.rider);
       this.rider.position.set(s.rp[0], s.rp[1], s.rp[2]); this.rider.quaternion.set(s.rq[0], s.rq[1], s.rq[2], s.rq[3]).normalize(); this.torso.rotation.x = s.tx;
     } else if (this.rider.parent !== this.mount) { this.mount.add(this.rider); this.rider.position.set(0, 0, 0); this.rider.quaternion.identity(); }
-    this.snapUnhorsed = s.unhorsed;
+    this.snapUnhorsed = s.unhorsed; this.snapLR = s.lr || null;
   }
 
   // ------------------------------------------------------------ update
@@ -1298,6 +1370,7 @@ export class Jouster {
       _v.applyQuaternion(_q);                                                // torso-local
       _q2.setFromUnitVectors(Z, _v.normalize());
       this.lance.quaternion.copy(this.lanceRestQ).slerp(this.lanceUpQ, smoothstep(0, 1, this.raise)).slerp(_q2, smoothstep(0, 1, this.lanceLower));
+      if (this.replaying && this.snapLR) this._lanceFromRel(this.snapLR);      // a replay shows the recorded pose, not a recomputed one
       this.lance.updateMatrixWorld(true);
     }
     // reins: bit -> bridle hand (or the saddle bow once the rider is gone)

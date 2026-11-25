@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TILT — The Jousting Circuit</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
@@ -26,9 +26,9 @@
 <div id="ticker"></div>
 <div id="hud" class="hidden">
   <div id="scorebar">
-    <div class="side left"><canvas id="crestP" width="64" height="76"></canvas><span id="nameP"></span></div>
+    <div class="side left"><canvas id="crestP" width="64" height="76"></canvas><span id="nameP"></span><i id="condP" class="cond"></i></div>
     <div class="score"><b id="scoreP">0</b><i id="courseInfo">COURSE 1/4</i><b id="scoreO">0</b></div>
-    <div class="side right"><span id="nameO"></span><canvas id="crestO" width="64" height="76"></canvas></div>
+    <div class="side right"><i id="condO" class="cond"></i><span id="nameO"></span><canvas id="crestO" width="64" height="76"></canvas></div>
   </div>
   <div id="venueInfo"></div>
   <div id="marks"><div id="marksP"></div><div id="marksO"></div></div>
@@ -58,13 +58,16 @@
     <div id="shieldTxt">SHIELD: LOW</div>
     <label>BODY</label><div class="bar"><div id="bodyBar"></div></div>
     <label>BREATH</label><div class="bar"><div id="breathBar"></div></div>
+    <div id="lanceLeft"></div>
     <div id="dolls" title="Armour damage: shield, helm, breastplate, shield-side shoulder"><div><canvas id="dollP" width="56" height="72"></canvas><span>YOUR HARNESS</span></div><div><canvas id="dollO" width="56" height="72"></canvas><span>HIS HARNESS</span></div></div>
   </div>
 
   <div id="reticle"><div class="ring"></div><div id="zoneTxt"></div></div>
   <div id="cursorDot"></div>
   <div id="prompt"></div>
+  <button id="yieldBtn" class="btn hidden">Yield the joust <kbd>Y</kbd></button>
 </div>
+<div id="yieldAsk" class="hidden"><div class="cf scroll"><i class="paper"></i><div class="page"><h3>Yield the joust?</h3><p>You give up the field. The match is lost, but you keep your horse and harness.</p><div class="cfbtns"><button class="btn" id="yieldNo">Ride on <kbd>N</kbd></button><button class="btn primary" id="yieldYes">I yield <kbd>Y</kbd></button></div></div></div></div>
 
 <div id="verdict" class="hidden">
   <div class="vcol you"><canvas class="hitmap" id="hitYou" width="170" height="190"></canvas><div class="vwho" id="vwhoYou"></div><div class="vwhat" id="vwhatYou"></div><div class="vpts" id="vptsYou"></div></div>
@@ -77,6 +80,7 @@
 <div id="replayTag" class="hidden">INSTANT REPLAY</div>
 <div id="replayYou" class="panel rmap hidden"><label>YOUR LANCE</label><canvas class="hitmap" id="rhitYou" width="170" height="190"></canvas><div id="rwhatYou"></div></div>
 <div id="replayHim" class="panel rmap hidden"><label>HIS LANCE</label><canvas class="hitmap" id="rhitHim" width="170" height="190"></canvas><div id="rwhatHim"></div></div>
+<div id="rplCtl" class="hidden"><button data-k="back" aria-label="Back one frame">&#9664;|</button><button data-k="pp" id="rplPause">PAUSE</button><button data-k="fwd" aria-label="Forward one frame">|&#9654;</button><i></i><button data-s="1">1&times;</button><button data-s="0.5">&frac12;&times;</button><button data-s="0.25">&frac14;&times;</button><button data-s="0.1">0.1&times;</button><i></i><button data-k="view">VIEW</button></div>
 <div id="replayKeys" class="hidden"><kbd>V</kbd> change view &nbsp;&nbsp; <kbd>SPACE</kbd> skip</div>
 <div id="lesson" class="hidden"><div id="lessonTitle"></div><div id="lessonGoal"></div><ul id="lessonList"></ul><div id="lessonNote"></div></div>
 <div id="toast"><i class="paper"></i><b></b><span></span></div>

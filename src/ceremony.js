@@ -116,8 +116,8 @@ export function createCeremony(scene) {
     else if (id === 'trump') { want.set(lerp(1.5, 3.2, u), 1.9, lerp(-0.6, 0.6, u)); look.set(10.8, 2.2, 0); fov = 44; }
     else if (id === 'royal') { want.set(lerp(7.0, 8.4, u), lerp(3.4, 3.9, u), lerp(4.2, 2.6, u)); look.set(15.5, 3.6, 0); fov = 34; }
     else if (id === 'herald') { want.set(lerp(4.6, 6.2, u), 1.75, lerp(-3.4, -2.2, u)); look.set(T.H ? T.H.x : X0, 1.7, 0); fov = 38; }
-    else if (id === 'warmP') { const c = player.root.position; want.set(-5.8, 1.6, c.z - 1.5); look.set(c.x, 1.9, c.z + 3); fov = 40; }
-    else if (id === 'warmO') { const c = opp.root.position; want.set(5.8, 1.6, c.z + 1.5); look.set(c.x, 1.9, c.z - 3); fov = 40; }
+    else if (id === 'warmP') { const c = player.root.position; want.set(-5.8, 1.6, c.z - 1.5); look.set(c.x, player.seatY + 0.07, c.z + 3); fov = 40; }
+    else if (id === 'warmO') { const c = opp.root.position; want.set(5.8, 1.6, c.z + 1.5); look.set(c.x, opp.seatY + 0.07, c.z - 3); fov = 40; }
     else if (id === 'lineup') { want.set(lerp(8.6, 7.4, u), 2.5, 0); look.set(0, 1.9, 0); fov = 50; }      // the host's view: both knights ride in from the ends and face the box
     else if (id === 'him' || id === 'you') {      // a slow push-in on the knight, from in front of his horse
       const on = id === 'him' ? opp : player, c = on.root.position, yaw = on.root.rotation.y, fx = Math.sin(yaw), fz = Math.cos(yaw), an = -0.95 + u * 0.25, R = lerp(7.0, 4.9, smoothstep(0, 1, u));

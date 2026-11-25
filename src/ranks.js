@@ -16,6 +16,10 @@ const DEFAULT_URL = 'https://tilt-ranks.tilt-joust.workers.dev';
 const TIMEOUT = 6000;
 const param = (k) => { try { return new URLSearchParams(location.search).get(k); } catch (e) { return null; } };
 export const rankTest = () => param('ranktest') === '1';
+export const apiBase = () => base();
+let authToken = () => '';
+/** main.js: where the signed-in account's bearer token comes from (ranked reports must carry it). */
+export const setAuthSource = (fn) => { authToken = fn; };
 const base = () => { const u = param('ranks'); return u && /^(http:\/\/localhost|https:\/\/)/.test(u) ? u.replace(/\/+$/, '') : DEFAULT_URL; };
 
 const b64u = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
@@ -28,7 +32,7 @@ async function call(method, path, body) {
   let t = 0;
   try {
     const ctl = new AbortController(); t = setTimeout(() => ctl.abort(), TIMEOUT);
-    const r = await fetch(base() + path, { method, signal: ctl.signal, ...(body ? { body: JSON.stringify(body), headers: { 'Content-Type': 'text/plain' } } : {}) });
+    const r = await fetch(base() + path, { method, signal: ctl.signal, ...(body ? { body: JSON.stringify(body) } : {}), headers: { ...(body ? { 'Content-Type': 'text/plain' } : {}), ...(path === '/result' && authToken() ? { Authorization: 'Bearer ' + authToken() } : {}) } });
     const d = await r.json(); clearTimeout(t);
     return d && typeof d === 'object' ? Object.assign(d, { _status: r.status }) : null;
   } catch (e) { clearTimeout(t); return null; }
@@ -90,6 +94,10 @@ async function sendName(name) {
 /** The in-game name changed: tell the server (does nothing until registered). */
 export async function syncName() { try { if (!(await ensure())) return false; const n = shownName(); if (key.name === n) return true; const r = await sendName(n); if (r && r.ok) { key.name = n; saveKey(key); } return !!(r && r.ok); } catch (e) { return false; } }
 
+/** Proof that this browser holds the rank key, for tying it to an account: { rid, ts, sig } over tilt-link-v1, account id, rid, ts. */
+export async function signLink(accountId) {
+  try { if (!(await ensure())) return null; const ts = Date.now(); return { rid: myId, ts, sig: await sign(['tilt-link-v1', accountId, myId, ts].join('\n')) }; } catch (e) { return null; }
+}
 /** The proof that I am playing this match against him (sent to him at the start; a forfeit win needs it). */
 export async function playProof(matchId, oppId) {
   try { if (!(await ensure())) return null; return await sign(['tilt-play-v1', matchId, myId, oppId].join('\n')); } catch (e) { return null; }

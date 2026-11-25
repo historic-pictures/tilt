@@ -128,3 +128,68 @@ export const circuitOpening = (round, place, done) => {
   if (round === 0) return pick(CIRCUIT.start);
   return place === 1 ? pick(CIRCUIT.mid1) : pick(CIRCUIT.mid);
 };
+
+// ---- Commentary that knows the stakes (career tournaments). Hugh speaks these in the intro and between courses; the host has a line for a final.
+// Placeholders: {you} {him} {himFull} {venue} {size} {left} (knights still standing) {round}. Each line <= 16 words.
+export const STAKES = {
+  early: [
+    'The first round. {size} knights began the day, and half will be gone by noon.',
+    'Round one at {venue}. Win, and you ride again. Lose, and you watch.',
+    'The first round is always the quickest. Nobody has learned the sand yet.',
+  ],
+  quarter: [
+    'The quarter-final. Eight knights began, and four will see the semi-final.',
+    'Quarter-final. The field is thinning, and the crowd can smell it.',
+    'Eight knights left in the lists. Four will be going home today.',
+  ],
+  semi: [
+    'The semi-final. Four knights remain, and two will ride in the final.',
+    'Semi-final at {venue}. One more win and {you} rides for the prize.',
+    'Four knights left, and the stands are full. The semi-final.',
+  ],
+  final: [
+    'The final. Two knights remain at {venue}, and only one will take the prize.',
+    'This is the final. Whatever happens now, the heralds will cry it.',
+    'The final, and the whole city is holding its breath.',
+  ],
+  first: [
+    'It is {you}\'s first tournament. The heralds have no record of him. Let us give them one.',
+    'A first tournament for {you}. Every great name began on a first day.',
+  ],
+  rematch: [
+    '{him} beat {you} once before. The crowd has not forgotten, and neither has {you}.',
+    'A rematch. {him} has the better of it so far. {you} would like that changed.',
+    '{you} meets {him} again. Last time it went to {him}.',
+  ],
+  lead: [
+    '{you} leads. The count is {yourScore} to {hisScore}, and {him} must answer.',
+    '{you} is ahead, {yourScore} to {hisScore}. Do not get comfortable.',
+    'The lead is {you}\'s, and a lead is the first thing a tournament takes away.',
+  ],
+  trail: [
+    '{him} leads, {hisScore} to {yourScore}. {you} has a hole to climb out of.',
+    'Behind, {yourScore} to {hisScore}. Another round of this and {you} goes home.',
+    '{you} trails. The knockout does not wait for anyone to find his seat.',
+  ],
+  // the victory lap: Hugh calls the prize while the winner rides the lists (purse = the marks; prize = the tournament prize)
+  lapPurse: [
+    'The purse is {marks} marks, to {you}.',
+    '{marks} marks to {you}, for the day. The lists thank him.',
+  ],
+  lapPrize: [
+    '{you} wins the tournament at {venue}. The prize is {marks} marks, and the honour is his.',
+    'Champion of {venue}: {you}. The prize is {marks} marks.',
+  ],
+  lapOut: [
+    '{him} takes the day, and the purse of {marks} marks.',
+    'The day goes to {him}. {you} rides to his tent.',
+  ],
+  lapDraw: ['Honours are even. The knights salute the box, and the purse is shared.'],
+};
+// The host stands for the final.
+export const HOST_FINAL = {
+  richard: ['The final. Now we shall see which of them is worth the crown.'],
+  charles: ['The final, at my wedding. Let it be a day I tell my grandchildren.'],
+  lord: ['The final. Let the best man win, and let me watch it.'],
+  marshal: ['The final. Ride well, both of you.'],
+};
