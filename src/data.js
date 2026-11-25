@@ -435,6 +435,25 @@ export const PHYS = {
     swayAt: 0.45, swayMax: 0.3, swayIn: 0.2, swayW1: 0.8, swayW2: 1.7, swayHint: 0.25 },
   // The unhorsed rider as one rigid body: mass (kg), moment of inertia (kg m2), bounce, grip of the sand.
   fall: { kg: 105, inertia: 13, bounce: 0.18, friction: 0.65 },
+  // The moment of a blow (all visual: nothing here changes a stroke's result; main.js strike(), jouster.js hit(), fx.js lanceBurst()).
+  //  Break classes by stroke power (1 = a full stroke): crack < cleanAt <= clean < shatterAt <= shatter.
+  //  long / chips: how many long splinters and small chips each class throws; len: splinter length range (m); spray: speed along the stroke (m/s) and
+  //  out to the side; keep: seconds the splinters lie on the sand (the rest of the course, then fade over `fade`).
+  //  coronel: the crown tip stays with the struck helm or shield for hold (+ per power) seconds, then bounces off.
+  //  hitStop (s, scaled by power between hsFrom..1, offline only; online the sim is never paused, the sparks just hang) and slow (S.slowT seconds per class).
+  //  react: spring-damper reaction of the struck rider (see Jouster.hit): leanMax = rad he can be bent back before the cantle stops him (divided by kit.cantle),
+  //  headSide / headYaw: the helm snapped sideways and turned; lag: seconds before the torso follows a helm blow; jolt: how far the lance arm is thrown back (m);
+  //  push: how far a heavy blow shoves him back in the saddle (m); toss/check: the horse's head toss and stride check; whip: the striker's lance whip, recoil: his arm.
+  impact: {
+    cleanAt: 0.42, shatterAt: 0.85, slowTouch: 0.4,
+    crack: { long: 6, chips: 22, len: [0.3, 0.6], spray: 3.5, side: 1.6, up: 1.5, slow: 0, shake: 0.2 },
+    clean: { long: 13, chips: 50, len: [0.3, 1.0], spray: 5.5, side: 2.4, up: 2.2, slow: 0.45, shake: 0.4 },
+    shatter: { long: 24, chips: 90, len: [0.3, 1.2], spray: 8, side: 3.4, up: 3, slow: 0.75, shake: 0.6 },
+    keep: 60, fade: 4, foreSpin: [5, 9], coronel: { hold: 0.22, perPower: 0.2, size: 0.11 },
+    hsFrom: 0.5, hitStop: [0.04, 0.09], hsBreak: 1.25,
+    react: { leanMax: 0.62, headSide: 2.0, headYaw: 1.1, lag: 0.09, lagShare: 0.6, jolt: 0.3, push: 0.12, toss: 1.1, check: 0.9, checkAt: 0.7, whip: 1.5, recoil: 0.16, shoulder: 0.8 },
+    fall: { skid: 1.6, burst: 1.2, ground: 0.5 },
+  },
   quintainKg: 250,      // the board, its arm and sandbag, and the reaction of the post
   // Drama: injuries, the surgeon, yielding, a dropped lance, helm ringing and daze (main.js, "drama" section; all offline: online play keeps none of it).
   // heavyHelm / heavyBody: stroke power (1 = a full 250 J stroke) that makes a hit "heavy" (the battered-knight close-up; a lance broken on the helm always is). battered: seconds of that close-up; batterGap: courses between two close-ups.

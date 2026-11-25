@@ -380,14 +380,28 @@ export class GameAudio {
       this._play('impact_metal', o({ db: db - 6, rate: 1.35, env: [0.01, hl * 1.5], delay: 0.12 }));
     });
   }
-  lanceBreak(power, dist = 3) {
+  /**
+   * The lance breaking, in layers from the sampled sounds (no synthesis): the crack (the bigger the blow, the more and the lower), a clang of the metal that was
+   * struck by zone (helm rings high, shield is flat and short, body is dull), and the splinters: a tinkle of wood falling, many for a shatter, a few for a crack.
+   * o.cls: 0 crack, 1 clean break, 2 shatter; o.zone: what was struck.
+   */
+  lanceBreak(power, dist = 3, o2 = {}) {
     this._run(() => {
-      const p = clamp(power, 0.3, 1.2), o = (x) => Object.assign({ stem: 'impact', dist }, x);
-      this._play('wood_crack', o({ db: lerp(-2, 4, p / 1.2) }));
+      const p = clamp(power, 0.3, 1.2), cls = o2.cls ?? 1, zone = o2.zone, o = (x) => Object.assign({ stem: 'impact', dist }, x);
+      this._play('wood_crack', o({ db: lerp(-2, 4, p / 1.2) + (cls === 0 ? -3 : 0), rate: cls === 2 ? 0.92 : 1 }));
       this._play('wood_crack', o({ db: -5, rate: 0.78, delay: 0.035 }));
-      this._play('wood_crack', o({ db: -9, rate: 1.3, delay: 0.09 }));
-      for (let i = 0; i < 7; i++) this._play('wood_debris', o({ db: -3 - i, delay: 0.18 + i * rand(0.09, 0.2), pan: rand(-0.6, 0.6), dist: dist + rand(0, 3) }));
+      if (cls >= 1) this._play('wood_crack', o({ db: -9, rate: 1.3, delay: 0.09 }));
+      if (cls === 2) { this._play('wood_crack', o({ db: -3, rate: 0.62, delay: 0.015 })); this._play('wood_crack', o({ db: -6, rate: 1.15, delay: 0.14 })); }
+      if (zone === 'helm') this._play('impact_metal', o({ db: -6 + p * 3, rate: 1.55, delay: 0.02 }));
+      else if (zone === 'shield') this._play('impact_shield', o({ db: -7 + p * 3, rate: 1.2, delay: 0.02 }));
+      else if (zone === 'body') this._play('impact_metal', o({ db: -9 + p * 3, rate: 0.8, delay: 0.025 }));
+      const n = cls === 2 ? 11 : cls === 1 ? 7 : 3;
+      for (let i = 0; i < n; i++) this._play('wood_debris', o({ db: -3 - i * 0.7, delay: 0.18 + i * rand(0.07, 0.17), pan: rand(-0.6, 0.6), dist: dist + rand(0, 3), rate: rand(0.9, 1.3) }));
     });
+  }
+  /** One splinter or the crown knocking on the sand (fx.onClack): a single quiet wooden tick, v m/s. */
+  splinterTick(dist = 5, v = 3, pan = 0) {
+    this._run(() => this._play('wood_debris', { stem: 'impact', dist: dist + rand(0, 2), pan, db: lerp(-12, -5, clamp(v / 8, 0, 1)), rate: rand(1.0, 1.5), pick: 'short' }));
   }
   bodyFall(power, dist = 6) {
     this._run(() => {

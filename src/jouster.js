@@ -175,7 +175,7 @@ const FALL_PTS = [[0, 0.92, 0, 0.17], [0, 0.42, -0.02, 0.24], [0, -0.02, 0, 0.24
 const WALK_OFF = [0.25, 0.75, 0.0, 0.5];   // FL FR HL HR
 const GALLOP_OFF = [0.40, 0.52, 0.0, 0.12];
 
-const _v4 = new THREE.Vector3();
+const _v4 = new THREE.Vector3(), _bq = new THREE.Quaternion(), _bv = new THREE.Vector3(), _bp = new THREE.Vector3(), _we = new THREE.Euler(), _wq = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
 const _hm = new THREE.Matrix4(), _hm2 = new THREE.Matrix4(), _dv = new THREE.Vector3(), _hit = new Hit(), _cs = new Cap();
@@ -247,6 +247,7 @@ export class Jouster {
     this.prevLegPhase = [0, 0, 0, 0];
     this.onHoof = null; this.time = Math.random() * 10;
     this.fall = null; this.caps = [];
+    this.cantle = 1; this.lock = 1; this._fxReset();      // the kit's saddle (main.js sets them per match): a high cantle stops a rider bending back, a locked seat throws him less
     // armour damage: each region 0..1; dlog = every blow that marked it (key orders it in time, for replays); see damage()
     this.dmg = { shield: 0, helm: 0, breast: 0, pauldronL: 0 }; this.dlog = []; this.askew = 0; this._vAsk = 0; this._vd = { shield: 0, helm: 0, breast: 0, pauldronL: 0 };
     this._vPlume = true; this._plumeGone = false; this._dirty = new Set(); this._shMarks = []; this._vN = 0; this._cut = 0; this._cutSide = 1; this._cloth = [];
@@ -948,7 +949,7 @@ export class Jouster {
   fresh() {
     this.refitShield();
     this.raise = this.raiseT = 0;
-    this.speed = 0; this.lanceLower = 0; this.recoil = this.recoilV = 0; this.sideRecoil = this.sideRecoilV = 0; this.brace = 0; this.rear = 0; this.guard = 0; this.look = 0; this.manualPos = false; this.going = null; this.twist = this.twistV = this.headK = this.headV = this.shK = this.shV = this.stag = this.stagV = 0;
+    this.speed = 0; this.lanceLower = 0; this.recoil = this.recoilV = 0; this.sideRecoil = this.sideRecoilV = 0; this.brace = 0; this.rear = 0; this.guard = 0; this.look = 0; this.manualPos = false; this.going = null; this.twist = this.twistV = this.headK = this.headV = this.shK = this.shV = this.stag = this.stagV = 0; this._fxReset();
     this._mendLance();
   }
   setPose(z, dir) {
@@ -956,7 +957,7 @@ export class Jouster {
     this.root.position.set(-this.dir * this.lane, 0, z);
     this.hbValid = false;
     this.root.rotation.set(0, this.dir > 0 ? 0 : Math.PI, 0); this.guard = 0; this.look = 0; this.manualPos = false; this.raise = this.raiseT = 0;
-    this.speed = 0; this.lanceLower = 0; this.recoil = this.recoilV = 0; this.sideRecoil = this.sideRecoilV = 0; this.brace = 0; this.rear = 0; this.going = null; this.twist = this.twistV = this.headK = this.headV = this.shK = this.shV = this.stag = this.stagV = 0;
+    this.speed = 0; this.lanceLower = 0; this.recoil = this.recoilV = 0; this.sideRecoil = this.sideRecoilV = 0; this.brace = 0; this.rear = 0; this.going = null; this.twist = this.twistV = this.headK = this.headV = this.shK = this.shV = this.stag = this.stagV = 0; this._fxReset();
     if (this.unhorsed) {
       this.mount.add(this.rider);
       this.rider.position.set(0, 0, 0); this.rider.quaternion.identity();
@@ -1053,6 +1054,53 @@ export class Jouster {
     if (o.zone === 'helm') this.headV += kick * R.head * (o.headMul ?? 1);
     if (o.zone === 'shield') this.shV += kick * R.shield;
     this.stagV += (fromLeft ? -1 : 1) * Math.abs(kick) * R.stagger * 8;
+    if (o.dir) this._blow(kick, o);
+  }
+
+  // ------------------------------------------------------------ the blow as a vector (numbers in PHYS.impact.react; all of it is looks: no stroke's result depends on it)
+  _fxReset() {
+    this.pend = []; this.hS = this.hSV = this.hY = this.hYV = this.push = this.pushV = this.jZ = this.jZV = this.jX = this.jXV = this.jY = this.jYV = 0;
+    this.wX = this.wXV = this.wY = this.wYV = this.toss = this.tossV = this.chk = this.shd = this.shdV = 0;
+  }
+  _sp(a, k, c, dt) { const v = a + 'V'; this[v] += (-this[a] * k - this[v] * c) * dt; this[a] += this[v] * dt; }
+  /**
+   * o.dir: the blow's direction (unit, world); o.pt: where it landed (world); o.power: the stroke's strength (1 = full); o.zone.
+   * Helm: the head snaps back, turns and tips to the side the blow came from, and the torso follows a moment later. Shield or body: the shoulders are driven back and
+   * twisted by how far off the spine it landed, the lance arm is thrown back along the shaft, and he rocks back against the cantle (limited in update()).
+   * A heavy blow shoves him back in the saddle and the horse tosses his head and checks his stride.
+   */
+  _blow(kick, o) {
+    const R = PHYS.impact.react, lk = 1 / Math.sqrt(Math.max(0.5, this.lock)), pw = clamp(o.power ?? kick * 0.2, 0, 1.4), k = clamp(kick / 3.5, 0.15, 1.8) * lk;
+    _bq.copy(this.root.quaternion).invert(); const bd = _bv.copy(o.dir).applyQuaternion(_bq);      // the blow in his own frame: +z his front, +x his left
+    let px = 0; if (o.pt) { this.root.updateMatrixWorld(true); this.torso.worldToLocal(_bp.copy(o.pt)); px = _bp.x; }
+    const sd = Math.sign(bd.x * 1.5 + px * 3 + 1e-4), F = clamp(-bd.z, 0.2, 1);
+    if (o.zone === 'helm') {
+      this.hSV += sd * R.headSide * k * 3 * F; this.hYV += clamp(px / 0.15, -1, 1) * R.headYaw * k * 4 + bd.x * k * 2;
+      const share = Math.min(this.recoilV, kick) * R.lagShare; this.recoilV -= share; this.pend.push({ t: R.lag, rv: share, sv: sd * 0.25 * kick * R.lagShare, tw: clamp(px / 0.15, -1, 1) * 0.3 * kick });
+    } else {
+      this.twistV += clamp(px / 0.3, -1, 1) * kick * 0.45 * lk; this.shdV += R.shoulder * k * 2.5; this.jZV -= R.jolt * k * 9; this.jXV += sd * k * 0.8; this.jYV -= k * 0.5;
+    }
+    const heavy = smoothstep(R.checkAt - 0.3, R.checkAt + 0.3, pw);
+    if (heavy > 0) { this.pushV -= R.push * 14 * heavy * lk * F; this.tossV += R.toss * 9 * heavy; this.chk = Math.max(this.chk, R.check * heavy); }
+  }
+  /** The striker feels his own stroke: the arm is driven back along the shaft, the shoulder jolts, and a lance that did not break whips. */
+  strikeKick(power, dir, broke) {
+    const R = PHYS.impact.react, p = clamp(power, 0.1, 1.3), lk = 1 / Math.sqrt(Math.max(0.5, this.lock));
+    this.jZV -= R.recoil * p * 14 * lk; this.shdV += R.shoulder * p * 1.6; this.pushV -= R.push * 4 * p * lk;
+    if (!broke) { this.wXV += R.whip * p * (0.6 + Math.random() * 0.8) * 4; this.wYV += (Math.random() - 0.5) * R.whip * p * 5; }
+  }
+  /** Spring-dampers of the blow's reaction (seconds in dt; dt = 0 leaves them as they are). */
+  _reactStep(dt) {
+    const R = PHYS.impact.react;
+    if (dt > 0) {
+      for (let i = this.pend.length - 1; i >= 0; i--) { const e = this.pend[i]; e.t -= dt; if (e.t <= 0) { this.recoilV += e.rv; this.sideRecoilV += e.sv; this.twistV += e.tw; this.pend.splice(i, 1); } }
+      this._sp('hS', 85, 8, dt); this._sp('hY', 70, 7, dt); this._sp('push', 55, 9, dt); this._sp('jZ', 90, 10, dt); this._sp('jX', 80, 8, dt); this._sp('jY', 80, 8, dt);
+      this._sp('wX', 420, 5, dt); this._sp('wY', 380, 5, dt); this._sp('toss', 40, 5, dt); this._sp('shd', 75, 9, dt);
+      this.chk = Math.max(0, this.chk - dt * 1.4);
+      const lim = R.leanMax / Math.max(0.6, this.cantle), pm = R.push * 1.7 / Math.max(0.6, this.cantle);
+      if (!this.going && this.recoil > lim) { this.recoil = lim; if (this.recoilV > 0) this.recoilV *= -0.3; }      // the cantle stops him: he rocks back against it and comes forward
+      if (this.push < -pm) { this.push = -pm; if (this.pushV < 0) this.pushV *= -0.2; }
+    }
   }
 
   /** at: metres from the grip where the shaft fails (see breakAt in physics.js). What is left of the fore part stays on the lance. */
@@ -1067,7 +1115,7 @@ export class Jouster {
     this.lanceKept = new THREE.Mesh(g, this.lanceMat); this.lanceKept.castShadow = true; this.lance.add(this.lanceKept);
     this.lanceStump.scale.setScalar(Math.max(0.6, lanceRadius(at) * k / 0.04));
     const a = this.lance.localToWorld(new THREE.Vector3(0, 0, at)), b = this.lance.localToWorld(new THREE.Vector3(0, 0, LANCE_REACH));
-    return { a, b, at };
+    return { a, b, at, r: lanceRadius(at) * k };
   }
   // ------------------------------------------------------------ armour damage (numbers in PHYS.damage)
   /**
@@ -1197,14 +1245,15 @@ export class Jouster {
     // from here he is one rigid body: he leaves the saddle turning backward over the cantle (spin), with whatever twist the blow gave him
     const w = new THREE.Vector3(1, 0, 0).applyQuaternion(this.rider.quaternion).multiplyScalar(g.spin);
     w.y += this.twistV * 0.6 + (Math.random() - 0.5) * 1.6; w.addScaledVector(_v.set(0, 0, 1).applyQuaternion(this.rider.quaternion), this.sideRecoilV * 0.5 + (Math.random() - 0.5) * 1.2);
-    this.fall = { v: g.vel, w, landed: false, still: 0 };
+    w.addScaledVector(_v.set(0, 0, 1).applyQuaternion(this.rider.quaternion), -g.vel.x * 0.8 * PHYS.impact.fall.ground * 2);      // thrown out to the side: he rolls over as he goes
+    this.fall = { v: g.vel, w, landed: false, still: 0, wl: w.clone(), skidT: 0, bounceT: 0 };
   }
 
   /** Everything needed to redraw this rider at an instant (for instant replay). */
   snapshot() {
     const r = this.root, s = { px: r.position.x, pz: r.position.z, ry: r.rotation.y, rz: r.rotation.z, dir: this.dir, speed: this.speed, phase: this.phase, time: this.time,
       lanceLower: this.lanceLower, ax: this.aimLocal.x, ay: this.aimLocal.y, az: this.aimLocal.z, brace: this.brace, recoil: this.recoil, sideRecoil: this.sideRecoil,
-      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff, shGone: !!this.shGone, lr: this._lanceRel(), ld: !!this.lanceDropped };      // lr: the lance exactly as it was posed, relative to the root (the live pose rests on eased state and on the other man's body, which a replay does not have)
+      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff, shGone: !!this.shGone, lr: this._lanceRel(), ld: !!this.lanceDropped, fx: [this.hS, this.hY, this.push, this.jZ, this.wX, this.wY, this.toss, this.chk, this.shd, this.jX, this.jY] };      // lr: the lance exactly as it was posed, relative to the root (the live pose rests on eased state and on the other man's body, which a replay does not have)
     if (this.unhorsed) { const p = this.rider.position, q = this.rider.quaternion; s.rp = [p.x, p.y, p.z]; s.rq = [q.x, q.y, q.z, q.w]; s.tx = this.torso.rotation.x; }
     return s;
   }
@@ -1225,6 +1274,7 @@ export class Jouster {
     const r = this.root; r.position.x = s.px; r.position.z = s.pz; r.rotation.y = s.ry; r.rotation.z = s.rz; this.dir = s.dir;
     this.speed = s.speed; this.phase = s.phase; this.time = s.time; this.lanceLower = s.lanceLower; this.aimLocal.set(s.ax, s.ay, s.az).normalize();
     this.brace = s.brace; this.recoil = s.recoil; this.sideRecoil = s.sideRecoil; this.rear = s.rear; this.guard = s.guard; this.look = s.look; this.agit = s.agit;
+    { const f = s.fx || []; [this.hS, this.hY, this.push, this.jZ, this.wX, this.wY, this.toss, this.chk, this.shd, this.jX, this.jY] = [f[0] || 0, f[1] || 0, f[2] || 0, f[3] || 0, f[4] || 0, f[5] || 0, f[6] || 0, f[7] || 0, f[8] || 0, f[9] || 0, f[10] || 0]; }
     this.twist = s.twist || 0; this.headK = s.headK || 0; this.shK = s.shK || 0; this.stag = s.stag || 0;
     this.raise = this.raiseT = s.raise || 0; this.visorUp = !!s.visorUp; this.helmOff = !!s.helmOff; if (!!s.shGone !== !!this.shGone) this.setShieldGone(!!s.shGone);
     this.lance.visible = !s.ld; this.lanceFore.visible = !s.lanceBroken; this.lanceStump.visible = s.lanceBroken; if (this.lanceKept) this.lanceKept.visible = s.lanceBroken;
@@ -1242,7 +1292,7 @@ export class Jouster {
     if (!this.manualPos && !this.replaying) this.root.position.z += this.dir * sp * dt;
     const g = this.gait = smoothstep(2.4, 6.4, sp);
     const amp = this.amp = clamp(sp / 1.3, 0, 1);
-    this.phase += dt * (sp > 0.05 ? 0.72 + 0.17 * sp : 0);   // strides per second: about 1.0 at the walk, 1.4 trot, 1.8 canter, 2.0-2.2 gallop (film: 2.0 at about 7 m/s)
+    this.phase += dt * (sp > 0.05 ? 0.72 + 0.17 * sp : 0) * (1 - 0.75 * Math.min(1, this.chk));   // strides per second: about 1.0 at the walk, 1.4 trot, 1.8 canter, 2.0-2.2 gallop (film: 2.0 at about 7 m/s)
     const duty = lerp(0.62, 0.36, g), A = lerp(0.27, 0.6, g) * amp, F = lerp(0.55, 1.4, g) * amp;
 
     for (let i = 0; i < 4; i++) {
@@ -1294,7 +1344,8 @@ export class Jouster {
     this.head.rotation.x = lerp(0.12, -0.2, g) - g * 0.05 * Math.sin(cyc + 1.2) + idle * 0.5;
     const ag = this.agit || 0;
     this.head.rotation.z = Math.sin(t * 8.5) * 0.16 * ag * (0.5 + 0.5 * Math.sin(t * 1.3)); this.neck.rotation.y = Math.sin(t * 3.1) * 0.1 * ag;
-    this.neck.rotation.x -= Math.max(0, Math.sin(t * 2.2)) * 0.12 * ag;
+    this.neck.rotation.x -= Math.max(0, Math.sin(t * 2.2)) * 0.12 * ag + this.toss * 0.5; this.body.rotation.x += this.chk * 0.06; this.head.rotation.x -= this.toss * 0.4;
+    if (this._neck) { if (this._neck[0]) this._neck[0].rotation.x += this.toss * 0.25; if (this._neck[1]) this._neck[1].rotation.x += this.toss * 0.35; }
     this.tail.rotation.x = lerp(0.08, 0.95, g * amp) + Math.sin(cyc + 1) * 0.1 * amp + Math.sin(t * 1.3) * 0.04;
     this.tail.rotation.z = Math.sin(t * 2.1) * 0.08 + Math.sin(cyc * 0.5) * 0.1 * amp;
 
@@ -1324,23 +1375,24 @@ export class Jouster {
     this.headV += (-this.headK * 70 - this.headV * 9) * dt; this.headK += this.headV * dt;                // the head snapped back
     this.shV += (-this.shK * 60 - this.shV * 9) * dt; this.shK += this.shV * dt;                          // the shield driven in against the chest
     this.stagV += (-this.stag * 26 - this.stagV * 5) * dt; this.stag += this.stagV * dt;                  // the horse rocked sideways under the blow
+    this._reactStep(dt);
     { const sg = clamp(this.stag, -0.16, 0.16); this.body.rotation.z = sg; if (this.modelPivot) this.modelPivot.rotation.z = sg; }
     const off = this.replaying ? this.snapUnhorsed : this.unhorsed;
     if (!off) {
       this.rider.position.y = -bob * 0.12 + g * amp * 0.035 * Math.sin(cyc + 3.4) + this.brace * 0.045;
-      this.rider.position.z = this.brace * 0.07;
+      this.rider.position.z = this.brace * 0.07 + this.push;
       this.rider.rotation.x = -this.body.rotation.x * 0.75;
       // the body is thrown back as the horse surges and pitches forward as he checks
       const acc = dt > 0 ? (sp - (this.prevSp ?? sp)) / dt : 0; this.prevSp = sp;
       this.accLean = damp(this.accLean || 0, clamp(-acc * 0.028, -0.2, 0.24), 5, dt);
-      this.torso.rotation.x = 0.05 + 0.13 * g * amp + this.brace * 0.44 + this.lean + this.accLean - clamp(this.recoil, -0.4, 1.5) + g * amp * 0.03 * Math.sin(cyc + 2.6);
+      this.torso.rotation.x = 0.05 + 0.13 * g * amp + this.brace * 0.44 + this.lean + this.accLean - clamp(this.recoil, -0.4, 1.5) - this.shd + g * amp * 0.03 * Math.sin(cyc + 2.6);
       this.torso.rotation.z = clamp(this.sideRecoil, -0.6, 0.6);
       this.torso.rotation.y = 0.12 * this.lanceLower + this.look * 0.6 + clamp(this.twist, -0.7, 0.7);
       this.helm.rotation.x = -0.05 * g + clamp(this.recoil, -0.3, 0.6) * 0.5 - this.brace * 0.2 - clamp(this.headK, -0.3, 0.6);   // chin down, eyes still on the mark
-      this.helm.rotation.y = 0.25 * this.lanceLower + this.look * 1.9;
+      this.helm.rotation.y = 0.25 * this.lanceLower + this.look * 1.9 + clamp(this.hY, -0.8, 0.8); this.helm.rotation.z = clamp(this.hS, -0.6, 0.6);
       // shield guard: raised it covers the helm and bares the body
       const gd = this.guard, sk_ = clamp(this.shK, -0.3, 0.8); this.shield.position.y = 0.29 + 0.2 * gd - 0.04 * sk_; this.shield.rotation.x = -0.08 - 0.22 * gd - 0.5 * sk_; this.shield.rotation.z = 0.06 + this._vAsk; this.shield.position.z = 0.2 + 0.03 * gd - 0.07 * sk_;
-      this.lance.position.z = 0.25 + this.brace * 0.2;       // the thrust: the arm drives the lance forward as the body goes in
+      this.lance.position.z = 0.25 + this.brace * 0.2 + this.jZ;       // the thrust: the arm drives the lance forward as the body goes in
       this.lance.position.y = 0.13 + 0.25 * this.raise;      // lifted in the hand when he shows he is ready
       this.zones[1].o.position.y = 0.3 + 0.21 * gd; this.zones[0].r = 0.17 * (1 - 0.55 * gd);
     } else if (!this.replaying && !this.remote) this._updateFall(dt);      // (online, the friend's fallen rider is placed from his own stream: see online.js applyRider)
@@ -1370,6 +1422,7 @@ export class Jouster {
       _v.applyQuaternion(_q);                                                // torso-local
       _q2.setFromUnitVectors(Z, _v.normalize());
       this.lance.quaternion.copy(this.lanceRestQ).slerp(this.lanceUpQ, smoothstep(0, 1, this.raise)).slerp(_q2, smoothstep(0, 1, this.lanceLower));
+      if (this.wX || this.wY || this.jX || this.jY) { _we.set(clamp(this.wX + this.jY * 0.3, -0.5, 0.5), clamp(this.wY + this.jX * 0.3, -0.5, 0.5), 0); this.lance.quaternion.multiply(_wq.setFromEuler(_we)); }      // the whip of a lance that struck, the jolt of the arm that was struck
       if (this.replaying && this.snapLR) this._lanceFromRel(this.snapLR);      // a replay shows the recorded pose, not a recomputed one
       this.lance.updateMatrixWorld(true);
     }
@@ -1406,6 +1459,7 @@ export class Jouster {
         if (_v2.y < 0) {
           const jn = -(1 + F.bounce) * _v2.y / (1 / F.kg + rn.lengthSq() / F.inertia);
           if (!f.landed && _v2.y < -1.2) { f.landed = true; if (this.onLand) this.onLand(r.position, Math.abs(_v2.y)); }
+          else if (f.landed && _v2.y < -1.6 && f.bounceT <= 0) { f.bounceT = 0.15; if (this.onBounce) this.onBounce(r.position, Math.abs(_v2.y)); }      // each later knock on the sand
           f.v.y += jn / F.kg; f.w.addScaledVector(rn, jn / F.inertia);
           // friction against the sliding of the point
           const tx = _v2.x, tz = _v2.z, tl = Math.hypot(tx, tz);
@@ -1416,10 +1470,16 @@ export class Jouster {
           }
         }
       }
+      f.bounceT -= h;
+      if (touching) { f.skidT -= h; const gs = Math.hypot(f.v.x, f.v.z); if (gs > PHYS.impact.fall.skid && f.skidT <= 0) { f.skidT = 0.07; if (this.onSkid) this.onSkid(r.position, gs, f.v); } }      // a slide: the sand is thrown up behind him
       if (touching) { const k = Math.exp(-2.2 * h); f.w.multiplyScalar(k); f.v.x *= Math.exp(-1.4 * h); f.v.z *= Math.exp(-1.4 * h); }
       if (touching && f.v.lengthSq() < 0.05 && f.w.lengthSq() < 0.2) { f.still += h; if (f.still > 0.4) { f.v.set(0, 0, 0); f.w.set(0, 0, 0); } } else f.still = 0;
     }
     this.torso.rotation.x = damp(this.torso.rotation.x, -0.15, 4, dt);
+    // the limbs trail: head, shield arm and lance lag behind the body's turning (they are not on springs of their own, so they follow his spin late)
+    { const k = 1 - Math.exp(-7 * dt); f.wl.lerp(f.w, k); _v.copy(f.wl).sub(f.w).applyQuaternion(_q.copy(r.quaternion).invert());
+      this.helm.rotation.x = clamp(_v.x * 0.14, -0.7, 0.7); this.helm.rotation.z = clamp(-_v.z * 0.14, -0.6, 0.6); this.helm.rotation.y = clamp(_v.y * 0.1, -0.5, 0.5);
+      this.shield.rotation.x = -0.08 + clamp(_v.x * 0.1, -0.5, 0.5); this.shield.rotation.z = 0.06 + this._vAsk + clamp(-_v.z * 0.12, -0.6, 0.6); this.torso.rotation.z = clamp(-_v.z * 0.05, -0.3, 0.3); }
     this.lance.quaternion.slerp(this.lanceRestQ, 1 - Math.exp(-3 * dt));
   }
 }

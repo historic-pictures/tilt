@@ -137,6 +137,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.08, 4000);
 const fx = new FX(scene);
+let clackT = 0; fx.onClack = (p, v) => { if (S.time - clackT < 0.05) return; clackT = S.time; const [d, pan] = hear(p); audio.splinterTick(d, v, pan); };
 const post = createPost(renderer, scene, camera, { lite: GFX.post !== 'full', plain: GFX.post === 'plain' });
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -147,7 +148,7 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // ------------------------------------------------------------------ state
-const S = { mode: 'menu', time: 0, timeScale: 1, excite: 0.12, slowT: 0, shake: 0, fp: false, muted: (() => { try { return localStorage.getItem('tilt.sound') === 'off'; } catch (e) { return false; } })(), introT: 0, skipHold: 0, skipWanted: { me: false, them: false }, online: false, menuAng: 0.6, paused: false, menuView: 'main' };
+const S = { mode: 'menu', time: 0, timeScale: 1, excite: 0.12, slowT: 0, shake: 0, stopT: 0, hold: false, kx: 0, ky: 0, kvx: 0, kvy: 0, fp: false, muted: (() => { try { return localStorage.getItem('tilt.sound') === 'off'; } catch (e) { return false; } })(), introT: 0, skipHold: 0, skipWanted: { me: false, them: false }, online: false, menuAng: 0.6, paused: false, menuView: 'main' };
 let profile = loadProfile();
 ranks.setNameSource(() => profile.name);
 ranks.setAuthSource(() => account.token());
@@ -274,6 +275,8 @@ function hookRider(j, isPlayer) {
     audio.hoof(sp, pan, d);
     if (isPlayer && i === 0 && j.speed > 5) audio.armourClank(0.4 + sp * 0.5);
   };
+  j.onSkid = (p, v, vel) => { _a.copy(p); _a.y = 0.05; fx.dust(_a, 2, 0.5, 0.6, 0.4, _b.copy(vel).multiplyScalar(0.25)); };
+  j.onBounce = (p, v) => { fx.landBurst(p, v * 0.7); audio.bodyFall(clamp(v / 9, 0.2, 0.6), hear(p)[0]); S.shake = Math.max(S.shake, 0.12); };
   j.onLand = (p, v) => { audio.bodyFall(clamp(v / 6, 0.4, 1), hear(p)[0]); fx.landBurst(p, v); S.shake = Math.max(S.shake, 0.35); };
 }
 function makeRider(def, dir, isPlayer) {
@@ -751,6 +754,7 @@ function beginCourse(first = false) {
   player.root.position.x = -dirP() * C.lat; player.lance.visible = true;
   if (!M.practice) { opp.raiseT = 0; opp.visorUp = !!opp.visor; }      // he waits with his visor up until he raises his lance
   if (first) fx.clear();
+  player.cantle = opp.cantle = M.kit.cantle; player.lock = opp.lock = M.kit.lock;      // the saddle's hold on the body-reaction (jouster.js hit())
   // a Drinker may be late this course (his work and his temper's gifts are skipped); everyone else is here
   if (first) { lateMen = {}; lateRolled = false; } else if (!lateRolled) rollLate();      // (normally rolled when you arrived at the end, see rideOut)
   lateRolled = false;
@@ -926,8 +930,8 @@ function shaftBlow(Aj, Bj, st, isP) {
     C.shaftDone[isP ? 0 : 1] = true;
     const seg = Aj.breakLance(h.at), vel = new THREE.Vector3(0, 0, Aj.dir * Aj.speed * 0.6);
     if (S.online && NET.host) (C.nfx || (C.nfx = {}))[isP ? 'p' : 'o'] = { across: 1, bk: seg ? seg.at : 0, hz: h.name === 'helm' ? 'helm' : 'body', hs: h.name === 'horse' ? 1 : 0 };
-    if (seg) { fxSplinters(seg.a, seg.b, vel, 18); fxShaft(seg.a, seg.b, vel); }
-    const [d, pan] = hear(_w); audio.lanceBreak(0.45, d); audio.impact(0.5, h.name === 'horse' ? 'horse' : 'body', d);
+    if (seg) fxBurst(Aj, Bj, seg, _s2.set(0, 0.04, Aj.dir).normalize(), 0.4, h.name === 'helm' ? 'helm' : 'body');
+    const [d, pan] = hear(_w); audio.lanceBreak(0.45, d, { cls: 0, zone: h.name === 'helm' ? 'helm' : 'body' }); audio.impact(0.5, h.name === 'horse' ? 'horse' : 'body', d);
     Bj.hit(1.3, true, { zone: h.name === 'helm' ? 'helm' : 'body', lat: 0.5 }); S.shake = Math.max(S.shake, 0.3);
     if (isP) { arm.vy -= dirP() * 1.4; arm.vp += 0.6; } else C.o.knock.set(0.15, 0.1);
     if (h.name === 'horse' && Bj.horse !== undefined) Bj.speed *= 0.9;
@@ -1731,6 +1735,24 @@ function techSnapshot(zone, cent) {
   return { sight, lance, horse, will, q: 0.4 * lance + 0.35 * horse + 0.25 * will, perfect, braced, tips, speedFrac };
 }
 
+/** A lance breaks (the whole burst: fore part, splinters, chips, crown; see FX.lanceBurst and PHYS.impact). Recorded with its seed, so a replay throws the same splinters. Returns the class 0 crack / 1 clean / 2 shatter. */
+function fxBurst(Aj, Bj, seg, dir, power, zone) {
+  const o = { a: seg.a.clone(), b: seg.b.clone(), dir: dir.clone(), v: new THREE.Vector3(0, 0, Aj.dir * Aj.speed), hv: new THREE.Vector3(0, 0, Bj.dir * Bj.speed), power, zone, paint: Aj.arms && Aj.arms.c1 || 0xb23a2a, seed: (Math.random() * 1e9) | 0, r0: seg.r };
+  const cls = fx.lanceBurst(o); if (C && !R) C.rec.ev.push({ t: C.t, k: 'lb', o });
+  return cls;
+}
+const breakClass = (power) => power >= PHYS.impact.shatterAt ? 2 : power >= PHYS.impact.cleanAt ? 1 : 0;
+/**
+ * The feel of a blow, all of it visual: a hit-stop (a freeze of 40-90 ms, only for a big, square blow; online the simulation is never paused, so there the sparks and splinters
+ * hang instead), and the camera kicked along the blow's own direction. The slow motion is in strike() (PHYS.impact crack/clean/shatter .slow).
+ */
+function impactFeel(power, glanced, dir, zone) {
+  const I = PHYS.impact;
+  if (!glanced && power >= I.hsFrom && !R) S.stopT = Math.max(S.stopT, lerp(I.hitStop[0], I.hitStop[1], smoothstep(I.hsFrom, 1.1, power)));
+  _a.set(1, 0, 0).applyQuaternion(camera.quaternion); _b.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  const k = (glanced ? 0.35 : 1) * (0.4 + power * 0.9);
+  S.kvx += dir.dot(_a) * k * 7 + (Math.random() - 0.5) * k; S.kvy += (dir.dot(_b) + (zone === 'helm' ? 0.5 : -0.2)) * k * 5 + (Math.random() - 0.5) * k;
+}
 function fxSplinters(a, b, vel, n) { fx.splinters(a, b, vel, n); if (C && !R) C.rec.ev.push({ t: C.t, k: 'spl', a: a.clone(), b: b.clone(), v: vel.clone(), n }); }
 function fxShaft(a, b, vel) { fx.shaft(a, b, vel); if (C && !R) C.rec.ev.push({ t: C.t, k: 'sh', a: a.clone(), b: b.clone(), v: vel.clone() }); }
 function fxSparks(p, n, s) { fx.sparks(p, n, s); if (C && !R) C.rec.ev.push({ t: C.t, k: 'spk', p: p.clone(), n, s }); }
@@ -1808,12 +1830,16 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   const hit = impact(closing, { horseKg: PHYS.horseKg[Aj.horseDef.id] || 500, armourKg: (Aj.armourDef.kg ?? PHYS.armourKg[Aj.armourDef.id] ?? 28), lanceKg: lanceS.kg, breakJ: lanceS.breakJ * M.mode.lance, coupling: q, boost },
     M.practice ? { quintain: true } : { horseKg: PHYS.horseKg[Bj.horseDef.id] || 500, armourKg: (Bj.armourDef.kg ?? PHYS.armourKg[Bj.armourDef.id] ?? 28), braced: defBraced, seat: isP ? M.od.seat : S.online ? ARMOURS[profile.armour].protection * 0.85 : (sk('seat') ? SKILLS.seat.seat : 0.6), protection: Bj.armourDef.protection },
     zone, cent, { turned: st.turned, forceBreak, bite: M.mode.bite, hold: M.mode.hold * M.kit.cantle, lock: M.kit.lock, sharp: M.mode.sharp, sharpJ: M.kit.sharpJ * PHYS.refJ, springJ: M.kit.spring * PHYS.refJ, soft: legSoft, square, glance: glanced, pass: zone === 'shield' && Bj.dmg ? 1 + PHYS.damage.shieldPass * Bj.dmg.shield : 1 });
+  if (G.force) Object.assign(hit, G.force);      // (test hook: G.force = { broke: true, power: 0.9, unhorse: true } overrides the stroke's outcome)
   const power = hit.power; if (nfx) nfx.pw = power;
   Aj.tipWorld(_tip);
   const velA = new THREE.Vector3(0, 0, Aj.dir * Aj.speed);
-  S.slowT = Math.max(S.slowT, 0.7); S.shake = Math.max(S.shake, 0.25 + power * 0.5);
+  const bdir = new THREE.Vector3(0, 0.04, Aj.dir).normalize(), IM = PHYS.impact;
+  S.slowT = Math.max(S.slowT, zone === 'horse' ? 0.3 : glanced ? 0 : hit.broke ? [IM.crack, IM.clean, IM.shatter][breakClass(power)].slow : IM.slowTouch);      // (one slow motion per stroke, by what it did: none for a glance or a crack)
+  S.shake = Math.max(S.shake, 0.12 + power * 0.3 + (hit.broke ? [IM.crack, IM.clean, IM.shatter][breakClass(power)].shake * 0.4 : 0));
+  impactFeel(power, glanced || zone === 'horse', bdir, zone);
   post.setImpact(clamp(0.35 + power * 0.6, 0, 1));
-  $('flash').style.opacity = 0.35; setTimeout(() => { $('flash').style.opacity = 0; }, 60);
+  $('flash').style.opacity = glanced ? 0.15 : 0.35; setTimeout(() => { $('flash').style.opacity = 0; }, 60);
   const who = isP ? profile.name : M.od.short, whom = isP ? M.od.short : profile.name;
 
   if (zone === 'horse') {
@@ -1838,8 +1864,8 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   if (!broke && !M.practice) { if (isP) C.kickUp = PHYS.shaft.kick; else opp.lanceLower = Math.min(opp.lanceLower, 1 - PHYS.shaft.kick); }
   const unhorse = hit.unhorse || (broke && G.forceUnhorse === (isP ? 'opp' : 'player'));
   if (!M.practice) C.shock[isP ? 'o' : 'p'] = { t: C.t, power, unhorse, lead: Math.abs(C.lead) / Math.max(closing, 1) };   // lead: seconds until the other point would land
-  { const hk = M.practice ? power : clamp(hit.omega * 1.15 * (zone === 'helm' && Bj.visorUp ? 1.5 : 1), 0.4, 7), ho = { headMul: M.kit.bolted ? PHYS.kit.boltedHead : 1, zone, lat: clamp((off ? off[0] : 0) * 0.4 + (zone === 'shield' ? 0.7 : zone === 'helm' ? 0 : 0.15), -1, 1) };
-    Bj.hit(hk, true, ho); if (nfx) { nfx.hk = hk; nfx.hm = ho.headMul; nfx.hl = ho.lat; } }
+  { const hk = M.practice ? power : clamp(hit.omega * 1.15 * (zone === 'helm' && Bj.visorUp ? 1.5 : 1), 0.4, 7), ho = { dir: bdir, pt: _tip.clone(), power, headMul: M.kit.bolted ? PHYS.kit.boltedHead : 1, zone, lat: clamp((off ? off[0] : 0) * 0.4 + (zone === 'shield' ? 0.7 : zone === 'helm' ? 0 : 0.15), -1, 1) };
+    Bj.hit(hk, true, ho); if (nfx) { nfx.hk = hk; nfx.hm = ho.headMul; nfx.hl = ho.lat; } if (Aj.strikeKick && !M.practice) Aj.strikeKick(power, bdir, hit.broke); }
   if (!M.practice) {
     // the horses feel it too: the struck one loses pace by the blow's momentum over his weight, the striker a little by the reaction
     const dv = hit.J / ((PHYS.horseKg[Bj.horseDef.id] || 500) + PHYS.riderKg + (Bj.armourDef.kg ?? 28)) * PHYS.recoil.horse;
@@ -1850,7 +1876,7 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   const [hd] = hear(_tip);
   audio.impact(power, zone, hd); fxSparks(_tip.clone(), 10 + (power * 14 | 0), 4 + power * 3);
   let brokeAt = 0;
-  if (broke) { const seg = Aj.breakLance(breakAt(Math.sqrt(Math.max(0, 1 - square * square)))); if (seg) { brokeAt = seg.at; fxSplinters(seg.a, seg.b, velA, 30 + (power * 34 | 0)); fxShaft(seg.a, seg.b, velA); } audio.lanceBreak(power, hd); M.breaks[isP ? 0 : 1]++; }
+  if (broke) { const seg = Aj.breakLance(breakAt(Math.sqrt(Math.max(0, 1 - square * square)))); let cls = breakClass(power); if (seg) { brokeAt = seg.at; cls = fxBurst(Aj, Bj, seg, bdir, power, zone); } audio.lanceBreak(power, hd, { cls, zone }); M.breaks[isP ? 0 : 1]++; }
   if (nfx && broke) nfx.bk = brokeAt;
   let pts = broke ? (zone === 'helm' ? M.PT.helm : M.PT.broken) : M.PT.attaint, code = broke ? (zone === 'helm' ? 'h' : 'b') : 'a';
   const how = power > 1.0 ? 'shivered his lance to the vamplate' : power > 0.75 ? 'broke his lance clean' : 'broke his lance near the point';
@@ -2483,7 +2509,7 @@ function replayDress() {
     if (fs.unhorsed && fs.rp) R.fall.set(fs.rp[0], fs.rp[1], fs.rp[2]); else R.fall.set(fs.px, 1.5, fs.pz);
     R.fdir = fs.dir || R.fdir;
   }
-  while (R.e < R.ev.length && R.ev[R.e].t <= t) { const e = R.ev[R.e++]; if (e.k === 'spl') fx.splinters(e.a, e.b, e.v, e.n); else if (e.k === 'sh') fx.shaft(e.a, e.b, e.v); else if (e.k === 'pc') fx.piece(e.p, e.q, e.sx, e.sy, e.sz, e.v); else fx.sparks(e.p, e.n, e.s); }
+  while (R.e < R.ev.length && R.ev[R.e].t <= t) { const e = R.ev[R.e++]; if (e.k === 'lb') fx.lanceBurst(e.o); else if (e.k === 'spl') fx.splinters(e.a, e.b, e.v, e.n); else if (e.k === 'sh') fx.shaft(e.a, e.b, e.v); else if (e.k === 'pc') fx.piece(e.p, e.q, e.sx, e.sy, e.sz, e.v); else fx.sparks(e.p, e.n, e.s); }
   fx.update(R.fxDt);
 }
 function replayUndress() {
@@ -2934,8 +2960,8 @@ function netApplyStroke(m) {
   const zone = res.zone;
   if (res.across) {      // the shaft broke across his man, not on its point
     const seg = Aj.breakLance(clampNum(m.bk, 0.5, 3) || 1), vel = new THREE.Vector3(0, 0, Aj.dir * Aj.speed * 0.6);
-    if (seg) { fxSplinters(seg.a, seg.b, vel, 18); fxShaft(seg.a, seg.b, vel); }
-    Aj.lance.getWorldPosition(_a); const [d] = hear(_a); audio.lanceBreak(0.45, d); audio.impact(0.5, m.hs ? 'horse' : 'body', d);
+    if (seg) fxBurst(Aj, Bj, seg, _s2.set(0, 0.04, Aj.dir).normalize(), 0.4, m.hz === 'helm' ? 'helm' : 'body');
+    Aj.lance.getWorldPosition(_a); const [d] = hear(_a); audio.lanceBreak(0.45, d, { cls: 0, zone: m.hz === 'helm' ? 'helm' : 'body' }); audio.impact(0.5, m.hs ? 'horse' : 'body', d);
     Bj.hit(1.3, true, { zone: m.hz === 'helm' ? 'helm' : 'body', lat: 0.5 }); S.shake = Math.max(S.shake, 0.3);
     if (m.hs) Bj.speed *= 0.9;
     if (isP) { arm.vy -= dirP() * 1.4; arm.vp += 0.6; C.tech = techSnapshot(null, 0); }
@@ -2951,8 +2977,9 @@ function netApplyStroke(m) {
   const power = clampNum(m.pw, 0, 3), velA = new THREE.Vector3(0, 0, Aj.dir * Aj.speed);
   Aj.tipWorld(_tip); const [hd, hpan] = hear(_tip);
   if (isP) C.tech = techSnapshot(zone, res.cent);
-  S.shake = Math.max(S.shake, 0.25 + power * 0.5); post.setImpact(clamp(0.35 + power * 0.6, 0, 1));
-  $('flash').style.opacity = 0.35; setTimeout(() => { $('flash').style.opacity = 0; }, 60);
+  const bdir = new THREE.Vector3(0, 0.04, Aj.dir).normalize(), IM = PHYS.impact, gl = !!(res.glanced || res.turned);
+  S.shake = Math.max(S.shake, 0.12 + power * 0.3 + (res.broke ? [IM.crack, IM.clean, IM.shatter][breakClass(power)].shake * 0.4 : 0)); impactFeel(power, gl, bdir, zone); post.setImpact(clamp(0.35 + power * 0.6, 0, 1));
+  $('flash').style.opacity = gl ? 0.15 : 0.35; setTimeout(() => { $('flash').style.opacity = 0; }, 60);
   const mine = (p3) => new THREE.Vector3(-clampNum(p3[0], -300, 300), clampNum(p3[1], -50, 50), -clampNum(p3[2], -300, 300));      // the host's world point, in ours
   if (zone === 'horse') {
     audio.impact(power, 'horse', hd); audio.whinny(hpan, hd); fx.dust(_tip, 6, 0.3, 1, 0.3);
@@ -2967,11 +2994,11 @@ function netApplyStroke(m) {
   }
   if (m.sp && Bj.shield) { Bj.shield.getWorldPosition(_hd); Bj.shield.getWorldQuaternion(_qa); fxPiece(_hd.clone(), _qa.clone(), 0.42, 0.62, 0.03, new THREE.Vector3(0, 0, Aj.dir * Aj.speed)); fxSparks(_hd.clone(), 8, 3); Bj.setShieldGone(true); }
   if (!res.broke && isP) C.kickUp = PHYS.shaft.kick;
-  Bj.hit(clampNum(m.hk, 0, 8), true, { headMul: clampNum(m.hm, 0, 3), zone, lat: clampNum(m.hl, -1, 1) });
+  Bj.hit(clampNum(m.hk, 0, 8), true, { dir: bdir, pt: _tip.clone(), power, headMul: clampNum(m.hm, 0, 3), zone, lat: clampNum(m.hl, -1, 1) }); if (Aj.strikeKick) Aj.strikeKick(power, bdir, res.broke);
   if (typeof m.dv === 'number') { const dv = clampNum(m.dv, 0, 20); Bj.speed = Math.max(0, Bj.speed - dv); Aj.speed = Math.max(0, Aj.speed - dv * 0.5); }
   if (!isP) { arm.vy -= dirP() * 0.6 * PHYS.recoil.arm * power; arm.vp += PHYS.recoil.arm * power * (1 + PHYS.kit.lockKick * (M.kit.lock - 1)); }      // the shock through your own arm
   audio.impact(power, zone, hd); fxSparks(_tip.clone(), 10 + (power * 14 | 0), 4 + power * 3);
-  if (res.broke && m.bk) { const seg = Aj.breakLance(clampNum(m.bk, 0.5, 3)); if (seg) { fxSplinters(seg.a, seg.b, velA, 30 + (power * 34 | 0)); fxShaft(seg.a, seg.b, velA); } audio.lanceBreak(power, hd); }
+  if (res.broke && m.bk) { const seg = Aj.breakLance(clampNum(m.bk, 0.5, 3)); let cls = breakClass(power); if (seg) cls = fxBurst(Aj, Bj, seg, bdir, power, zone); audio.lanceBreak(power, hd, { cls, zone }); }
   const un = Array.isArray(m.un) && m.un.length === 4 ? m.un.map(v => clampNum(v, -30, 30)) : null;
   if (un && res.unhorse) { Bj.unhorse(new THREE.Vector3(-un[0], un[1], -un[2]), un[3]); C.cine = Bj; }
   const visorHit = zone === 'helm' && !!Bj.visorUp, Z = zone.toUpperCase(), sgn = res.pts > 0 ? `+${res.pts}` : `${res.pts}`, broke = res.broke, unhorse = res.unhorse;
@@ -3531,6 +3558,10 @@ function updateCamera(dtReal) {
   fov = damp(fov, wantFov, 4, dtReal);
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   camera.position.copy(camPos);
+  { // the camera kicked along the blow (a spring: it goes with the blow and swings back, a little past)
+    const kd = Math.min(dtReal, 0.033); S.kvx += (-S.kx * 190 - S.kvx * 11) * kd; S.kvy += (-S.ky * 190 - S.kvy * 11) * kd; S.kx += S.kvx * kd; S.ky += S.kvy * kd;
+    if (Math.abs(S.kx) + Math.abs(S.ky) > 1e-4) { _a.set(1, 0, 0).applyQuaternion(camera.quaternion); _b.set(0, 1, 0).applyQuaternion(camera.quaternion); camera.position.addScaledVector(_a, clamp(S.kx, -1, 1) * 0.06).addScaledVector(_b, clamp(S.ky, -1, 1) * 0.06); }
+  }
   if (S.shake > 0.005) { camera.position.x += (Math.random() - 0.5) * S.shake * 0.25; camera.position.y += (Math.random() - 0.5) * S.shake * 0.25; S.shake *= Math.exp(-5 * dtReal); }
   camera.position.y = Math.max(0.3, camera.position.y);
   camera.lookAt(camLook);
@@ -3584,8 +3615,10 @@ function frame(dtReal) {
   else if (S.slowT > 0) { S.slowT -= dtReal; ts = S.slowT > 0.3 ? 0.16 : lerp(1, 0.16, S.slowT / 0.3); }
   else if (S.focusOn) ts = 0.4;
   S.timeScale = damp(S.timeScale, ts, S.slowT > 0 ? 30 : 9, dtReal);
+  const tsAudio = S.timeScale; S.hold = S.stopT > 0;
+  if (S.hold) { S.stopT -= dtReal; if (!S.online && S.mode !== 'replay' && !R) S.timeScale = 0.03; }      // hit-stop: a beat of stillness on a big blow (online the match runs on: only the effects hang, below)
   const dt = dtReal * S.timeScale;
-  audio.setTimeScale(S.mode === 'replay' ? 1 : S.timeScale);
+  audio.setTimeScale(S.mode === 'replay' ? 1 : tsAudio);
   musicSync();
   if (S.focusOn) { S.hb = (S.hb || 0) - dtReal; if (S.hb <= 0) { S.hb = 0.75; audio.heartbeat(0.8); } }
 
@@ -3626,7 +3659,7 @@ function frame(dtReal) {
     if (player) world.focusShadow(S.mode === 'intro' && introNew() ? ceremony.focus(S.introT, player, opp, _a) : S.mode === 'intro' && S.introT < 4.2 && opp ? opp.root.position : (C && C.cine && S.mode === 'after' ? C.cine.rider.position : player.root.position));
   }
   audio.update(dtReal, { excitement: S.excite, anticipation: S.antic || 0, speed: player && M && S.mode !== 'replay' ? player.speed : 0, favour: M ? M.favour : 0 });
-  if (S.mode !== 'replay' && !R) fx.update(dt);
+  if (S.mode !== 'replay' && !R) fx.update(S.hold && S.online ? dt * 0.05 : dt);
   updateCamera(dtReal);
   speech.update();
   if (player) player.root.updateMatrixWorld(true);
@@ -3660,7 +3693,7 @@ $('soundBtn').addEventListener('click', () => setSound(S.muted));
   window.addEventListener('pointerdown', wake); window.addEventListener('keydown', wake);
 }
 G.drama = { conditionOf, lancesLeft, startTend, startBatter, doYield, openYield, swapHelm, dropLance: (side = 0) => dropLance(side ? opp : player, side), yieldOk, aiYields };
-G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
+G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.fx = fx; G.endReplay = endReplay; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
 resize();
 const firstVenue = Math.min(profile.venue || 0, VENUES.length - 1);
 // Staged loading: the menu needs only the two models (and, at medium and high, the first sky, but not for more than a few seconds).
