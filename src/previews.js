@@ -43,6 +43,7 @@ export function createPreviews() {
       return { tt, look: [0, 0, 0], dist: 4.5, fov: 20, pre: () => { tt.add(lanceJ.tilt); lanceJ.lance.children[0].scale.set(k, k, 1); lanceJ.lanceFore.scale.set(k, k, 1); } };
     }
     const j = new Jouster(scene, Object.assign({}, arms), 1, 0, kind === 'horse' ? HORSES[id] : HORSES.rouncey, kind === 'armour' ? harness(id) : kind === 'helm' ? harness('milanese', id) : Object.assign(harness('mail'), kind === 'horse' ? { noRig: true } : {}));
+    if (j.rig) j.rig.legs = null;      // (on the stand there is no horse to straddle: the legs hang as the clips pose them)
     j.update(0); tt.add(j.root); j.root.position.set(0, 0, 0);
     if (kind === 'horse') {
       // the horse alone, in your caparison

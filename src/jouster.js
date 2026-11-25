@@ -10,7 +10,7 @@ import { GFX } from './gfx.js';
 import { expect, progress, done } from './loadmeter.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RIG, KS, riderWanted, figureFor, buildRigRider, poseRig, armsRig } from './rider_rig.js';
+import { RIG, KS, riderWanted, figureFor, buildRigRider, poseRig, armsRig, fitLegs, legsRig, posePose } from './rider_rig.js';
 
 // The rigged horse (Quaternius, CC0). Loaded once; every rider gets his own skinned copy.
 // If it is missing the code-built horse is used instead.
@@ -19,10 +19,16 @@ const MODEL_SCALE = 0.52, MODEL_Z = -0.1;
 const SEAT_BACK = -0.08;      // the saddle sits this far (horse units) behind where the code-built one did: the rigged horse's shoulders are wider and higher, and the knees pushed into them
 const SEAT_RISE = 0.16;       // m: pelvis above the horse's back (saddle tree, pad and the padding of the armoured thigh) — measured, see shots/horses/probe.js
 let MODEL_WITHERS = 0;
-/** Height of the rigged horse's withers above the ground at scale 1 (metres, after MODEL_SCALE), measured once from its idle pose: the top of the
+// horse_new.glb (the modelled horse, 16 skinned parts with breed morphs) on high and medium; horse_smooth.glb (one coat mesh) on low. HORSE_NEW: the new one loaded.
+const MODEL_DIR = new URL('../assets/models/', import.meta.url).href;
+let HORSE_NEW = false, HORSE_SEAT = null;       // HORSE_SEAT: the file's own seat / withers numbers (model units, before MODEL_SCALE)
+const HORSE_COATS = {};                          // breed -> coat texture (the new horse's per-breed baked coats)
+/** Height of the rigged horse's withers above the ground at scale 1 (metres, after MODEL_SCALE). The new horse states its withers in its file (the coat's crest is
+ *  deeper than the withers there, so a measure of the top line over the shoulder reads high); the old one is measured once from its idle pose: the top of the
  *  spine over the shoulder bone (the coat mesh only, so the mane is not counted) above the lowest hoof. */
 function modelWithers() {
   if (MODEL_WITHERS) return MODEL_WITHERS;
+  if (HORSE_SEAT && HORSE_SEAT.withers) return MODEL_WITHERS = HORSE_SEAT.withers * MODEL_SCALE;
   const m = cloneSkinned(HORSE_MODEL.scene); m.scale.setScalar(MODEL_SCALE);
   const mx = new THREE.AnimationMixer(m), c = HORSE_MODEL.animations.find(a => a.name === 'Idle'); if (c) mx.clipAction(c).play(); mx.update(0);
   m.updateMatrixWorld(true);
@@ -31,7 +37,7 @@ function modelWithers() {
   const sh = m.getObjectByName('FrontShoulderL'), zs = sh ? sh.getWorldPosition(v.clone()).z : 0.7;
   m.traverse(o => {
     if (!o.isSkinnedMesh) return;
-    const coat = o.material.name === 'Main', P = o.geometry.attributes.position;
+    const mats = Array.isArray(o.material) ? o.material : [o.material], coat = mats.some(x => x.name === 'Main' || x.name === 'Coat'), P = o.geometry.attributes.position;
     for (let i = 0; i < P.count; i++) {
       o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); ground = Math.min(ground, v.y);
       if (coat && Math.abs(v.x) < 0.12 && Math.abs(v.z - zs) < 0.06) top = Math.max(top, v.y);
@@ -41,10 +47,24 @@ function modelWithers() {
 }
 const DRAPE_FIT = new Map();   // caparison fit per horse scale + girth: the rigged horse's top and half-width under each drape point
 // horse_smooth.glb: the Quaternius horse welded, subdivided twice and smooth-shaded in Blender (13 Nov), one coat material; same rig and clips.
-export async function preloadHorse(url = 'assets/models/horse_smooth.glb') {
-  expect('horse', 'boot', 2.6e6); expect('knight', 'boot', 2.2e6);
+export async function preloadHorse(url) {
+  expect('horse', 'boot', GFX.tier === 'low' ? 2.6e6 : 3.9e6); expect('knight', 'boot', 2.2e6);
   const knight = preloadKnight();      // (both models download side by side)
-  try { HORSE_MODEL = await new GLTFLoader().loadAsync(url, (e) => progress('horse', e)); } catch (e) { HORSE_MODEL = null; console.warn('horse model unavailable, using the built-in horse', e); }
+  const wantNew = !url && GFX.tier !== 'low' && new URLSearchParams(location.search).get('horse') !== 'old';      // ?horse=old: the smooth horse on any tier
+  const tryLoad = async (u, mgr) => new GLTFLoader(mgr).loadAsync(u, (e) => progress('horse', e));
+  HORSE_MODEL = null; HORSE_NEW = false; HORSE_SEAT = null; MODEL_WITHERS = 0;
+  if (wantNew) {
+    try {
+      // medium: the 512 textures (the file names them horse/<name>; they sit in horse/512/ too, all but the mane's hair texture)
+      const mgr = new THREE.LoadingManager(); if (GFX.tier === 'medium') mgr.setURLModifier((u) => u.replace(/\/horse\/(horse_(?:normal|coat_[a-z]+)\.(?:png|jpg))/, '/horse/512/$1'));
+      const g = await tryLoad(MODEL_DIR + 'horse_new.glb', mgr), seat = g.parser.json.scenes[0].extras && g.parser.json.scenes[0].extras.seat;
+      if (!seat) throw new Error('horse_new.glb carries no seat data');
+      HORSE_MODEL = g; HORSE_SEAT = seat; HORSE_NEW = true;
+      const tl = new THREE.TextureLoader(), dir = MODEL_DIR + (GFX.tier === 'high' ? 'horse/' : 'horse/512/');
+      await Promise.all(['destrier', 'courser', 'andalusian', 'rouncey'].map(b => new Promise((ok) => tl.load(`${dir}horse_coat_${b}.jpg`, (t) => { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = GFX.aniso || 4; HORSE_COATS[b] = t; ok(); }, undefined, () => ok()))));
+    } catch (e) { HORSE_MODEL = null; HORSE_NEW = false; HORSE_SEAT = null; console.warn('new horse unavailable, using the smooth horse', e); }
+  }
+  if (!HORSE_MODEL) { try { HORSE_MODEL = await tryLoad(url || MODEL_DIR + 'horse_smooth.glb'); } catch (e) { HORSE_MODEL = null; console.warn('horse model unavailable, using the built-in horse', e); } }
   done('horse');
   await knight;
   return !!HORSE_MODEL;
@@ -85,6 +105,29 @@ export async function preloadKnight(url = 'assets/models/knight_plate.glb') {
     if (!KNIGHT_PARTS.legs || !KNIGHT_PARTS.torso) KNIGHT_PARTS = null;
   } catch (e) { KNIGHT_PARTS = null; console.warn('knight model unavailable, using the built-in knight', e); }
   done('knight');
+}
+
+
+// the modelled horse's body volumes (PHYS.hitboxes horseChest / horseBarrel / horseQuarters were measured on the older model): capsule ends and radius in inner units
+// (the model's metres at MODEL_SCALE, before the breed's scale), measured on the barrel, haunch and shoulder over the gaits (shots/horsefit)
+const NEW_BODY = { horseChest: { a: [0, 1.45, 0.45], b: [0, 1.45, 0.78], r: 0.34 }, horseBarrel: { a: [0, 1.45, -0.5], b: [0, 1.45, 0.25], r: 0.41 }, horseQuarters: { a: [0, 1.5, -1.05], b: [0, 1.5, -0.65], r: 0.42 } };
+const SEAT_FWD_NEW = 0.03;     // m: the rider sits this far forward of the file's seat point (off the cantle's wrap)
+const SEAT_RISE_NEW = 0.115;   // m: pelvis above the new saddle's leather (the fauld and the padding of the thigh stand on it); see shots/horsefit
+const BAKED = new WeakMap();   // source geometry -> baked geometry per breed index
+/** A copy of a morphed geometry with breed `bi` applied (the file's morphs are relative offsets), without the morph targets: sharable, cheaper to draw. */
+function bakeBreed(geo, bi) {
+  let list = BAKED.get(geo); if (!list) BAKED.set(geo, list = []);
+  if (list[bi]) return list[bi];
+  const g = new THREE.BufferGeometry(); for (const k in geo.attributes) g.setAttribute(k, geo.attributes[k]);
+  g.setIndex(geo.index); geo.groups.forEach(gr => g.addGroup(gr.start, gr.count, gr.materialIndex));
+  for (const key of ['position', 'normal']) {
+    const base = geo.attributes[key], mt = geo.morphAttributes[key] && geo.morphAttributes[key][bi]; if (!base || !mt) continue;
+    const a = new Float32Array(base.count * 3), rel = geo.morphTargetsRelative;
+    for (let i = 0; i < a.length; i++) a[i] = rel ? base.array[i] + mt.array[i] : mt.array[i];
+    if (key === 'normal') for (let i = 0; i < a.length; i += 3) { const l = Math.hypot(a[i], a[i + 1], a[i + 2]) || 1; a[i] /= l; a[i + 1] /= l; a[i + 2] /= l; }
+    g.setAttribute(key, new THREE.BufferAttribute(a, 3));
+  }
+  list[bi] = g; return g;
 }
 
 const BY = 1.22;                 // barrel centre height (body pivot)
@@ -256,11 +299,11 @@ export class Jouster {
     this._vPlume = true; this._plumeGone = false; this._dirty = new Set(); this._shMarks = []; this._vN = 0; this._cut = 0; this._cutSide = 1; this._cloth = [];
     this._buildMaterials();
     this._buildHorse();
-    if (HORSE_MODEL) this._attachModelHorse();
+    if (HORSE_MODEL) { if (HORSE_NEW) this._attachNewHorse(); else this._attachModelHorse(); }
     // the horse's scale goes on before the rider is built: his hit volumes are placed in the finished frame
     const gx = this.hs * (horse.girth ?? 1);
     this.body.scale.set(gx, this.hs, this.hs); this.mount.scale.set(1 / gx, 1 / this.hs, 1 / this.hs);
-    this.seatY = 1.71 * this.hs; if (this.hasModel) this._seatOnBack();
+    this.seatY = 1.71 * this.hs; if (this.hasModel) { if (this.newHorse) this._seatOnNew(); else this._seatOnBack(); }
     this._buildRider();
     this.setPose(0);
   }
@@ -311,7 +354,7 @@ export class Jouster {
     const D = this._drapes || [], front = D[0], rear = D[1], plain = style === 'plain';
     for (const x of D) if (x.mesh) x.mesh.material = plain ? this.clothPlain : this.cloth;
     if (front) front.mesh.visible = style === 'livery' || plain;
-    if (rear) rear.mesh.visible = style !== 'none';
+    if (rear) rear.mesh.visible = this.newHorse ? style === 'half' : style !== 'none';      // the modelled horse wears one cloth (front); 'half' is its crupper piece alone
     for (const b of this._bosses || []) b.visible = style === 'livery';
   }
 
@@ -321,10 +364,12 @@ export class Jouster {
     pa.array.set(d.pos); pa.needsUpdate = true; D.cap.base.set(d.pos); D.mesh.geometry.computeVertexNormals(); D.st = st;
   }
 
-  _drapeData(st, hemBase, { closeStart = false, closeEnd = false, uRep = 1.6, hang = 0.3 } = {}) {
+  _drapeData(st, hemBase, { closeStart = false, closeEnd = false, uRep = 1.6, hang = 0.3, ns = 28, round = [0, 0] } = {}) {
     const curve = new THREE.CatmullRomCurve3(st.map(s => new THREE.Vector3(s[2], s[1], s[0])), false, 'catmullrom', 0.5);
-    const NS = 28, pts = curve.getPoints(NS - 1);
+    const NS = ns, pts = curve.getPoints(NS - 1);
     const ARC = 8, HANG = 8, half = ARC + HANG, cols = half * 2 + 1;
+    // st[i][3]: the cross-section the cloth must clear, y at x = hw * sin(th) for the nine arc columns (the new horse's body is not a quarter ellipse); rows lerp between points
+    const profAt = (f) => { if (!st[0][3]) return null; const p = f * (st.length - 1), k = Math.min(st.length - 2, Math.floor(p)), u = p - k; return st[k][3].map((y, j) => y + (st[k + 1][3][j] - y) * u); };
     const pos = [], uv = [], idx = [], wts = [];
     const z0 = st[0][0], z1 = st[st.length - 1][0];
     for (let i = 0; i < NS; i++) {
@@ -335,18 +380,24 @@ export class Jouster {
       // The hem used to alternate 5.5 cm up / down every single row (a 2-sample sawtooth): too fine to read as a cut, so on screen it was a
       // frayed, clipped edge, and the flutter pulled the teeth about. Now one broad, smooth swell per fold of the cloth.
       const dag = (0.5 + 0.5 * Math.cos(z * 17 + hemBase * 9)) * 0.045 * (1 - rise);
-      const hemY = lerp(hemBase + dag, top - hang - 0.12, rise * 0.55);
+      const prof = profAt(f), yEnd = prof ? prof[ARC] : top - hang;
+      const hemY = lerp(hemBase + dag, yEnd - 0.12, rise * 0.55);
       for (let j = 0; j < cols; j++) {
         const k = j - half, s = Math.sign(k), a = Math.abs(k);
         let x, y, w = 0;
-        if (a <= ARC) { const th = (a / ARC) * Math.PI / 2; x = Math.sin(th) * hw; y = top - (1 - Math.cos(th)) * hang; }
+        if (a <= ARC) { const th = (a / ARC) * Math.PI / 2; x = Math.sin(th) * hw; y = prof ? prof[a] : top - (1 - Math.cos(th)) * hang; }
         else {
           const t = (a - ARC) / HANG;
-          // broad hanging folds (two wavelengths, deeper toward the hem): the cloth has weight and drape, not a smooth skin
-          x = hw * (1 + 0.1 * t) + 0.025 * t + (Math.sin(z * 11 + s * 1.3 + hemBase * 5) * 0.022 + Math.sin(z * 23 + s * 2.1) * 0.01) * t * (0.4 + 0.6 * t);
-          y = lerp(top - hang, hemY, t); w = t;
+          // soft vertical folds: many small ones just under the top, fading as the cloth falls, and fewer, broader ones toward the hem (nothing at t = 0, so it lies on the body)
+          const fine = Math.sin(t * Math.PI) * Math.pow(1 - t, 0.6), broad = t * t;
+          x = hw * (1 + 0.1 * t) + 0.025 * t + (Math.sin(z * 21 + s * 1.3 + hemBase * 5) * 0.017 + Math.sin(z * 34 + s * 0.7) * 0.008) * fine + (Math.sin(z * 9 + s * 2.1 + hemBase * 3) * 0.04 + Math.sin(z * 14 + s * 0.4) * 0.015) * broad;
+          y = lerp(yEnd, hemY, t); w = t;
         }
-        pos.push(s * x, y, z); wts.push(w);
+        // rounded ends: below the top the cloth's end edge is cut back along a quarter circle, so the corners are soft, not square
+        let zz = z; const h = Math.max(0, top - y);
+        if (round[0] > 0 && z - z0 < round[0]) { const R = round[0], c = Math.min(h, R); zz = Math.max(z, z0 + R - Math.sqrt(R * R - (R - c) * (R - c))); }
+        if (round[1] > 0 && z1 - z < round[1]) { const R = round[1], c = Math.min(h, R); zz = Math.min(zz, z1 - (R - Math.sqrt(R * R - (R - c) * (R - c)))); }
+        pos.push(s * x, y, zz); wts.push(w);
         uv.push((z - z0) / (z1 - z0) * uRep, j / (cols - 1) * 2.6);
       }
     }
@@ -560,6 +611,97 @@ export class Jouster {
     this._fitDrapes();
   }
 
+
+  /**
+   * The modelled horse (horse_new.glb): sixteen skinned parts on the old rig, each with a morph per breed. Baked once per breed into plain skinned geometry
+   * (shared by every horse of that breed), dressed in the breed's coat texture and the mane colour, with the tack shown or hidden. The file's own caparison panels are
+   * left out: the game's procedural one (flutter, heraldry) is refitted to this body instead (_fitDrapesNew).
+   */
+  _attachNewHorse() {
+    const m = this.model = cloneSkinned(HORSE_MODEL.scene), H = this.horseDef, bi = Math.max(0, ['destrier', 'courser', 'andalusian', 'rouncey'].indexOf(H.id));
+    this.newHorse = true;
+    const mats = new Map(), dress = (src) => {
+      if (mats.has(src)) return mats.get(src);
+      const c = src.clone(), n = src.name;
+      if (n === 'Coat') { if (HORSE_COATS[H.id]) c.map = HORSE_COATS[H.id]; c.envMapIntensity = 0.6; c.roughness = 0.58; }
+      else if (n === 'Hair') { c.color.set(H.mane ?? 0x15110e).multiplyScalar(1.5).addScalar(0.01); c.alphaTest = 0.4; c.transparent = false; c.side = THREE.DoubleSide; c.envMapIntensity = 0.7; }
+      else if (n === 'Cloth') { c.color.set(this.arms.c1).multiplyScalar(0.75); c.envMapIntensity = 0.3; }
+      else if (n === 'Steel' || n === 'Brass') { c.envMapIntensity = 1.1; phoneMetal(c); }
+      else c.envMapIntensity = 0.5;
+      mats.set(src, c); return c;
+    };
+    // each part is a node: a SkinnedMesh, or a Group of them when it has several materials (the loader suffixes the names _1, _2)
+    const N = this.parts = {}, bare = (o) => o.name.replace(/_\d+$/, '');
+    for (const mesh of HORSE_MODEL.parser.json.meshes) {
+      let best = null;
+      m.traverse(o => { if (bare(o) === mesh.name && (o.isMesh || o.isGroup) && (!best || o.children.length > best.children.length)) best = o; });
+      if (best) N[mesh.name] = best;
+    }
+    m.traverse(o => {
+      if (!o.isMesh) return;
+      o.frustumCulled = false; o.receiveShadow = true;
+      const arr = Array.isArray(o.material); o.material = arr ? o.material.map(dress) : dress(o.material);
+      const g = o.geometry; if (g.morphAttributes && g.morphAttributes.position) { o.geometry = bakeBreed(g, bi); o.morphTargetInfluences = undefined; o.morphTargetDictionary = undefined; }
+    });
+    for (const [k, node] of Object.entries(N)) { const shadow = k === 'HorseBody' || k === 'Mane' || k === 'ManeHogged' || k === 'Tail' || k === 'Feathers' || k === 'Saddle'; node.traverse(o => { if (o.isMesh) o.castShadow = shadow; }); }
+    const show = (k, v) => { if (N[k]) N[k].visible = v; };
+    // the file's own caparison goes (it hangs stiff and lets the hooves through); mane long, the destrier's feathers, the rest of the tack on
+    for (const k of ['CaparisonFront', 'CaparisonRear', 'ManeHogged']) if (N[k]) { N[k].removeFromParent(); delete N[k]; }
+    for (const k of ['Saddle', 'Girth', 'BreastStrap', 'Crupper', 'Bridle', 'Bit', 'Reins']) show(k, true);
+    show('Mane', true); show('Feathers', H.id === 'destrier');
+    // the chanfron (a plate down the face) belongs to the later harnesses; the earlier periods ride without
+    show('Chanfron', ['stechzeug', 'milanese'].includes(this.armourDef.id));
+    show('Stirrups', true);      // (the rider's own irons hang on his foot bones: this node is hidden while he is up, see _tackUpdate)
+    const gx = (H.girth ?? 1);
+    m.scale.set(MODEL_SCALE * this.hs * gx, MODEL_SCALE * this.hs, MODEL_SCALE * this.hs); m.position.set(0, 0, MODEL_Z);
+    this.modelPivot = new THREE.Group(); this.modelPivot.position.z = -0.75; m.position.z += 0.75; this.modelPivot.add(m); this.root.add(this.modelPivot);
+    this.mixer = new THREE.AnimationMixer(m);
+    const clip = (name) => HORSE_MODEL.animations.find(a => a.name === name);
+    this.act = {};
+    for (const [k, name] of [['idle', 'Idle'], ['walk', 'Walk'], ['gallop', 'Gallop']]) { const c = clip(name); if (!c) continue; const a = this.mixer.clipAction(c); a.play(); a.setEffectiveWeight(k === 'idle' ? 1 : 0); this.act[k] = a; this.act[k + 'Len'] = c.duration; }
+    this.backBone = m.getObjectByName('Torso2') || m.getObjectByName('Torso') || m.getObjectByName('Back');
+    this.mixer.update(0); this.root.updateMatrixWorld(true);
+    this.backRest = this.root.worldToLocal(this.backBone.getWorldPosition(new THREE.Vector3())).y;
+    // the rider rides the saddle itself, not a bone: a few vertices of the saddle's top around the seat point are skinned each frame (the bone sits ~3 cm off the leather at the gallop)
+    { const S = HORSE_SEAT.seat_surface, found = [], p = new THREE.Vector3();
+      N.Saddle.traverse(o => { if (!o.isSkinnedMesh) return; const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) { p.fromBufferAttribute(P, i); const d = Math.hypot(p.x - S[0], p.z - S[2]); if (d < 0.35 && Math.abs(p.y - S[1]) < 0.1) found.push({ o, i }); } });
+      this.seatVerts = found.length > 24 ? found.filter((_, k) => k % Math.ceil(found.length / 24) === 0) : found; this.seatRest = this._seatSample(); }
+    // the reins: the model's own run from the bit to a fixed point at the bridle hand; a leather from that point to the rider's actual left hand (or the saddle bow) is drawn each frame
+    this.reinEnd = (() => { const bone = m.getObjectByName('Neck2') || m.getObjectByName('Neck1'), o = new THREE.Object3D(); bone.add(o); o.position.copy(bone.worldToLocal(m.localToWorld(new THREE.Vector3(...HORSE_SEAT.rein_hand)))); return o; })();
+    // hide the code-built animal; its invisible joints still carry the hit zones and hoof-fall timing
+    this.neck.visible = false; this.tail.visible = false; this.legs.forEach(L => { L.upper.visible = false; });
+    this.inner.children.forEach(c => { if (c.isMesh && (c.material === this.coat || c.material === this.clothPlain || c.material === leather)) c.visible = false; });
+    this.saddle.visible = false;
+    this.reins.forEach(r => { r.visible = false; });
+    this.hasModel = true;
+    this._fitDrapesNew();
+  }
+
+  /** Height (root frame) of the saddle's seat now: the mean of the skinned seat vertices. */
+  _seatSample() {
+    let y = 0; for (const { o, i } of this.seatVerts) { o.getVertexPosition(i, _v4); _v4.applyMatrix4(o.matrixWorld); y += this.root.worldToLocal(_v4).y; }
+    return y / (this.seatVerts.length || 1);
+  }
+
+  /** Show the stirrup irons of the horse only while nobody's own are hanging on it: in the stable, and after the rider has come off. */
+  _tackUpdate(off) {
+    const st = this.parts && this.parts.Stirrups; if (!st) return;
+    const v = !this.rider || !this.rider.parent || !!off;
+    if (st.visible !== v) st.visible = v;
+  }
+
+  /** Seat the rider on the new saddle from the file's own seat point (scenes[0].extras.seat: the leather's top at (0, y, z), model units before MODEL_SCALE). */
+  _seatOnNew() {
+    const hs = this.hs, S = HORSE_SEAT, k = MODEL_SCALE * hs;
+    this.body.position.y = BY * hs; this.mixer.update(0); this.root.updateMatrixWorld(true);
+    const leatherY = S.seat_surface[1] * k, zSeat = MODEL_Z + S.seat_surface[2] * k + SEAT_FWD_NEW;        // root frame, metres
+    this.backY = S.back_under_seat[1] * k; this.leatherY = leatherY;
+    this.tack.position.z = zSeat / hs - this.mount.position.z;
+    this.tack.position.y = (leatherY + SEAT_RISE_NEW) / hs - this.mount.position.y;
+    this.seatY = leatherY + SEAT_RISE_NEW;
+    this.pommel.position.set(0, (leatherY + 0.2) / hs - this.tack.position.y, (zSeat + 0.3 * hs) / hs - this.tack.position.z);
+  }
+
   /**
    * Rest the saddle on the rigged horse's real back. The saddle and the seat were built for the old code-built barrel, whose back was ~0.15 m lower
    * than the rigged horse's, so the rider sat inside the horse. Measure the coat's top line under the seat (idle pose, in the horse's own scale)
@@ -578,6 +720,84 @@ export class Jouster {
     this.tack.position.y = (top + SEAT_RISE) / hs - this.mount.position.y;
     this.saddle.position.y = (top + 0.02) / hs - 1.597;      // the saddle's underside (1.597 in the old horse's frame) on the back
     this.seatY = top + SEAT_RISE;
+  }
+
+
+  /**
+   * Cut the game's own caparison to the modelled horse. The model's body, crupper and breast strap are sampled in the inner frame (idle, trot and the gallop's phases),
+   * and each of the two pieces is given, per slice, the half-width and the outside-in upper envelope the cloth must clear (+ a margin), so it lies over the withers, the
+   * barrel and the croup without gaps, then hangs straight to near the fetlocks. The numbers are cached per breed (the shape depends on the breed's morph, scale and girth).
+   */
+  _fitDrapesNew() {
+    if (!this._drapes) return;
+    const H = this.horseDef, key = H.id + '|' + this.hs + '|' + (H.girth ?? 1);
+    let fit = DRAPE_FIT.get(key);
+    if (!fit) {
+      const hs = this.hs, gx = H.girth ?? 1, v = new THREE.Vector3(), skinned = [];
+      for (const k of ['HorseBody', 'Crupper', 'BreastStrap', 'Girth']) if (this.parts[k]) this.parts[k].traverse(o => { if (o.isSkinnedMesh) skinned.push(o); });
+      const Z0 = -1.3, Z1 = 1.25, DZ = 0.05, NZ = Math.round((Z1 - Z0) / DZ) + 1;
+      const slice = Array.from({ length: NZ }, () => []);       // per z slice: [|x|, y] samples (inner frame)
+      const A = this.act, setW = (i, g) => { A.idle.setEffectiveWeight(i); if (A.gallop) A.gallop.setEffectiveWeight(g); if (A.walk) A.walk.setEffectiveWeight(0); };
+      const sample = () => {
+        this.mixer.update(0); this.root.updateMatrixWorld(true);
+        const by = this.newHorse ? this._seatSample() - this.seatRest : this.root.worldToLocal(this.backBone.getWorldPosition(_v3)).y - this.backRest;       // (the body group rides this: see update)
+        for (const sm of skinned) {
+          const n = sm.geometry.attributes.position.count;
+          for (let i = 0; i < n; i++) {
+            sm.getVertexPosition(i, v); v.applyMatrix4(sm.matrixWorld); this.root.worldToLocal(v);
+            const x = Math.abs(v.x) / (hs * gx), y = (v.y - by) / hs, z = v.z / hs;
+            if (y < 1.0) continue;
+            const k = Math.round((z - Z0) / DZ); if (k >= 0 && k < NZ) slice[k].push(x, y);
+          }
+        }
+      };
+      setW(1, 0); this.mixer.setTime(0); sample();
+      if (A.gallop) { setW(0, 1); for (let i = 0; i < 6; i++) { this.mixer.setTime(A.gallopLen * i / 6); sample(); } }
+      setW(1, 0); this.mixer.setTime(0); this.mixer.update(0); this.root.updateMatrixWorld(true);      // back to the idle pose
+      // per slice: the half-width of the barrel (and the height of its widest point), and the outside-in envelope at x
+      const ARC = 8;
+      // under the saddle the cloth lies close on the back (the saddle's tree sits on it); fore and aft of the saddle it stands a hand off the body
+      const margin = (zc) => { const u = Math.min(1, Math.max(0, Math.min(zc + 0.55, 0.5 - zc) / 0.12)); return 0.035 + (0.013 - 0.035) * u * u * (3 - 2 * u); };
+      const at = (zc, k = 1) => {
+        const k0 = Math.round((zc - Z0) / DZ), pts = []; for (let q = k0 - 1; q <= k0 + 1; q++) if (slice[q]) pts.push(...slice[q]);
+        const M = margin(zc);
+        let w = 0, yw = 0, top = 0; for (let i = 0; i < pts.length; i += 2) { if (pts[i] > w) { w = pts[i]; yw = pts[i + 1]; } top = Math.max(top, pts[i + 1]); }
+        const hw = (w + 0.075) * k, prof = [];
+        for (let j = 0; j <= ARC; j++) { const x = hw * Math.sin(j / ARC * Math.PI / 2); let c = 0; for (let i = 0; i < pts.length; i += 2) if (pts[i] >= x - 0.02) c = Math.max(c, pts[i + 1]); prof.push(c + M); }
+        const yEnd = yw + 0.1; for (let j = 0; j <= ARC; j++) prof[j] = Math.max(prof[j], yEnd);
+        const cap = zc > 0.74 ? 2.0 : 1e9;      // over the neck's root the cloth lies on the shoulders and lets the neck stand through it (a neck hole), instead of wrapping the crest in a collar
+        for (let j = 0; j <= ARC; j++) prof[j] = Math.min(prof[j], cap);
+        for (let j = 1; j <= ARC; j++) prof[j] = Math.min(prof[j], prof[j - 1]);      // monotone down from the crest
+        return [zc, prof[0], hw, prof];
+      };
+      fit = { at }; DRAPE_FIT.set(key, fit);
+    }
+    // ONE cloth from the withers' neck-root to the tail, running under the saddle (livery / plain); the crupper alone is the 'half' style. Both are cut per slice from the body's
+    // own top line, so there are no square corners: the ends close in plan (the half's front edge tapers) and the hem sweeps up at the ends.
+    const lin = (a, b, n) => Array.from({ length: n + 1 }, (_, i) => a + (b - a) * i / n);
+    const sm = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+    const cuts = [
+      { zs: lin(-1.2, 1.1, 23), hem: 0.38, taper: (z) => 1, opts: { closeStart: true, closeEnd: true, ns: 72, uRep: 2, round: [0.2, 0.2] } },
+      { zs: lin(-1.2, -0.4, 8), hem: 0.4, taper: (z) => 0.5 + 0.5 * sm((-0.4 - z) / 0.24), opts: { closeStart: false, closeEnd: true, ns: 28, uRep: 1.3, round: [0.06, 0.22] } },
+    ];      // hem: inner units (x0.81 m at the destrier's scale)
+    const stOf = (c) => c.zs.map(z => fit.at(z, c.taper(z)));
+    {      // the full cloth has more rows than the old front panel: rebuild its mesh
+      const old = this._drapes[0], c = cuts[0];
+      old.mesh.removeFromParent(); old.mesh.geometry.dispose(); this.caps.splice(this.caps.indexOf(old.cap), 1); this._drapes.splice(0, 1);
+      this._drape(stOf(c), c.hem, c.opts); this._drapes.unshift(this._drapes.pop());
+    }
+    { const D = this._drapes[1], c = cuts[1]; D.hem = c.hem; D.opts = Object.assign({}, D.opts, c.opts); this._refitDrape(D, stOf(c)); }
+    this.setCaparison(this.caparison || 'livery');
+    // the gilded bosses stud the flank seam of the cloth (where it turns from the back to hang), fore and aft of the saddle
+    for (const b of this._bosses || []) b.removeFromParent();
+    this._bosses = [];
+    { const D = this._drapes[0], P = D.mesh.geometry.attributes.position, ARC = 8, HANG = 8, half = ARC + HANG, cols = half * 2 + 1, NSr = P.count / cols, c = cuts[0];
+      for (const zb of [-1.0, -0.88, -0.76, -0.64, 0.6, 0.72, 0.84, 0.96]) for (const sg of [-1, 1]) {
+        const row = Math.round((zb - c.zs[0]) / (c.zs[c.zs.length - 1] - c.zs[0]) * (NSr - 1)), j = half + sg * ARC, b = ball([0, 0, 0], 0.018, gold);
+        b.position.set(P.getX(row * cols + j) + sg * 0.004, P.getY(row * cols + j) - 0.004, P.getZ(row * cols + j));
+        this.inner.add(b); this._bosses.push(b);
+      } }
+    this.setCaparison(this.caparison || 'livery');
   }
 
   /** Re-cut the caparison so the rigged horse's back and flanks (idle and gallop poses) stay under the cloth. */
@@ -738,9 +958,12 @@ export class Jouster {
     // Placed by where they sit on the horse (root frame), then parented so they move with what they belong to.
     this.root.updateMatrixWorld(true);
     const at = (parent, p, r, name) => { const o = new THREE.Object3D(); parent.add(o); parent.updateMatrixWorld(true); o.position.copy(parent.worldToLocal(this.root.localToWorld(new THREE.Vector3(...p)))); return { o, r, name }; };
-    const hs = this.hs;
-    this.solids = this.zones.concat([
+    const hs = this.hs, kr = hs * (1 + (this.horseDef.girth ?? 1)) / 2;
+    this.solids = this.zones.concat(this.newHorse ? [
+      at(this.root, [0, 1.45 * hs, 0.62 * hs], 0.36 * kr, 'horse'), at(this.root, [0, 1.45 * hs, -0.1 * hs], 0.42 * kr, 'horse'), at(this.root, [0, 1.5 * hs, -0.85 * hs], 0.42 * kr, 'horse'),
+    ] : [
       at(this.root, [0, 1.25 * hs, 0.5 * hs], 0.34 * hs, 'horse'), at(this.root, [0, 1.22 * hs, -0.1 * hs], 0.36 * hs, 'horse'), at(this.root, [0, 1.28 * hs, -0.7 * hs], 0.34 * hs, 'horse'),
+    ]).concat([
       at(this.rider, [0.2, this.seatY - 0.13, 0.12], 0.14, 'leg'), at(this.rider, [-0.2, this.seatY - 0.13, 0.12], 0.14, 'leg'),
     ]);
     this._buildHitboxes();
@@ -791,9 +1014,11 @@ export class Jouster {
         const loop = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.0085, 6, 16), darkSteel); loop.position.y = -0.002; iron.add(loop);      // the eye of the iron, the foot passing through it
         const tread = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.008, 0.04), darkSteel); tread.position.y = -0.054; iron.add(tread);      // the flat tread under the ball of the foot
         const lea = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.0125, 1, 5), leather); lea.castShadow = true; rider.add(lea);
+        const lea2 = new THREE.Mesh(lea.geometry, leather); lea2.castShadow = true; lea2.visible = false; rider.add(lea2);      // (the lower run, when the leather has to turn out over the cloth)
         const top = new THREE.Object3D(); top.position.set(0, 0.056, 0); iron.add(top);
-        this._stir.push({ lea, top, bar: new THREE.Vector3(s * 0.29, -0.05, 0.3) });      // the saddle bar, in the rider's frame
+        this._stir.push({ lea, lea2, top, s, bar: new THREE.Vector3(s * 0.29, -0.05, 0.3) });      // the saddle bar, in the rider's frame
       } }
+    this._fitLegs();
     this._stirUpdate();
     // hit zone markers (radii in metres: the figure is KS times the old rider)
     const mk = (parent, p, r, name) => { const o = new THREE.Object3D(); o.position.set(...p); parent.add(o); return { o, r: r * (parent === this.head || parent === this.neck ? 1 : KS), name }; };
@@ -809,9 +1034,12 @@ export class Jouster {
     this._zr = [0.17 * KS, 0.25 * KS];
     this.root.updateMatrixWorld(true);
     const at = (parent, p, r, name) => { const o = new THREE.Object3D(); parent.add(o); parent.updateMatrixWorld(true); o.position.copy(parent.worldToLocal(this.root.localToWorld(new THREE.Vector3(...p)))); return { o, r, name }; };
-    const hs = this.hs;
-    this.solids = this.zones.concat([
+    const hs = this.hs, kr = hs * (1 + (this.horseDef.girth ?? 1)) / 2;
+    this.solids = this.zones.concat(this.newHorse ? [
+      at(this.root, [0, 1.45 * hs, 0.62 * hs], 0.36 * kr, 'horse'), at(this.root, [0, 1.45 * hs, -0.1 * hs], 0.42 * kr, 'horse'), at(this.root, [0, 1.5 * hs, -0.85 * hs], 0.42 * kr, 'horse'),
+    ] : [
       at(this.root, [0, 1.25 * hs, 0.5 * hs], 0.34 * hs, 'horse'), at(this.root, [0, 1.22 * hs, -0.1 * hs], 0.36 * hs, 'horse'), at(this.root, [0, 1.28 * hs, -0.7 * hs], 0.34 * hs, 'horse'),
+    ]).concat([
       at(this.rider, [0.2, this.seatY - 0.13, 0.12], 0.12, 'leg'), at(this.rider, [-0.2, this.seatY - 0.13, 0.12], 0.12, 'leg'),
     ]);
     this._buildHitboxes();
@@ -863,7 +1091,11 @@ export class Jouster {
       const rb = rebased[def0.name];
       let def = rb ? rb.def : def0;
       // the horse's body volumes were measured on a horse of scale 1 (the old courser) and are in metres from the ground: size them to this horse
-      if (def.on === 'root' && def.zone === 'horse') { const k = this.hs; def = Object.assign({}, def, { a: def.a.map(v => v * k), b: def.b.map(v => v * k), r: def.r * k, cr: def.cr * k }); }
+      if (def.on === 'root' && def.zone === 'horse') {
+        const k = this.hs, nv = this.newHorse && NEW_BODY[def.name];
+        if (nv) { const kr = k * (1 + (this.horseDef.girth ?? 1)) / 2; def = Object.assign({}, def, { a: nv.a.map(v => v * k), b: nv.b.map(v => v * k), r: nv.r * kr, cr: (nv.r + 0.04) * kr }); }      // (the modelled horse's own body: inner units, see NEW_BODY)
+        else def = Object.assign({}, def, { a: def.a.map(v => v * k), b: def.b.map(v => v * k), r: def.r * k, cr: def.cr * k });
+      }
       const parent = rb ? rb.parent : parts[def.on]; if (!parent) continue;
       const obb = def.shape === 'obb';
       // a volume moved onto the model's bones is what the OTHER man's lance hits; for keeping your own lance clear of your own horse the
@@ -1355,13 +1587,113 @@ export class Jouster {
     this.reach = r; this.rs = r / LANCE_REACH; const E = PHYS.lanceChain.edges;
     for (let i = 0; i < this.lc.length; i++) { this.lc[i].x0 = E[i] * this.rs; this.lc[i].x1 = E[i + 1] * this.rs; }
   }
-  /** The stirrup leathers: from the saddle bar (fixed to the rider) to the eye of the iron (on the foot). */
+  /**
+   * The caparison's cross-sections in the rider's frame at rest, for the legs: per row of the cloth (z), the half-profile from the crest out over the barrel and down the hang
+   * (x, y); dist(x, y, z) is the signed distance to that line in the row nearest z (+ outside the cloth). Built from the rest shape (the flutter is a few millimetres).
+   */
+  _clothProfile() {
+    const D = this._drapes && this._drapes[0]; if (!D || !this.newHorse) return null;
+    this.root.updateMatrixWorld(true); this.rider.updateWorldMatrix(true, false);
+    const m = new THREE.Matrix4().copy(this.rider.matrixWorld).invert().multiply(this.inner.matrixWorld), v = new THREE.Vector3(), b = D.cap.base;
+    const ARC = 8, HANG = 8, half = ARC + HANG, cols = half * 2 + 1, NS = b.length / 3 / cols, rows = [];
+    for (let i = 0; i < NS; i++) {
+      const xs = [], ys = []; let z = 0;
+      for (let j = half; j < cols; j++) { v.set(b[(i * cols + j) * 3], b[(i * cols + j) * 3 + 1], b[(i * cols + j) * 3 + 2]).applyMatrix4(m); xs.push(Math.abs(v.x)); ys.push(v.y); if (j === half) z = v.z; }
+      rows.push({ z, xs, ys });
+    }
+    rows.sort((p, q) => p.z - q.z);
+    const DENT_ARC = 0.012, DENT_HANG = (j) => 0.04 + 0.04 * Math.min(1, (j - ARC + 0.5) / HANG);      // how far the cloth may be pressed in: on the back (it lies a finger above the coat) and on the hang (a hand off the barrel)
+    const seg = (r, px, py, soft) => {      // signed distance to the half-profile of one row
+      let best = 1e9, sg = 1, al = 0;
+      for (let j = 0; j < r.xs.length - 1; j++) {
+        const ax = r.xs[j], ay = r.ys[j], dx = r.xs[j + 1] - ax, dy = r.ys[j + 1] - ay, l2 = dx * dx + dy * dy || 1e-9, t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2));
+        const qx = px - (ax + dx * t), qy = py - (ay + dy * t), d = Math.hypot(qx, qy);
+        if (d < best) { best = d; al = j < ARC ? DENT_ARC : DENT_HANG(j); sg = dx * (py - ay) - dy * (px - ax) >= 0 ? 1 : -1; }
+      }
+      return best * sg + (soft ? al : 0);
+    };
+    const at = (x, y, z, soft) => {
+      let lo = 0, hi = rows.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (rows[mid].z < z) lo = mid; else hi = mid; }
+      if (z < rows[0].z - 0.05 || z > rows[rows.length - 1].z + 0.05) return 1;
+      return seg(rows[z - rows[lo].z < rows[hi].z - z ? lo : hi], Math.abs(x), y, soft);
+    };
+    return { rows, dist: (x, y, z) => at(x, y, z, false), soft: (x, y, z) => at(x, y, z, true), DENT_ARC, DENT_HANG };
+  }
+  /** Splay the rider's legs out over the barrel and the cloth (rider_rig.js fitLegs), from this horse's own cloth. */
+  _fitLegs() {
+    const R = this.rig; this.clothFit = this._clothProfile(); if (!R || !this.clothFit) return;
+    this.legFit = fitLegs(this, R, this.clothFit);
+    this._dentCloth(this._riderPoints(), this.legFit.caps, 0.01, [-0.03, 0, 0.025]); this.clothFit = this._clothProfile();      // (the dented cloth is what the leathers clear)
+  }
+  /** Points on the rider's lower body (fauld and tassets, thighs, shins, feet: what lies against the cloth) in the rider's frame, in the pose he is in now. */
+  _riderPoints(step = 5) {
+    const R = this.rig, out = [], v = new THREE.Vector3(); this.rider.updateWorldMatrix(true, false);
+    posePose(R.P, R.bones, { couch: 0, raised: 0, stand: 0 }); legsRig(this, R); R.root.updateMatrixWorld(true);
+    R.root.traverse(o => {
+      if (!o.isSkinnedMesh || !o.visible || o === R.helmMesh) return;
+      const g = o.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, bn = o.skeleton.bones; o.skeleton.update();
+      for (let i = 0; i < g.attributes.position.count; i += step) {
+        let bi = 0, bw = 0; for (let k = 0; k < 4; k++) if (sw.getComponent(i, k) > bw) { bw = sw.getComponent(i, k); bi = si.getComponent(i, k); }
+        if (!/^(Left|Right)(UpLeg|Leg|Foot|ToeBase)$|^Hips$/.test(bn[bi].name)) continue;
+        o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); this.rider.worldToLocal(v); if (Math.abs(v.x) > 0.1) out.push(v.x, v.y, v.z);
+      }
+    });
+    return out;
+  }
+  /**
+   * The cloth gives way under the rider: every vertex of the caparison is pushed away from the points of his lower body (swept through the lifts his posting gives, so the
+   * dent is wide enough for the whole stride) until it clears by `clr`: at most DENT_ARC on the back (it lies a finger above the coat), DENT_HANG on the hang. Done once on the
+   * rest shape, so the flutter rides on top of it.
+   */
+  _dentCloth(pts, caps, clr, lifts) {
+    const D = this._drapes && this._drapes[0], F = this.clothFit; if (!D || !F) return;
+    this.rider.updateWorldMatrix(true, false); this.inner.updateWorldMatrix(true, false);
+    const m = new THREE.Matrix4().copy(this.rider.matrixWorld).invert().multiply(this.inner.matrixWorld), mi = m.clone().invert(), b = D.cap.base, pa = D.mesh.geometry.attributes.position;
+    const half = 16, cols = half * 2 + 1, v = new THREE.Vector3(), v0 = new THREE.Vector3(), q = new THREE.Vector3(), ab = new THREE.Vector3(), ap = new THREE.Vector3(), c2 = clr * clr; let moved = 0;
+    for (let i = 0; i < b.length; i += 3) {
+      const col = (i / 3) % cols, a = Math.abs(col - half), lim = a <= 8 ? F.DENT_ARC : F.DENT_HANG(a);
+      v0.set(b[i], b[i + 1], b[i + 2]).applyMatrix4(m); v.copy(v0);
+      if (Math.abs(v.x) < 0.02) continue;
+      for (let pass = 0; pass < 2; pass++) for (const dy of lifts) {
+        for (let k = 0; k < pts.length; k += 3) {
+          const dx = v.x - pts[k], ddy = v.y - pts[k + 1] - dy, dz = v.z - pts[k + 2], d2 = dx * dx + ddy * ddy + dz * dz;
+          if (d2 < c2 && d2 > 1e-10) { const d = Math.sqrt(d2), f = (clr - d) / d; v.x += dx * f; v.y += ddy * f; v.z += dz * f; }
+        }
+        for (const c of caps) {      // the thighs, shins and feet as capsules (the cloth may lie inside one: the points above are only its skin)
+          ab.subVectors(c.b, c.a); ap.copy(v).sub(c.a); ap.y -= dy; const t = Math.max(0, Math.min(1, ap.dot(ab) / (ab.lengthSq() || 1e-9)));
+          q.copy(c.a).addScaledVector(ab, t); q.y += dy; ap.subVectors(v, q); const d = ap.length(), need = c.r + clr - d;
+          if (need > 0 && d > 1e-6) v.addScaledVector(ap, need / d);
+        }
+      }
+      let dd = v.distanceTo(v0); if (dd < 1e-5) continue; if (dd > lim) { v.lerpVectors(v0, v, lim / dd); dd = lim; } if (dd < 1e-5) continue;
+      v.applyMatrix4(mi); b[i] = v.x; b[i + 1] = v.y; b[i + 2] = v.z; pa.array[i] = v.x; pa.array[i + 1] = v.y; pa.array[i + 2] = v.z; moved++;
+    }
+    pa.needsUpdate = true; D.mesh.geometry.computeVertexNormals(); this.dentN = moved;
+  }
+  /**
+   * The stirrup leathers: from the saddle bar (fixed to the rider) to the eye of the iron (on the foot). With the legs outside the cloth the straight run from the bar to the iron
+   * would cut through the cloth's shoulder, so where it does the leather turns out over it at one bend (two runs), clearing the cloth (this frame's cloth, at the rider's own offset from it).
+   */
   _stirUpdate() {
     if (!this._stir) return;
     this.rider.updateWorldMatrix(true, false);
+    const F = this.rider.parent === this.mount ? this.clothFit : null, Q = this.rider.matrix, T = _v, M = _v2, p = _v3, W = 0.0125 + 0.01;
+    const clear = (a, b, c) => {      // worst clearance of the run(s) and where: a -> b (-> c)
+      let worst = 1e9, wu = 0.5, wi = 0;
+      for (let leg = 0; leg < (c ? 2 : 1); leg++) { const from = leg ? b : a, to = leg ? c : (c ? b : b); for (let k = 1; k < 10; k++) { const u = k / 10; p.lerpVectors(from, to, u).applyMatrix4(Q); const d = F.dist(p.x, p.y, p.z) - W; if (d < worst) { worst = d; wu = u; wi = leg; } } }
+      return { worst, wu, wi };
+    };
     for (const S of this._stir) {
-      S.top.updateWorldMatrix(true, false); _v.setFromMatrixPosition(S.top.matrixWorld); this.rider.worldToLocal(_v); _v2.copy(_v).sub(S.bar);
-      const len = _v2.length() || 1e-3; S.lea.position.copy(S.bar).addScaledVector(_v2, 0.5); S.lea.scale.set(1, len, 1); S.lea.quaternion.setFromUnitVectors(Y, _v2.divideScalar(len));
+      S.top.updateWorldMatrix(true, false); T.setFromMatrixPosition(S.top.matrixWorld); this.rider.worldToLocal(T);
+      let bend = false;
+      if (F) {
+        let r = clear(S.bar, T); if (r.worst < 0) {
+          M.lerpVectors(S.bar, T, r.wu); bend = true;
+          for (let it = 0; it < 4 && r.worst < 0; it++) { M.x += S.s * (-r.worst * 1.5 + 0.004); r = clear(S.bar, M, T); }
+        }
+      }
+      const run = (mesh, a, b) => { _v4.subVectors(b, a); const len = _v4.length() || 1e-3; mesh.position.copy(a).addScaledVector(_v4, 0.5); mesh.scale.set(1, len, 1); mesh.quaternion.setFromUnitVectors(Y, _v4.divideScalar(len)); };
+      if (bend) { run(S.lea, S.bar, M); run(S.lea2, M, T); S.lea2.visible = true; } else { run(S.lea, S.bar, T); S.lea2.visible = false; }
     }
   }
   /** A fresh lance in the hand. */
@@ -1484,7 +1816,7 @@ export class Jouster {
       { const k = (0.35 + 0.65 * g) * amp * (1 - this.rear); if (this._neck[0]) this._neck[0].rotation.x -= 0.42 * k; if (this._neck[1]) this._neck[1].rotation.x -= 0.22 * k; }
       this.modelPivot.rotation.x = -this.rear * 0.62; this.modelPivot.position.y = this.rear * 0.1;
       this.root.updateMatrixWorld(true);
-      const by = this.root.worldToLocal(this.backBone.getWorldPosition(_v3)).y - this.backRest;
+      const by = this.newHorse ? this._seatSample() - this.seatRest : this.root.worldToLocal(this.backBone.getWorldPosition(_v3)).y - this.backRest;
       this.body.position.y = (BY + this.rear * 0.25) * this.hs + by;
       this.body.rotation.x = pitch * 0.5 - this.rear * 0.62;
       this.bob = by;
@@ -1530,6 +1862,7 @@ export class Jouster {
     this._reactStep(dt);
     { const sg = clamp(this.stag, -0.16, 0.16); this.body.rotation.z = sg; if (this.modelPivot) this.modelPivot.rotation.z = sg; }
     const off = this.replaying ? this.snapUnhorsed : this.unhorsed;
+    if (this.newHorse) this._tackUpdate(off);
     if (!off) {
       this.rider.position.y = -bob * 0.12 + g * amp * 0.035 * Math.sin(cyc + 3.4) + this.brace * 0.045;
       this.rider.position.z = this.brace * 0.07 + this.push;
@@ -1595,6 +1928,12 @@ export class Jouster {
     // reins: bit -> bridle hand (or the saddle bow once the rider is gone)
     const tgt = (this.replaying ? this.snapUnhorsed : this.unhorsed) ? this.pommel : this.hand;
     tgt.getWorldPosition(_v2); this.root.worldToLocal(_v2);
+    if (this.newHorse) {      // the model's reins end at a fixed point by the bridle hand; the leather runs on from there to the rider's actual left hand (the saddle bow once he is gone)
+      this.reinEnd.getWorldPosition(_v); this.root.worldToLocal(_v); _v3.subVectors(_v2, _v); const len = _v3.length(), r = this.reins[0];
+      r.visible = len > 0.03 && len < 1.2 && !!(this.rider && this.rider.parent || (this.replaying ? this.snapUnhorsed : this.unhorsed)); this.reins[1].visible = false;
+      if (r.visible) { r.position.copy(_v).addScaledVector(_v3, 0.5); r.scale.set(1, len, 1); r.quaternion.setFromUnitVectors(Y, _v3.divideScalar(len)); }
+      return;
+    }
     for (let i = 0; i < 2; i++) {
       this.bit[i].getWorldPosition(_v); this.root.worldToLocal(_v);
       const r = this.reins[i]; _v3.subVectors(_v2, _v); const len = _v3.length();

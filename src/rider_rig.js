@@ -142,7 +142,7 @@ function prepareFigure(gltf, id) {
 }
 
 /** Set every animated bone to the blend of the clips: Seated, toward LanceRaised by raised, toward Couch by couch, toward Stand by stand. */
-function posePose(P, bones, w) {
+export function posePose(P, bones, w) {
   const S = P.poses.Seated.Hips; if (S && S.position && bones.Hips) bones.Hips.position.fromArray(S.position);
   for (const a of P.anim) {
     const b = bones[a.name]; if (!b) continue;
@@ -262,9 +262,75 @@ export function poseRig(J, R) {
   // the helm's nod, turn and tilt (relative to the torso) go on the neck: the helm rides the Head bone, so the whole head follows
   { const b = R.bones.Neck; _q.setFromEuler(_e.set(H.x, H.y, H.z, 'YXZ')); b.quaternion.premultiply(_q); }
   // where the fist is: the grip, blended with the pose, in the lance frame (+ the jolt of the arm)
+  legsRig(J, R);      // the legs wrap the horse's barrel (additive on the clips; see fitLegs)
   const g = P.grips; R.gripNow.copy(g.seated).lerp(g.raised, w.raised).lerp(g.couch, w.couch);
   J.lance.position.copy(R.gripNow); J.lance.position.z += J.jZ * KS;
   R.root.updateMatrixWorld(true);
+}
+
+// ------------------------------------------------------------------------------------------------ the legs outside the cloth
+const _rq = new THREE.Quaternion(), _lq = new THREE.Quaternion(), _lq2 = new THREE.Quaternion(), _lq3 = new THREE.Quaternion(), _lz = new THREE.Vector3(0, 0, 1), _lx = new THREE.Vector3(1, 0, 0), _lup = new THREE.Quaternion(), _llg = new THREE.Quaternion(), _ldq = new THREE.Quaternion();
+/** The additive rotation of a leg bone, in the rider's frame: out by `ab` about the forward axis, after the hip has been flexed by `fl` (the thigh raised) about the lateral one. */
+const legQ = (out, ab, fl) => out.setFromAxisAngle(_lz, ab).multiply(_lq3.setFromAxisAngle(_lx, -fl));
+/** The same turn in the world: the rider's world rotation rq, then the turn about the rider's own axes. */
+const worldTurn = (out, rq, q) => out.copy(rq).multiply(q).multiply(_lq3.copy(rq).invert());
+/**
+ * The splay of the legs, added on top of the clips: R.legs = { a: [left, right], g: [left, right], f: [left, right] } (radians; positive a = the thigh swung out about the rider's
+ * forward axis, f = the thigh raised a little, g = the angle the lower leg hangs at, out from the vertical). The knee turns by whatever gets the shin to g, and the foot keeps the orientation the
+ * pose gave it, so it stays in the iron. fitLegs measures the angles per horse so that the thighs and shins stand outside the caparison.
+ * The splay fades as the rider goes limp (the Stand pose).
+ */
+export function legsRig(J, R) {
+  const L = R.legs, k = 1 - R.w.stand; if (!L || k < 0.001) return;
+  R.root.updateMatrixWorld(true); J.rider.getWorldQuaternion(_rq);
+  const rq = _rq, up_ = _lup, lg_ = _llg, dq = _ldq;
+  for (let i = 0; i < 2; i++) {
+    const side = i ? 'Right' : 'Left', s = i ? -1 : 1, B = R.bones, up = B[side + 'UpLeg'], kn = B[side + 'Leg'], ft = B[side + 'Foot'];
+    if (!up || !kn || !ft || (!L.a[i] && !L.g[i] && !L.f[i])) continue;
+    legQ(up_, s * L.a[i] * k, L.f[i] * k); legQ(lg_, s * L.g[i] * k, 0);
+    rotateWorld(up, worldTurn(dq, rq, up_)); up.updateMatrixWorld(true);
+    rotateWorld(kn, worldTurn(dq, rq, lg_.multiply(_lq2.copy(up_).invert()))); kn.updateMatrixWorld(true);      // (lg_ is spent after this)
+    legQ(lg_, s * L.g[i] * k, 0);
+    rotateWorld(ft, worldTurn(dq, rq, lg_.invert())); ft.updateMatrixWorld(true);
+  }
+}
+
+/**
+ * Find the leg pose that puts the thighs and shins outside the cloth. `cloth.dist(x, y, z)` is the signed distance from the cloth's surface (+ = outside; `cloth.soft` the same plus the depth the cloth can be dented there), in the rider's frame at rest
+ * (x across, y up, z forward; the cloth is symmetric, so the sign of x does not matter). The rider is posed seated when this is called. Each leg is sampled as capsules (thigh and
+ * poleyn, shin and greave, foot); `lift` are the vertical offsets between rider and cloth that posting and the gait cause. The cloth may be dented inward by up to `dent` under the leg
+ * (see Jouster._dentCloth); `cloth.soft` is the distance counting that depth. The cheapest pose is taken (the hip's swing a, the thigh raised by f, weighted), then the smallest shin angle
+ * g (within `gSpan`) that clears the shin and the foot. Returns { a, g, f, c: the clearance reached (undented), caps: the capsules at rest, for the dent }.
+ */
+export function fitLegs(J, R, cloth, o = {}) {
+  const clr = o.clr ?? 0.01, lift = o.lift ?? [-0.03, 0, 0.025], rT = o.rT ?? [[0.3, 0.094], [0.45, 0.092], [0.6, 0.088], [0.75, 0.09], [0.9, 0.092], [1, 0.098]], rS = o.rS ?? 0.06, rF = o.rF ?? 0.05, gSpan = o.gSpan ?? [0.02, 0.36], fMax = o.fMax ?? 0.3, fW = o.fW ?? 2;
+  R.legs = null; posePose(R.P, R.bones, { couch: 0, raised: 0, stand: 0 }); R.root.updateMatrixWorld(true); J.rider.updateWorldMatrix(true, false);
+  const at = (n) => J.rider.worldToLocal(R.bones[n].getWorldPosition(new THREE.Vector3()));
+  const res = { a: [0, 0], g: [0, 0], f: [0, 0], c: [0, 0], caps: [] }, qa = new THREE.Quaternion();
+  const need = clr, dist = cloth.soft || cloth.dist;      // (the cloth that can be dented counts for the dent's depth: see Jouster._dentCloth)
+  for (let i = 0; i < 2; i++) {
+    const side = i ? 'Right' : 'Left', H = at(side + 'UpLeg'), K = at(side + 'Leg'), A = at(side + 'Foot'), T = at(side + 'ToeBase'), s = Math.sign(K.x) || 1;
+    const d1 = K.clone().sub(H), d2 = A.clone().sub(K), d3 = T.clone().sub(A);
+    const rotT = (v, a, f) => v.clone().applyQuaternion(legQ(qa, s * a, f)), rotS = (v, g) => v.clone().applyQuaternion(legQ(qa, s * g, 0));
+    const clearance = (pts, dy) => { let m = 1e9; for (const [p, r] of pts) m = Math.min(m, dist(p.x, p.y + dy, p.z) - r); return m; };
+    const thigh = (a, f) => { const e = rotT(d1, a, f), pts = []; for (const [t, r] of rT) pts.push([H.clone().addScaledVector(e, t), r]); return { pts, K: H.clone().add(e) }; };
+    const shin = (a, f, g) => { const kk = thigh(a, f).K, e = rotS(d2, g), pts = []; for (const t of [0.1, 0.3, 0.5, 0.7, 0.9, 1]) pts.push([kk.clone().addScaledVector(e, t), rS]);
+      const an = kk.clone().add(e); pts.push([an.clone().addScaledVector(d3, 0.5), rF], [an.clone().add(d3), rF]); return { pts, K: kk, A: an }; };
+    let best = null;
+    for (let f = 0; f <= fMax + 1e-6; f += 0.02) for (let a = 0; a < 1.4; a += 0.02) {
+      const cost = a * a + (fW * f) * (fW * f); if (best && cost >= best.cost) continue;
+      const t = thigh(a, f); if (lift.every(dy => clearance(t.pts, dy) >= need)) best = { a, f, cost };
+    }
+    if (!best) best = { a: 1.4, f: fMax, cost: 9 };
+    const { a, f } = best; let g = gSpan[0]; for (; g < gSpan[1]; g += 0.01) { if (lift.every(dy => clearance(shin(a, f, g).pts, dy) >= need)) break; }
+    res.a[i] = a; res.g[i] = g; res.f[i] = f; res.c[i] = Math.min(...lift.map(dy => Math.min(clearance(thigh(a, f).pts, dy), clearance(shin(a, f, g).pts, dy))));
+    const th = thigh(a, f), sh = shin(a, f, g);
+    const cut = (A_, B_, r) => res.caps.push({ a: A_.clone(), b: B_.clone(), r });
+    for (let k = 0; k < rT.length - 1; k++) cut(H.clone().lerp(th.K, rT[k][0]), H.clone().lerp(th.K, rT[k + 1][0]), (rT[k][1] + rT[k + 1][1]) / 2);
+    cut(th.K, sh.A, rS); cut(sh.A, sh.A.clone().add(d3), rF);
+  }
+  R.legs = { a: res.a, g: res.g, f: res.f };
+  return res;
 }
 
 const _gm = new THREE.Matrix4(), _hq = new THREE.Quaternion(), _sq = new THREE.Quaternion(), _t = new THREE.Vector3(), _lw = new THREE.Vector3(), _ld = new THREE.Vector3();
