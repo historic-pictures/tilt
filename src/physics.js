@@ -52,7 +52,7 @@ export function lanceRadius(x) {
  * where those come out nearly equal, the grain (u, a random number for this lance) decides.
  * sinT: sine of the angle between the stroke and square (0 = dead square).
  */
-export function breakAt(sinT, u = Math.random()) {
+export function breakAt(sinT, u = Math.random(), rs = 1) {
   const B = PHYS.lanceBeam, n = 14, strut = [], lever = [];
   let ms = 0, ml = 0;
   for (let i = 0; i <= n; i++) {
@@ -65,7 +65,7 @@ export function breakAt(sinT, u = Math.random()) {
     const s = ((1 - sinT) * strut[i] / ms + sinT * lever[i] / ml) * (1 + B.flaw * Math.sin(u * 97.1 + i * 2.39));
     if (s > bs) { bs = s; best = i; }
   }
-  return lerp(B.from, B.to, best / n);
+  return lerp(B.from, B.to, best / n) * rs;      // (rs: this lance's length over the 2.8 m the numbers are written for; a longer lance fails proportionally farther out)
 }
 
 /**

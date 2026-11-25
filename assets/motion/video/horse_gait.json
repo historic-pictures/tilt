@@ -1,0 +1,17 @@
+{
+  "source": "shots/mocap/for_rokoko/b2_A_white_charge_lance_couched.mp4 (Bolsover Castle (2), CC BY 2.0), 4.0 s after clip start, 24 fps",
+  "status": "PRELIMINARY. One clip, about 1.3 s (about 3 strides) of clean tracking. Pose landmarker not run (model file not approved for download), so rider body bounce is from a CSRT-tracked helmet box, not hips.",
+  "stride_frequency_Hz": { "value": 2.2, "range": [2.1, 2.3], "method": "Helmet vertical position (OpenCV CSRT box, camera follows the rider so vertical is mostly free of pan). Successive helmet-height minima 11 and 10 frames apart (0.46 s, 0.42 s) over frames 0-31 of the window. tools/mocap/gait_track.py's FFT gave 2.27 Hz over a 45-frame window that included the tracker degrading." },
+  "gait_type": "fast canter / gallop (about 2.2 strides/s). Contact sheet shows a clear gathered phase with the legs bunched under the body once per stride and a leading-leg asymmetry; the exact hoof-fall order (3-beat canter vs 4-beat gallop) could not be read reliably at 24 fps with motion blur.",
+  "hoof_fall_sequence": "NOT reliably measured. Frame-by-frame sheet shows for one stride (11 frames): frames 0-2 forelegs reaching forward, hind legs under the belly; frames 5-7 hind legs on the ground pushing off; frames 8-10 legs gathered (suspension). Only a qualitative description; do not use as phase offsets.",
+  "rider_bounce_px": { "value": "about 10-12 px peak-to-peak in the first 30 frames (rider about 130 px tall in frame, so roughly 7-9 cm, helmet-to-seat scale about 0.8 m per 70 px)", "method": "Peak-to-peak of CSRT helmet y. Rough; includes camera operator's vertical wobble." },
+  "head_bob_relative_to_withers": { "value": null, "method": "Horse-head CSRT track lost the head (confusion with the rail posts and crowd); no number reported." },
+  "rider_vs_horse_phase": { "value": null, "method": "Needs a reliable horse-head or withers track; not available." },
+  "game_current": {
+    "stride_Hz": "phase += dt * (0.72 + 0.17 * speed) strides/s, so 2.0-2.2 Hz at 7.5-8.7 m/s (src/jouster.js:1295; comment says film: 2.0 at about 7 m/s)",
+    "horse_body_bob_m": "0.1 * amp * g * sin(...), about 0.1 m amplitude, 0.2 m peak-to-peak at full gallop (jouster.js:1319)",
+    "rider_bounce_m": "-0.12 * bob + 0.035 * sin(...), about 0.047 m amplitude (about 9 cm peak-to-peak) at full gallop (jouster.js:1382)",
+    "gallop_leg_offsets": "GALLOP_OFF = [0.40, 0.52, 0.0, 0.12] (jouster.js:176)"
+  },
+  "comparison": "Measured 2.2 Hz is in line with the game's 2.0-2.2 Hz at gallop speed, and the measured rider bounce (about 7-9 cm p2p) is the same order as the game's roughly 9 cm. No evidence from this footage to change either. Not enough data for the offsets."
+}

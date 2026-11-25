@@ -4,13 +4,14 @@ import * as THREE from 'three';
 import { GFX } from './gfx.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Jouster } from './jouster.js';
+import { RIG, preloadRider, HARNESSES, HELMS } from './rider_rig.js';
 import { HORSES, ARMOURS, LANCES, harness } from './data.js';
 
 const BW = 560, BH = 360;            // drawing buffer; every preview is drawn into a corner of it
 const SPIN = 0.55;                   // radians per second
 
 export function createPreviews() {
-  let renderer = null, scene, cam, items = new Map(), queue = [], armsKey = '', ang = 0, skip = 0, lanceJ = null;
+  let askedRig = false, renderer = null, scene, cam, items = new Map(), queue = [], armsKey = '', ang = 0, skip = 0, lanceJ = null;
   const _t = new THREE.Vector3();
 
   function init() {
@@ -34,25 +35,36 @@ export function createPreviews() {
     if (kind === 'lance') {
       // one rider's lance serves all three; only its girth changes
       if (!lanceJ) {
-        lanceJ = new Jouster(scene, Object.assign({}, arms), 1, 0, HORSES.rouncey, harness('milanese')); lanceJ.update(0); scene.remove(lanceJ.root);
+        lanceJ = new Jouster(scene, Object.assign({}, arms), 1, 0, HORSES.rouncey, Object.assign(harness('milanese'), { noRig: true })); lanceJ.update(0); scene.remove(lanceJ.root);
         const tilt = lanceJ.tilt = new THREE.Group(); tilt.rotation.x = -0.3; tilt.add(lanceJ.lance);
         lanceJ.lance.position.set(0, 0, -0.925); lanceJ.lance.quaternion.identity(); lanceJ.lance.scale.setScalar(1);
       }
       const k = LANCES[id].scale;
       return { tt, look: [0, 0, 0], dist: 4.5, fov: 20, pre: () => { tt.add(lanceJ.tilt); lanceJ.lance.children[0].scale.set(k, k, 1); lanceJ.lanceFore.scale.set(k, k, 1); } };
     }
-    const j = new Jouster(scene, Object.assign({}, arms), 1, 0, kind === 'horse' ? HORSES[id] : HORSES.rouncey, kind === 'armour' ? harness(id) : kind === 'helm' ? harness('milanese', id) : harness('mail'));
+    const j = new Jouster(scene, Object.assign({}, arms), 1, 0, kind === 'horse' ? HORSES[id] : HORSES.rouncey, kind === 'armour' ? harness(id) : kind === 'helm' ? harness('milanese', id) : Object.assign(harness('mail'), kind === 'horse' ? { noRig: true } : {}));
     j.update(0); tt.add(j.root); j.root.position.set(0, 0, 0);
     if (kind === 'horse') {
       // the horse alone, in your caparison
       j.rider.parent.remove(j.rider); j.root.updateMatrixWorld(true);
       return Object.assign({ tt, j, fov: 26, lift: 0.35, tick: (dt) => j.update(dt) }, frame(j, j.root, 0.78));
     }
+    if (kind === 'helm' && j.rig) {
+      // the rigged rider's helm alone (its own mesh on the Head bone, or the separate piece)
+      const h = j.rig.helmMesh; j.root.updateMatrixWorld(true);
+      onlyShow(j, o => o === j.rig.helmMesh || under(o, j.helm)); if (h) h.visible = true;
+      return Object.assign({ tt, j, fov: 24, lift: 0.1 }, frame(j, h, 1.3));      // (a little roomier: the plume stands above the helm)
+    }
     if (kind === 'helm') {
       // the helm alone
       j.root.updateMatrixWorld(true);
       onlyShow(j, o => under(o, j.helm));
       return Object.assign({ tt, j, fov: 24, lift: 0.1 }, frame(j, j.helm, 1.0));
+    }
+    if (j.rig) {      // the rigged rider on the stand, helm and all (no lance)
+      j.lance.visible = false; j.lance.scale.setScalar(1e-4); j.update(0); j.root.updateMatrixWorld(true);      // (no lance: out of sight and out of the measuring)
+      onlyShow(j, o => under(o, j.rider));
+      return Object.assign({ tt, j, fov: 26, lift: 0.12 }, frame(j, j.rider, 0.8));
     }
     // harness: body, arms and shield without the helm, as on an armourer's stand
     j.torso.remove(j.lance); j.torso.remove(j.helm); j.root.updateMatrixWorld(true);
@@ -61,7 +73,8 @@ export function createPreviews() {
   }
   /** Centre the thing on its turntable and measure it, so the camera can stand back just far enough. */
   function frame(j, obj, k) {
-    const b = new THREE.Box3().setFromObject(obj), c = b.getCenter(new THREE.Vector3()), sz = b.getSize(new THREE.Vector3());
+    if (j.rig) j.rig.root.traverse(o => { if (o.isSkinnedMesh) o.skeleton.update(); });      // (a posed, skinned figure: measure the vertices as they stand)
+    const b = new THREE.Box3().setFromObject(obj, !!j.rig), c = b.getCenter(new THREE.Vector3()), sz = b.getSize(new THREE.Vector3());
     j.root.position.x -= c.x; j.root.position.z -= c.z;
     return { look: [0, c.y, 0], h: sz.y * k, wide: Math.max(sz.x, sz.z) * k };
   }
@@ -76,7 +89,8 @@ export function createPreviews() {
     const cvs = root.querySelectorAll('canvas.pv');
     if (!cvs.length) return;
     if (!renderer) init();
-    const key = JSON.stringify(arms);
+    if (!askedRig) { askedRig = true; preloadRider({ armour: HARNESSES, helm: HELMS, lance: ['standard'] }); }      // every harness and helm the armoury shows
+    const key = JSON.stringify(arms) + (RIG.ready ? '|rig' + RIG.figs.size + RIG.helms.size : '');      // (the rigged rider arrives in the background: build the cards again when it has)
     if (key !== armsKey) { armsKey = key; drop(); }
     ang += dt * SPIN;
     // build at most one preview a frame, so opening the armoury never stalls

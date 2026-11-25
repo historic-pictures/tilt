@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { BVHLoader } from 'three/addons/loaders/BVHLoader.js';
 
-const DIR = 'assets/motion/kimodo/';
+const DIRS = ['assets/motion/kimodo/', 'assets/motion/video/'];   // video/ = clips solved from real jousting footage (tools/mocap)
+const dirOf = f => f.startsWith('video/') ? DIRS[1] : DIRS[0];
+const pathOf = f => dirOf(f) + f.replace(/^video\//, '');
 const $ = id => document.getElementById(id);
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -190,7 +192,7 @@ function setCam(name) {
 }
 
 async function loadClip(file) {
-  const text = await (await fetch(DIR + file)).text();
+  const text = await (await fetch(pathOf(file))).text();
   S.name = file; S.t = 0;
   const rm = $('root').checked;
   S.dur = fig1.load(text, rm);
@@ -204,7 +206,8 @@ async function loadClip(file) {
 }
 
 (async () => {
-  const list = await (await fetch(DIR + 'index.json')).json();
+  const list = (await (await fetch(DIRS[0] + 'index.json')).json());
+  try { for (const f of await (await fetch(DIRS[1] + 'index.json')).json()) list.push('video/' + f); } catch (e) { /* no video clips yet */ }
   const sel = $('clip');
   for (const f of list) { const o = document.createElement('option'); o.value = f; o.textContent = f.replace(/\.bvh$/, ''); sel.appendChild(o); }
   sel.onchange = () => loadClip(sel.value);

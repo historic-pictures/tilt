@@ -67,7 +67,7 @@ export function packRider(j, extra) {
   const p = j.root.position, o = {
     t: 's', x: r2(p.x), z: r2(p.z), ry: r3(j.root.rotation.y), rz: r3(j.root.rotation.z), sp: r2(j.speed), d: j.dir, ll: r2(j.lanceLower), ax: r3(j.aimLocal.x), ay: r3(j.aimLocal.y), az: r3(j.aimLocal.z),
     br: r2(j.brace), gd: r2(j.guard), rs: r2(j.raiseT), lk: r2(j.look), vu: j.visorUp ? 1 : 0, ho: j.helmOff ? 1 : 0, re: r2(j.rear), ag: r2(j.agit || 0), lb: j.lanceBroken ? 1 : 0, u: j.unhorsed ? 1 : 0 };
-  if (j.unhorsed) { const q = j.rider.quaternion, rp = j.rider.position; o.rp = [r2(rp.x), r2(rp.y), r2(rp.z)]; o.rq = [r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; o.tx = r2(j.torso.rotation.x); }
+  if (j.unhorsed) { const q = j.rider.quaternion, rp = j.rider.position; o.rp = [r2(rp.x), r2(rp.y), r2(rp.z)]; o.rq = [r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; o.tx = r2(j.torsoD.rotation.x); }
   return Object.assign(o, extra);
 }
 /** A sample that arrived, checked field by field; null if it is rubbish. */
@@ -114,7 +114,7 @@ export function applyRider(j, s) {
   j.speed = s.sp; j.lanceLower = s.ll; j.aimLocal.set(s.ax, s.ay, s.az).normalize(); j.brace = s.br; j.guard = s.gd; j.raiseT = s.rs; j.look = s.lk; j.rear = s.re; j.agit = s.ag;
   j.visorUp = !!s.vu; j.helmOff = !!s.ho;
   if (j.unhorsed && s.u && s.rp) {
-    j.rider.position.set(-s.rp[0], s.rp[1], -s.rp[2]); _q.set(s.rq[0], s.rq[1], s.rq[2], s.rq[3]).normalize(); j.rider.quaternion.copy(_yaw).multiply(_q); j.torso.rotation.x = s.tx;
+    j.rider.position.set(-s.rp[0], s.rp[1], -s.rp[2]); _q.set(s.rq[0], s.rq[1], s.rq[2], s.rq[3]).normalize(); j.rider.quaternion.copy(_yaw).multiply(_q); j.torsoD.rotation.x = s.tx;
   }
 }
 export const mirrorVec = (v) => [-v[0], v[1], -v[2]];

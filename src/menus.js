@@ -360,7 +360,7 @@ export function initMenus(api) {
       <div class="actions"><button class="btn primary" data-go="main">Back</button></div></div>
       <div class="two"><div><h5>Controls</h5><div class="keys">
         <kbd>W</kbd><span>Before the course: raise your lance to show you are ready, then wait for the marshal's call and tap again to ride. While riding, each tap climbs a gait: walk, trot, canter, gallop. At the gallop, tap in time with the stride (the pulsing ring) to keep him collected.</span>
-        <kbd>H</kbd><span>Raise or lower your visor (bascinet and armet). A raised visor gives a clear view, but a blow to the helm hurts twice as much. With a great helm or frog-mouth, take the helm off or put it on between courses.</span>
+        <kbd>H</kbd><span>Take your helm off or put it on, between courses. (On the low-detail rider a bascinet or armet has a visor to raise instead: a raised visor gives a clear view, but a blow to the helm hurts twice as much.)</span>
         <kbd>S</kbd><span>Rein in — hold to drop a gait.</span>
         <kbd>A · D</kbd><span>Steer toward or away from the tilt. Ride close, but strike the barrier and it costs you.</span>
         <kbd>Left mouse</kbd><span>Hold to lower and couch the lance. Release to raise it.</span>

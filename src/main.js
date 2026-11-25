@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld, LANE_X, START_Z, LIST_HALF } from './world.js';
-import { Jouster, LANCE_REACH, preloadHorse } from './jouster.js';
+import { Jouster, preloadHorse } from './jouster.js';
+import { preloadRider, rigHas, RIG } from './rider_rig.js';
 import { FX } from './fx.js';
 import { clamp, lerp, damp, smoothstep, wobble, drawCrest, TAU } from './util.js';
 import { purse, HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, modeKit, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
@@ -132,6 +133,7 @@ const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: GFX.antialias, powerPreference: GFX.tier === 'low' ? 'default' : 'high-performance' });
 renderer.setPixelRatio(GFX.pixelRatio());      // by graphics tier (src/gfx.js); high is what it always was: phones 1.25 at most, desktops 1.75
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.localClippingEnabled = true;      // (a broken rigged lance is cut off at the break by a clip plane)
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.72;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
@@ -653,18 +655,24 @@ function bridgeRestoreHarness(k) {
 }
 
 let preparing = false;
+/** What the rigged riders of a match need (player and opponent: harness, helm, lance ids). An online friend's come from his profile (NET.od): both screens must build the same lance for him, since its length is his reach. */
+function rigWant(oppId, onl) {
+  const k = (onl && NET.od) || (oppId && (KNIGHTS.find(x => x.id === oppId) || FIELD.find(x => x.id === oppId))) || null;
+  return { armour: [profile.armour, k && k.armour], helm: [profile.helm, k && (k.helm || (ARMOURS[k.armour] || {}).helm)], lance: [profile.lance || 'standard', k && k.lance] };
+}
 /** Start a match. If the trees and props are still arriving in the background, wait for them behind "Preparing the lists…" rather than build the venue without them. */
 function startMatch(...args) {
   const sky = args[3] ? null : (VENUES[args[0]] || {}).sky;      // (the practice meadow has no photographed sky)
   const skyIn = !sky || !SCANS.skies[sky] || (SCANS.sky.get(sky) && SCANS.sky.get(sky).tex) || SCANS.sky.get(sky) === null;      // this venue's sky is in memory (or it has none / failed to load)
-  if (SCANS.ready && skyIn) return startMatchNow(...args);
+  const rigIn = rigHas(rigWant(args[1], args[7]));      // the rigged rider (about 2 MB, fetched in the background after the menu) has arrived or failed
+  if (SCANS.ready && skyIn && rigIn) return startMatchNow(...args);
   if (preparing) return;
   preparing = true; const el = $('preparing'), txt = $('prepTxt'); el.classList.remove('hidden');
   const paint = () => { const st = loadStats('bg'); txt.textContent = `${Math.round(st.frac * 100)}%  ·  ${mb(st.loaded)} of ${mb(st.total)} MB`; };
   paint(); const iv = setInterval(paint, 150);
   // the venue's photographed sky is waited for too: built without it the lists show a murky, dark half-lit scene until it arrives (the sky and the lighting come from it)
   const skyP = sky ? loadSky(sky, 'bg') : Promise.resolve(null);
-  Promise.race([Promise.all([SCANS.pending || preloadScans(), skyP]), new Promise(r => setTimeout(r, 45000))]).catch(() => {}).then(() => {      // (after 45 s it goes ahead without them)
+  Promise.race([Promise.all([SCANS.pending || preloadScans(), skyP, preloadRider(rigWant(args[1], args[7]))]), new Promise(r => setTimeout(r, 45000))]).catch(() => {}).then(() => {      // (after 45 s it goes ahead without them)
     clearInterval(iv); preparing = false; el.classList.add('hidden');
     const s = sky && SCANS.sky.get(sky);
     if (s && s.tex && world && !world.photoSky && worldKey === args[0]) worldKey = -99;      // a world built earlier without this sky: build it again with it
@@ -698,6 +706,7 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
     dr: { heavy: [0, 0], drops: [0, 0], swapped: [false, false], batterAt: -9, dazeT: 0, dazeDur: 1, dazeK: 0, oDazeT: 0, cond: ['FIT', 'FIT'], yielded: false },      // drama (see PHYS.drama): heavy blows taken, lances dropped, spare helm used, the daze, the last condition
     stats: [0, 1].map(() => ({ broken: 0, attaint: 0, helm: 0, miss: 0, top: 0, best: 0 })), tech: { sight: 0, lance: 0, horse: 0, will: 0, n: 0 } };
   if (circuit && !onl && !practice && !bridge) { const dt = career.describe(profile); if (dt && dt.opp === od.id) M.tourn = dt; }      // a knockout tournament: the round, and what is at stake
+  for (const j of [player, opp]) if (j && j.setTip) j.setTip(!!mode.sharp);      // sharp lances (Scharfrennen) wear the war tip, the rest the coronel
   if (onl) { M.mid = NET.mid; M.oppRid = LOBBY.friend ? LOBBY.friend.rid : ''; }
   if (account.signedIn() && !practice && !onl) {      // a signed-in player's match is timed and paid by the server: it starts its own clock now (a bridge is one match across its bouts)
     if (M.bridge && M.bridge.spId) M.spId = M.bridge.spId;
@@ -819,8 +828,9 @@ function spur() {
 function toggleVisor() {
   if (!M || !C || !player || S.paused || C.beat || player.unhorsed || !['ready', 'charge', 'after'].includes(S.mode)) return;
   if (player.visor) { player.visorUp = !player.visorUp; return; }
-  const name = player.armourDef.helm === 'frogmouth' ? 'A frog-mouth' : 'A great helm';
-  if (S.mode !== 'ready') { callout(`${name} has no visor — take it off between courses`, 'bad'); return; }
+  // (the rigged helms are one piece with no visor to lift: for them H is only helm off / helm on, whatever the pattern)
+  const name = { frogmouth: 'A frog-mouth', greathelm: 'A great helm', bascinet: 'This bascinet', armet: 'This armet' }[player.armourDef.helm] || 'This helm';
+  if (S.mode !== 'ready') { callout(`${name} has no visor to lift — take it off between courses`, 'bad'); return; }
   player.helmOff = !player.helmOff;
   callout(player.helmOff ? 'YOUR SQUIRE TAKES YOUR HELM' : 'HELM ON', 'good');
 }
@@ -1632,8 +1642,8 @@ function collideFrame(dt) {
 }
 function resolveLances(e) {
   C.crossed = true;
-  const CH = PHYS.lanceChain, P = player, O = opp, tipPart = (P.lcPoint === e.i && O.lcPoint === e.j), cap = LANCE_REACH - CH.capX;
-  const coronel = tipPart && e.xa >= cap && e.xb >= cap;          // both contacts within the last few cm of each lance: point to point
+  const CH = PHYS.lanceChain, P = player, O = opp, tipPart = (P.lcPoint === e.i && O.lcPoint === e.j), capP = P.reach - CH.capX, capO = O.reach - CH.capX;
+  const coronel = tipPart && e.xa >= capP && e.xb >= capO;          // both contacts within the last few cm of each lance: point to point
   if (coronel) { C.coronel = true; callout('CORONEL TO CORONEL', 'good'); }
   logPhys('p', coronel ? 'coronel' : 'lance', e, null);
   _hn.set(e.n[0], e.n[1], e.n[2]);                                // from his shaft to yours
@@ -1660,7 +1670,7 @@ function resolvePoint(e, evs, dt) {
   _hn.set(e.n[0], e.n[1], e.n[2]);
   const geo = { m: clamp(L / h.cr, 0, 1), dir: _b.clone(), out: _ho.clone(), centre: _hd.clone(), r: h.cr, n: _hn.clone(), p: new THREE.Vector3(e.p[0], e.p[1], e.p[2]), part: e.part };
   logPhys(isP ? 'p' : 'o', 'point', e, cent);
-  { const q = e.q, k = e.toi, ext = LANCE_REACH - PHYS.lanceChain.edges[PHYS.lanceChain.edges.length - 1];      // where the visible tip was at the instant of contact: the chain stops 4 cm short of the coronel's end, so go on along the shaft
+  { const q = e.q, k = e.toi, ext = Aj.reach - Aj.lc[Aj.lc.length - 1].x1;      // where the visible tip was at the instant of contact: the chain stops 4 cm short of the coronel's end, so go on along the shaft
     const end = (c) => { const dx = c.bx - c.ax, dy = c.by - c.ay, dz = c.bz - c.az, l = Math.hypot(dx, dy, dz) || 1; return [c.bx + dx / l * ext, c.by + dy / l * ext, c.bz + dz / l * ext]; };
     const a = end(q.p), b = end(q.c);
     HG = { tip: [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k], t: C.t - dt * (1 - k), p: e.p.slice() }; }
@@ -1759,7 +1769,7 @@ function fxSparks(p, n, s) { fx.sparks(p, n, s); if (C && !R) C.rec.ev.push({ t:
 
 /** The lance a rider carries this match: the type may fix a heavier one (the Rennen lance), which also tires the arm faster. */
 function lanceOf(isP) {
-  const id = isP ? (profile.lance || 'standard') : 'standard', b = PHYS.lance[id], kg = Math.max(b.kg, M ? M.kit.lanceKgMin : 0);
+  const id = (isP ? profile.lance : M && M.od && M.od.lance) || 'standard', b = PHYS.lance[id], kg = Math.max(b.kg, M ? M.kit.lanceKgMin : 0);
   return { kg, breakJ: b.breakJ, fatigue: LANCES[id].fatigue * kg / b.kg };
 }
 function fxPiece(p, q, sx, sy, sz, vel) { fx.piece(p, q, sx, sy, sz, vel); if (C && S.mode !== 'replay') C.rec.ev.push({ t: C.t, k: 'pc', p: p.clone(), q: q.clone(), sx, sy, sz, v: vel.clone() }); }
@@ -1876,14 +1886,14 @@ function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   const [hd] = hear(_tip);
   audio.impact(power, zone, hd); fxSparks(_tip.clone(), 10 + (power * 14 | 0), 4 + power * 3);
   let brokeAt = 0;
-  if (broke) { const seg = Aj.breakLance(breakAt(Math.sqrt(Math.max(0, 1 - square * square)))); let cls = breakClass(power); if (seg) { brokeAt = seg.at; cls = fxBurst(Aj, Bj, seg, bdir, power, zone); } audio.lanceBreak(power, hd, { cls, zone }); M.breaks[isP ? 0 : 1]++; }
+  if (broke) { const seg = Aj.breakLance(breakAt(Math.sqrt(Math.max(0, 1 - square * square)), Math.random(), Aj.rs)); let cls = breakClass(power); if (seg) { brokeAt = seg.at; cls = fxBurst(Aj, Bj, seg, bdir, power, zone); } audio.lanceBreak(power, hd, { cls, zone }); M.breaks[isP ? 0 : 1]++; }
   if (nfx && broke) nfx.bk = brokeAt;
   let pts = broke ? (zone === 'helm' ? M.PT.helm : M.PT.broken) : M.PT.attaint, code = broke ? (zone === 'helm' ? 'h' : 'b') : 'a';
   const how = power > 1.0 ? 'shivered his lance to the vamplate' : power > 0.75 ? 'broke his lance clean' : 'broke his lance near the point';
   let text = broke ? `${how} ${zone === 'helm' ? 'on the helm' : zone === 'shield' ? 'upon the shield' : 'on the body'}` : st.turned ? 'his stroke was turned by the shield' : `an attaint on the ${zone}, lance unbroken`;
   // ---- what the rule set makes of it
   { const MD = M.mode, sinT = Math.sqrt(Math.max(0, 1 - square * square));
-    if (broke && MD.nearTip && brokeAt > LANCE_REACH - MD.nearTip - 0.1) { pts = M.PT.attaint; code = 'a'; text = 'broke his lance within a foot of the point: no spear broken, only a touch'; }
+    if (broke && MD.nearTip && brokeAt > Aj.reach - MD.nearTip - 0.1) { pts = M.PT.attaint; code = 'a'; text = 'broke his lance within a foot of the point: no spear broken, only a touch'; }
     else if (broke && MD.crosswise && sinT > MD.crosswise) { pts = M.PT.attaint; code = 'a'; text = 'broke his lance crosswise, not with the point: it counts for nothing'; }
     if (hit.sprang && !broke) { pts = M.PT.broken; code = 'a'; text = 'his shield sprang from the arm: the stroke counts'; }
     if (MD.onlyShield && zone !== 'shield') { pts = 0; text += ' (only the shield scores)'; }
@@ -1955,7 +1965,7 @@ function dazeStep(dtReal) {
 }
 /** The lance falls from the hand. */
 function dropLance(J, side) {
-  const a = J.lance.localToWorld(new THREE.Vector3(0, 0, 0.3)), b = J.lance.localToWorld(new THREE.Vector3(0, 0, LANCE_REACH));
+  const a = J.lance.localToWorld(new THREE.Vector3(0, 0, 0.3)), b = J.lance.localToWorld(new THREE.Vector3(0, 0, J.reach));
   J.dropLance(); fxShaft(a, b, new THREE.Vector3(0, 0, J.dir * J.speed * 0.5)); M.dr.drops[side]++; M.stats[side].drops = (M.stats[side].drops || 0) + 1;
   callout(side === 0 ? 'YOU DROPPED YOUR LANCE' : 'HE DROPPED HIS LANCE', side === 0 ? 'bad' : 'good', 4.5);
 }
@@ -2534,7 +2544,7 @@ function replayCam() {
     case 5: { const F = R.fall; want.set(F.x + R.fx0 * 2.3, Math.max(0.9, F.y + 0.7), F.z - R.fdir * 3.4 + R.fdir * u * 0.8); wantLook.set(F.x, Math.max(0.35, F.y * 0.6), F.z); return 38; }
     case 6: case 7: {      // YOUR EYES / HIS EYES: through the visor slit, as the live first-person view sees it, looking at the man coming in
       const me = R.shot === 6 ? player : opp, ot = R.shot === 6 ? opp : player;
-      me.helm.getWorldPosition(want); want.y += 0.17; const fw = _a.set(0, 0, 1).applyQuaternion(me.root.quaternion); want.addScaledVector(fw, 0.05);
+      me.helm.getWorldPosition(want); want.y += me.eyeY ?? 0.17; const fw = _a.set(0, 0, 1).applyQuaternion(me.root.quaternion); want.addScaledVector(fw, 0.05);
       ot.helm.getWorldPosition(_b); _b.y -= 0.05; _c.subVectors(_b, want); const ahead = _c.dot(fw), k = smoothstep(0.5, 5, ahead);
       const a0 = Math.atan2(fw.x, fw.z), sgn = Math.abs(Math.sin(a0 + 0.22) * 20 + want.x) < Math.abs(Math.sin(a0 - 0.22) * 20 + want.x) ? 1 : -1;      // the glance down the lists leans toward the tilt, as in the live view
       _d.set(want.x + Math.sin(a0 + sgn * 0.22) * 20, want.y - 0.3, want.z + Math.cos(a0 + sgn * 0.22) * 20);
@@ -3377,7 +3387,7 @@ function updateReticle() {
   player.gripWorld(_a); player.tipWorld(_b); _c.subVectors(_b, _a).normalize();
   if (player.lanceLower > 0.95) player.aimWorld(_c);      // the ring follows where you mean the point to go; far out the shaft itself is held wider, clear of your horse's head
   opp.zoneWorld('body', _zc);
-  const t = _c.z * D > 0.05 ? clamp((_zc.z - _a.z) / _c.z, LANCE_REACH, 150) : 150;
+  const t = _c.z * D > 0.05 ? clamp((_zc.z - _a.z) / _c.z, player.reach, 150) : 150;
   _p.copy(_a).addScaledVector(_c, t);
   let zone = '';
   if (C.couch > 0.9) for (const z of opp.zones) { z.o.getWorldPosition(_d); if (Math.hypot(_p.x - _d.x, _p.y - _d.y) < z.r) { zone = z.name; break; } }
@@ -3484,7 +3494,7 @@ function updateCamera(dtReal) {
       want.set(pp.x + ox * 3.3 + fw.x * (2.1 - 0.3 * t), player.seatY - 0.03, pp.z + oz * 3.3 + fw.z * (2.1 - 0.3 * t)); wantLook.set(_b.x + ox * 0.5, _b.y - 0.35, _b.z + oz * 0.5); wantFov = 34;
     }
     else if (k === 'visor') {      // through your own visor slit, down the lists at the man you will meet (the mask is drawn in updateMask)
-      player.helm.getWorldPosition(want); want.y += 0.17; const fw = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion); want.addScaledVector(fw, 0.05);
+      player.helm.getWorldPosition(want); want.y += player.eyeY ?? 0.17; const fw = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion); want.addScaledVector(fw, 0.05);
       wantLook.set(opp.root.position.x, opp.seatY + 0.37, opp.root.position.z); wantFov = 52;
     }
     else if (k === 'react') {      // the reaction montage: the stands, your squire, a lady of the gallery
@@ -3519,7 +3529,7 @@ function updateCamera(dtReal) {
     want.set(r.x + Math.sign(r.x) * 6.2, 1.45, r.z + 3.6 * C.cine.dir); wantLook.set(r.x, 0.75, r.z); rate = 3.5; wantFov = 42;
     if (!C.cineCut) { C.cineCut = true; snap = true; }
   } else if (S.fp && !player.unhorsed) {
-    player.helm.getWorldPosition(want); want.y += 0.17;
+    player.helm.getWorldPosition(want); want.y += player.eyeY ?? 0.17;
     const fwd = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion), lk = player.look;
     want.addScaledVector(fwd, 0.05);
     // forward along the lists with a bias to the tilt side; glance over the left shoulder when looking behind
@@ -3723,6 +3733,7 @@ requestAnimationFrame(hideLoading); setTimeout(hideLoading, 400);
   if (!GFX.skyWait) loadSky(VENUES[firstVenue].sky);
   const note = $('bgNote'), paint = () => { const st = loadStats('bg'); if (note) { note.textContent = SCANS.ready ? '' : `Loading trees and props ${Math.round(st.frac * 100)}%`; note.classList.toggle('hidden', SCANS.ready || S.mode !== 'menu'); } };
   const iv = setInterval(paint, 300);
+  preloadRider(rigWant()).then((ok) => { if (ok && S.mode === 'menu' && !M) rebuildPlayer(); });      // the rigged rider, after the menu; the player is rebuilt in it
   preloadScans().then(() => { clearInterval(iv); paint(); refreshWorldWithScans(); startAudio(); });
   if (GFX.tier === 'high') startAudio(); else setTimeout(startAudio, 20000);      // (below high: after the trees and props, or after 20 s at the latest)
 }

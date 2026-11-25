@@ -40,7 +40,7 @@ export function createStable() {
   function build(id, arms) {
     dropItem();
     const tt = new THREE.Group(); scene.add(tt);
-    const j = new Jouster(scene, Object.assign({}, arms), 1, 0, HORSES[id], harness('mail'));
+    const j = new Jouster(scene, Object.assign({}, arms), 1, 0, HORSES[id], Object.assign(harness('mail'), { noRig: true }));      // (the horse alone: no rider to build)
     j.update(0); scene.remove(j.root); tt.add(j.root); j.root.position.set(0, 0, 0);
     // the horse alone, in the player's caparison
     if (j.rider && j.rider.parent) j.rider.parent.remove(j.rider);
