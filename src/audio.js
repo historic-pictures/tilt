@@ -79,6 +79,22 @@ class MusicBus {
     if (on) { this._tok++; if (this.cur) { this._fadeOut(1); this.cur = null; this.mood = null; mymusic.setNow(null); } }
     else if (this.want) this.play(this.want);
   }
+  /** The pause menu in a match: the game's own music (never YouTube or the player's files) fades in on a plain audio element, since pausing suspends the audio context; it fades out on resume. */
+  async pauseMusic(on) {
+    on = !!on; if (on === !!this._pmOn) return; this._pmOn = on; const tok = this._pmTok = (this._pmTok || 0) + 1;
+    if (!on) { this._pmRamp(this._pmEl, 0, 800, true); this._pmEl = null; return; }
+    if (this.vol <= 0 || this.off) return;
+    const tracks = this.tracks || await this.load(); if (tok !== this._pmTok || !tracks.length) return;
+    const pool = tracks.filter(t => (t.moods || []).includes('menu')), all = pool.length ? pool : tracks, others = all.filter(t => t.id !== this._pmLast), t = (others.length ? others : all)[(Math.random() * (others.length || all.length)) | 0];
+    const el = new Audio(t.file); el.preload = 'auto'; el.volume = 0; this._pmEl = el; this._pmLast = t.id;
+    el.addEventListener('ended', () => { if (this._pmEl === el) { this._pmOn = false; this.pauseMusic(true); } });
+    const p = el.play(); if (p && p.catch) p.catch(() => {});
+    this._pmRamp(el, Math.min(1, this._level() * lin(t.db || 0) * lin(MASTER_DB)), 1500);
+  }
+  _pmRamp(el, to, ms, end) {
+    if (!el) return; clearInterval(el._ramp); const from = el.volume, t0 = performance.now();
+    el._ramp = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ms); try { el.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch (e) { /* ignore */ } if (k >= 1) { clearInterval(el._ramp); if (end) { try { el.pause(); el.removeAttribute('src'); el.load(); } catch (e) { /* ignore */ } } } }, 50);
+  }
   get playing() { return !!this.cur; }
   _level() { return lin(MUSIC_DB) * (this.vol / MUSIC_DEFAULT) * (this.ducked ? lin(MUSIC_DUCK_DB) : 1); }
   _attach() { const ga = this.ga; if (this.gain || !ga.ctx) return; this.gain = ga.ctx.createGain(); this.gain.gain.value = this._level(); this.gain.connect(ga.master); if (this.want) this.play(this.want); }

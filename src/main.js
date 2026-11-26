@@ -106,6 +106,7 @@ function musicSync() {
   // FIFA-style: the music plays in the menus only. A match or training (from the first frame of the intro) fades it out; the in-match ambience and crowd are separate and keep going.
   const inMatch = S.mode !== 'menu';
   if (m.hold && inMatch !== musicHeld) { musicHeld = inMatch; m.hold(inMatch); if (!inMatch) musicMood = null; }
+  if (m.pauseMusic) m.pauseMusic(inMatch && S.paused && !(S.rpl && S.rplFrom === 'card') && !S.muted && !musicOffNow);      // the pause menu plays the game's own music, fading in; resuming fades it out
   const mood = inMatch ? null : 'menu', duck = false;
   if (m.place) m.place(S.mode === 'menu' ? 'menu' : 'match');
   if (duck !== musicDuck) { musicDuck = duck; m.duck(duck); }
@@ -4172,6 +4173,7 @@ G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) 
 function frame(dtReal) {
   touch.update();
   if (S.paused && !S.online) {      // (online the pause menu opens but the match goes on)
+    musicSync();      // (the pause menu has its own music)
     if (R && R.hl) { S.time += dtReal; updateReplay(dtReal, dtReal); replayDress(); updateCamera(dtReal); updateMask(); drawFrame(dtReal); }      // a highlight plays while the match stands still
     else drawFrame(0);
     return;

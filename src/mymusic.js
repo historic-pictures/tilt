@@ -1,3 +1,4 @@
+import { touchMode } from './touch.js';
 // "Your own music": songs the player adds from their own computer. They live in this browser's IndexedDB only
 // (db 'tilt-mymusic'): never uploaded, never sent to an online opponent, never part of the build.
 // src/audio.js MusicBus plays them (shuffled, looping) in place of the game's own music while this is on.
@@ -40,8 +41,8 @@ export const mymusic = {
   /** Which source plays: 'game' (the game's own music), 'files' (your files) or 'yt' (YouTube links). */
   // Pre-release test builds default to the YouTube "Mates' radio" (the three bardcore tracks, streamed by YouTube's own player, never re-hosted).
   // For the public launch set DEFAULT_SRC back to 'game'.
-  get source() { const DEFAULT_SRC = 'yt'; try { const v = localStorage.getItem('tilt.musicsrc'); return v === 'files' || v === 'yt' || v === 'game' ? v : DEFAULT_SRC; } catch (e) { return DEFAULT_SRC; } },
-  setSource(v) { v = v === 'files' || v === 'yt' ? v : 'game'; try { localStorage.setItem('tilt.musicsrc', v); localStorage.setItem(KEY, v === 'files' ? 'on' : 'off'); } catch (e) { /* ignore */ } this._emit('enabled'); },
+  get source() { const DEFAULT_SRC = 'yt'; let r = DEFAULT_SRC; try { const v = localStorage.getItem('tilt.musicsrc'); if (v === 'files' || v === 'yt' || v === 'game') r = v; } catch (e) { /* default */ } return r === 'yt' && touchMode ? 'game' : r; },      // YouTube is desktop-only: phones and tablets always get the game's own music
+  setSource(v) { v = v === 'files' || (v === 'yt' && !touchMode) ? v : 'game'; try { localStorage.setItem('tilt.musicsrc', v); localStorage.setItem(KEY, v === 'files' ? 'on' : 'off'); } catch (e) { /* ignore */ } this._emit('enabled'); },
   get enabled() { return this.source === 'files'; },
   setEnabled(on) { this.setSource(on ? 'files' : 'game'); },
   /** Add audio files. Returns { added: n, messages: [friendly text] }. */

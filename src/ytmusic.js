@@ -2,9 +2,10 @@
 // Nothing is downloaded or hosted; the API script is fetched only when this source is first used.
 // Lists are kept in localStorage 'tilt.ytlist' (video ids). The default list is "Mates' radio".
 const KEY = 'tilt.ytlist';
-// Opens with Real Slim Shady (bardcore), then Gangsta's Paradise (bardcore), then Blue, looping.
-export const DEFAULT_IDS = ['3okjFDo2aSU', 'dywM446-vcE', 'Z83PICHUwSc'];
-const OLD_DEFAULT = ['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'];       // the first test build's order: an untouched list follows the new default
+// Opens with Big Poppa (bardcore); the whole list loops.
+export const DEFAULT_IDS = ['_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'];
+// Earlier default lists: a saved list equal to one of these was never customised, so it follows the new default.
+const OLD_DEFAULTS = [['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'], ['3okjFDo2aSU', 'dywM446-vcE', 'Z83PICHUwSc']].map(a => a.join());
 const DUCK = 0.35, MIN = 200, BIG_W = 320, BIG_H = 220, FADE_MS = 1000, CKEY = 'tilt.ytcollapsed';
 // YouTube's embedded-player rules: the player stays visible and at least 200x200, so "collapsed" is exactly that size (the bar stays on top of it).
 
@@ -37,9 +38,9 @@ function loadApi() {
 
 const listeners = new Set();
 export const ytmusic = {
-  DEFAULTS: { Z83PICHUwSc: 'Eiffel 65 - Blue', '3okjFDo2aSU': 'Real Slim Shady (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)" },
+  DEFAULTS: { '_yICA0JNmig': 'Big Poppa (bardcore)', '3okjFDo2aSU': 'The Real Slim Shady (bardcore)', 'L1Uvr5v8IOE': 'Still Dre (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)", 'zg3Ggn3CMgU': 'Lose Yourself (bardcore)', 't70UQr_fMgM': 'The Next Episode (bardcore)', 'XbigmX35ICQ': 'Blinding Lights (bardcore)', 'kJWvmSJ3k9Q': 'What Is Love (bardcore)', 'nKGsnHF7PTI': 'Hey Ya! (bardcore)', 'AWEwF0PGTmI': 'Land Down Under (medieval)', 'p8M2TPZG0f4': 'Gimme! Gimme! Gimme! (medieval)', 'YMnC1SHxct0': 'Ms. Jackson (bardcore)', 'NOPPcsrsM4M': 'Numb/Encore (bardcore)', 'Z83PICHUwSc': 'Eiffel 65 - Blue (Da Ba Dee)' },
   player: null, box: null, ready: false, idx: 0, note: '', title: '', vol: 0.6, ducked: false, muted: false, wantPlay: false, _failed: 0, held: false, fade: 1, collapsed: false,
-  get ids() { try { const j = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(j)) { const a = j.filter(x => /^[\w-]{11}$/.test(x)); return a.join() === OLD_DEFAULT.join() ? DEFAULT_IDS.slice() : a; } } catch (e) { /* default */ } return DEFAULT_IDS.slice(); },
+  get ids() { try { const j = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(j)) { const a = j.filter(x => /^[\w-]{11}$/.test(x)); return OLD_DEFAULTS.includes(a.join()) ? DEFAULT_IDS.slice() : a; } } catch (e) { /* default */ } return DEFAULT_IDS.slice(); },
   _save(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } this._emit('list'); },
   add(text) {
     const id = parseId(text); if (!id) return { ok: false, msg: 'That is not a YouTube link.' };
@@ -89,15 +90,22 @@ export const ytmusic = {
     on = !!on; if (this.held === on) return; this.held = on; clearInterval(this._ft);
     const ramp = (to, done) => { const from = this.fade, t0 = performance.now(); this._ft = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / FADE_MS); this.fade = from + (to - from) * k; this._apply(); if (k >= 1) { clearInterval(this._ft); if (done) done(); } }, 50); };
     if (on) {
+      this._savePos();
       if (!this.player || !this.ready) { this.fade = 0; if (this.box) this.box.hidden = true; return; }
       ramp(0, () => { if (!this.held) return; try { this.player.pauseVideo(); } catch (e) { /* ignore */ } if (this.box) this.box.hidden = true; });
     } else {
       if (this.box) this.box.hidden = false;
       if (!this.player || !this.ready) { this.fade = 1; return; }
       this.fade = 0; this._apply();
-      if (this.wantPlay && !this.muted) { try { this.player.playVideo(); } catch (e) { /* ignore */ } }
+      if (this.wantPlay && !this.muted) { try { this.player.playVideo(); } catch (e) { /* ignore */ } this._restorePos(); }
       ramp(1);
     }
+  },
+  /** Remember which video and where, so coming back from a match carries on from the same second of the same track. */
+  _savePos() { try { const id = (this.player.getVideoData() || {}).video_id, t = this.player.getCurrentTime(); if (id && t >= 0) this._pos = { id, t }; } catch (e) { /* ignore */ } },
+  _restorePos() {
+    const p = this._pos; this._pos = null; if (!p || !this.player) return;
+    setTimeout(() => { try { const id = (this.player.getVideoData() || {}).video_id; if (id !== p.id && this.ids.includes(p.id)) { this.idx = this.ids.indexOf(p.id); this.player.loadVideoById(p.id, p.t); } else if (Math.abs(this.player.getCurrentTime() - p.t) > 3) this.player.seekTo(p.t, true); } catch (e) { /* ignore */ } }, 600);
   },
   _setNote(t) { this.note = t; clearTimeout(this._nt); if (t) this._nt = setTimeout(() => this._setNote(''), 7000); const n = document.getElementById('ytnote'); if (n) { n.textContent = t; n.style.display = t ? 'block' : 'none'; } },
   _setNow() {
@@ -121,8 +129,9 @@ export const ytmusic = {
         playerVars: { playsinline: 1, rel: 0, controls: 1, origin: location.origin },
         events: {
           onReady: () => { this.ready = true; this._apply(); this._setNow(); this._layout(); try { if (this.wantPlay && !this.held) this.player.playVideo(); } catch (e) { /* ignore */ } this._emit('ready'); },
-          onStateChange: (e) => { if (e.data === 0) this.next(); else if (e.data === 1) { this._failed = 0; this._setNow(); this._playIcon(); } else if (e.data === 2) this._playIcon(); },
+          onStateChange: (e) => { if (e.data === 0) { if (!this.held) this.next(); } else if (e.data === 1) { this._failed = 0; this._setNow(); this._playIcon(); } else if (e.data === 2) this._playIcon(); },
           onError: (e) => {
+            if (this.held) return;      // a pause or hide must never skip a track
             this._setNote(`A video ${[100, 101, 150].includes(e.data) ? 'cannot be played here' : 'did not load'}; skipped.`); this._failed++;
             if (this._failed < this.ids.length) this.next(); else this._setNote('None of the videos can be played here.');
           },
