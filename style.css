@@ -613,27 +613,29 @@ body.touch.compact .mmnow { font-size: 12px; margin-top: 1px; }
 body.touch.compact .mmnote { font-size: 11px; }
 body.touch.compact .mymusic { margin-top: 4px; }
 
-/* YouTube music box (src/ytmusic.js): the player stays visible, 200x200, never covered */
-#ytbox { position: fixed; z-index: 58; width: 200px; background: #1b130b; border: 1px solid var(--ink-soft); box-shadow: 0 2px 10px rgba(0,0,0,.5); color: #f2e6c9; font-size: 12px; }
-#ytbox[data-where="menu"] { right: 8px; bottom: 8px; }
-body.touch #ytbox[data-where="menu"] { right: 0; bottom: 50px; }
-#ytbox[data-where="match"] { left: 8px; top: 66px; }
-#ytbox .ythead { display: flex; align-items: center; gap: 8px; padding: 2px 6px; background: #2b1f12; line-height: 18px; }
-#ytbox #ytnow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#ytbox b { cursor: pointer; font-weight: normal; white-space: nowrap; }
-#ytbox b:hover { color: #ff8a70; }
-#ytnote { display: none; padding: 2px 6px; background: #5a1f14; font-size: 11px; }
-#ytframe { display: block; }
+/* YouTube music dock (src/ytmusic.js): a slim manuscript bar with the video panel attached under it, top-left.
+   YouTube's embed rules keep the player visible and at least 200x200, so "collapsed" is the bar over a 200x200 player.
+   The music stops in a match (the box is hidden then, with the music paused), so it never meets the HUD. */
+#ytbox { position: fixed; z-index: 58; left: max(8px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); width: 320px; color: var(--ink); background: #1b130b; border: 1px solid var(--ink); border-radius: 3px; box-shadow: 0 2px 8px rgba(0,0,0,.45); overflow: hidden; }
+#ytbox[hidden] { display: none; }
+#ytbox .ythead { display: flex; align-items: center; gap: 2px; padding: 0 3px 0 8px; height: 28px; background: linear-gradient(var(--vellum3), var(--vellum)); border-bottom: 1px solid var(--ink2); }
+#ytbox #ytnow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--note, 'Pirata One', Georgia, serif); font-size: 16px; line-height: 28px; }
+#ytbox .ythead b { flex: none; display: grid; place-items: center; min-width: 26px; height: 24px; cursor: pointer; font-weight: normal; font-size: 12px; color: var(--ink2); border-radius: 3px; user-select: none; }
+#ytbox .ythead b:hover { color: var(--red); background: rgba(43,29,18,.1); }
+#ytnote { display: none; padding: 2px 8px; background: var(--red2); color: var(--vellum3); font-size: 11px; }
+#ytframe { display: block; background: #000; }
 #ytframe iframe { display: block; }
+/* desktop: the main menu panel sits to the right of the dock instead of under it (the other screens are centred and clear it) */
+body.ytdock:not(.touch) .menu.main { left: max(5vw, 346px); }
+body.ytdock:not(.touch):has(#ytbox.min) .menu.main { left: max(5vw, 226px); }
+/* phones: thumb-sized buttons; the dock sits in the safe-area corner over the decorative left of the menu (the buttons are to its right or below it);
+   the first-run name form is pushed right of it in landscape */
+body.touch #ytbox .ythead { height: 34px; } body.touch #ytbox #ytnow { line-height: 34px; } body.touch #ytbox .ythead b { min-width: 36px; height: 32px; font-size: 14px; }
+body.touch.compact.ytdock #screen[data-name="welcome"] .menu.welcome { width: calc(100vw - 232px - var(--sr, 0px)); left: auto; right: max(6px, var(--sr, 0px)); transform: translateY(-50%); }
+
 .mmadd { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 .mmadd input { flex: 1; min-width: 0; font: inherit; font-size: 14px; background: transparent; border: 0; border-bottom: 1px solid var(--ink-soft); color: var(--ink); }
 .mymusic .toggles .lbl { font-size: 14px; color: var(--ink2); }
-/* the training lesson card sits to the right of the YouTube box instead of under it */
-body:has(#ytbox[data-where="match"]) #lesson { left: 222px; width: 300px; }
-/* phone in landscape: the top-right is the only free 200x224 patch (SPUR is below it, the pause and sound buttons are top-left) */
-body.touch.compact #ytbox[data-where="match"] { left: auto; right: 8px; top: 4px; }
-body.touch.compact:has(#ytbox[data-where="match"]) #lesson { left: 14px; width: 330px; }
-
 /* ---------- UI pass: one main path, a Settings screen, readable ledgers, a HUD with a clear lower band, bigger thumbs ---------- */
 /* main menu */
 .menu button.mplay { font-size: 34px; text-align: center; padding: 14px 10px 14px; margin: 4px 0 12px; color: var(--vellum3); background: var(--red); border: 1px solid var(--red2); border-radius: 3px; box-shadow: 0 2px 0 var(--red2), 0 4px 10px rgba(43, 29, 18, .35); letter-spacing: .06em; }

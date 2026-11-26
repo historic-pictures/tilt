@@ -99,15 +99,14 @@ function setMusic(v) {
 function musicNext() { const m = audio.music; if (m && m.next) { initAudio(); m.next(); } }
 /** "Your own music" was switched, added to or removed from (src/mymusic.js): the bus swaps between those songs and the game's own. */
 function musicMine() { const m = audio.music; if (!m || !m.refreshMine) return; initAudio(); m.refreshMine(); }
-let musicSeen = null, musicMood = null, musicDuck = false;
+let musicSeen = null, musicMood = null, musicDuck = false, musicHeld = false;
 function musicSync() {
   const m = audio.music; if (!m || !m.play) return;     // audio module still loading
-  if (musicSeen !== m) { musicSeen = m; musicMood = null; musicDuck = false; if (m.setOff) m.off = musicOffNow; m.setVolume(musicVol() / 100); }
-  let mood = null, duck = false;
-  if (S.mode === 'menu') mood = 'menu';
-  else if (S.mode === 'charge') duck = true;           // keep whatever is playing, just lower it
-  else if (S.mode === 'after' && C && C.carded && M && M.result) mood = M.result.startsWith('win') || M.result === 'practice' ? 'victory' : 'defeat';
-  else if (S.mode === 'ready' || S.mode === 'after' || S.mode === 'intro') mood = 'between';
+  if (musicSeen !== m) { musicSeen = m; musicMood = null; musicDuck = false; musicHeld = false; if (m.setOff) m.off = musicOffNow; m.setVolume(musicVol() / 100); }
+  // FIFA-style: the music plays in the menus only. A match or training (from the first frame of the intro) fades it out; the in-match ambience and crowd are separate and keep going.
+  const inMatch = S.mode !== 'menu';
+  if (m.hold && inMatch !== musicHeld) { musicHeld = inMatch; m.hold(inMatch); if (!inMatch) musicMood = null; }
+  const mood = inMatch ? null : 'menu', duck = false;
   if (m.place) m.place(S.mode === 'menu' ? 'menu' : 'match');
   if (duck !== musicDuck) { musicDuck = duck; m.duck(duck); }
   if (mood && mood !== musicMood) { musicMood = mood; m.play(mood); }

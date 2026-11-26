@@ -2,8 +2,11 @@
 // Nothing is downloaded or hosted; the API script is fetched only when this source is first used.
 // Lists are kept in localStorage 'tilt.ytlist' (video ids). The default list is "Mates' radio".
 const KEY = 'tilt.ytlist';
-export const DEFAULT_IDS = ['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'];
-const DUCK = 0.35, SIZE = 200;
+// Opens with Real Slim Shady (bardcore), then Gangsta's Paradise (bardcore), then Blue, looping.
+export const DEFAULT_IDS = ['3okjFDo2aSU', 'dywM446-vcE', 'Z83PICHUwSc'];
+const OLD_DEFAULT = ['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'];       // the first test build's order: an untouched list follows the new default
+const DUCK = 0.35, MIN = 200, BIG_W = 320, BIG_H = 220, FADE_MS = 1000, CKEY = 'tilt.ytcollapsed';
+// YouTube's embedded-player rules: the player stays visible and at least 200x200, so "collapsed" is exactly that size (the bar stays on top of it).
 
 /** Video id from a watch URL, youtu.be link, shorts/embed link (a &list= or ?si= is ignored) or a bare id. */
 export function parseId(s) {
@@ -35,8 +38,8 @@ function loadApi() {
 const listeners = new Set();
 export const ytmusic = {
   DEFAULTS: { Z83PICHUwSc: 'Eiffel 65 - Blue', '3okjFDo2aSU': 'Real Slim Shady (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)" },
-  player: null, box: null, ready: false, idx: 0, note: '', title: '', vol: 0.6, ducked: false, muted: false, wantPlay: false, _failed: 0,
-  get ids() { try { const j = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(j)) return j.filter(x => /^[\w-]{11}$/.test(x)); } catch (e) { /* default */ } return DEFAULT_IDS.slice(); },
+  player: null, box: null, ready: false, idx: 0, note: '', title: '', vol: 0.6, ducked: false, muted: false, wantPlay: false, _failed: 0, held: false, fade: 1, collapsed: false,
+  get ids() { try { const j = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(j)) { const a = j.filter(x => /^[\w-]{11}$/.test(x)); return a.join() === OLD_DEFAULT.join() ? DEFAULT_IDS.slice() : a; } } catch (e) { /* default */ } return DEFAULT_IDS.slice(); },
   _save(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } this._emit('list'); },
   add(text) {
     const id = parseId(text); if (!id) return { ok: false, msg: 'That is not a YouTube link.' };
@@ -51,19 +54,50 @@ export const ytmusic = {
   },
   resetList() { this._save(DEFAULT_IDS.slice()); },
   get curId() { return this.ids[this.idx % Math.max(1, this.ids.length)] || null; },
-  _level() { return Math.round(this.vol * 100 * (this.ducked ? DUCK : 1)); },
+  _level() { return Math.round(this.vol * 100 * (this.ducked ? DUCK : 1) * this.fade); },
   _apply() { if (!this.player || !this.ready) return; try { this.player.setVolume(this._level()); if (this.vol <= 0 || this.muted) this.player.mute(); else this.player.unMute(); } catch (e) { /* ignore */ } },
   setVolume(v) { this.vol = Math.max(0, Math.min(1, +v || 0)); this._apply(); },
   duck(on) { this.ducked = !!on; this._apply(); },
-  setMuted(m) { this.muted = !!m; this._apply(); if (this.player && this.ready) try { if (m) this.player.pauseVideo(); else if (this.wantPlay) this.player.playVideo(); } catch (e) { /* ignore */ } },
+  setMuted(m) { this.muted = !!m; this._apply(); if (this.player && this.ready) try { if (m) this.player.pauseVideo(); else if (this.wantPlay && !this.held) this.player.playVideo(); } catch (e) { /* ignore */ } },
   /** 'menu' or 'match': which corner the box sits in (CSS decides where). */
   place(where) { this._where = where; if (this.box) this.box.dataset.where = where; },
+  get _size() { return this.collapsed ? [MIN, MIN] : [BIG_W, BIG_H]; },
   _ensureBox() {
     if (this.box && this.box.isConnected) return this.box;
-    const b = this.box = document.createElement('div'); b.id = 'ytbox'; b.dataset.where = this._where || 'menu';
-    b.innerHTML = `<div class="ythead"><span id="ytnow">YouTube</span><b data-yt="next" title="Next">Next ▸</b><b data-yt="stop" title="Stop YouTube music">✕</b></div><div id="ytnote"></div><div id="ytframe" style="width:${SIZE}px;height:${SIZE}px"><div id="ytplayer"></div></div>`;
-    b.addEventListener('click', (e) => { const t = e.target.closest('[data-yt]'); if (!t) return; if (t.dataset.yt === 'next') this.next(); else this._emit('stop'); });
-    document.body.appendChild(b); return b;
+    this.collapsed = innerWidth < 1500; try { const c = localStorage.getItem(CKEY); if (c !== null) this.collapsed = c === '1'; } catch (e) { /* default */ }       // small windows start collapsed; the choice is remembered
+    const b = this.box = document.createElement('div'); b.id = 'ytbox'; b.dataset.where = this._where || 'menu'; b.dataset.tip = 'YouTube music: a YouTube player that has to stay visible while it plays. Pause or skip here, or press the cross to switch it off.';
+    b.hidden = this.held;
+    b.innerHTML = `<div class="ythead"><span id="ytnow">YouTube</span><b data-yt="play" id="ytplay" aria-label="Pause" title="Pause">❚❚</b><b data-yt="next" aria-label="Next" title="Next">▶▶</b><b data-yt="fold" id="ytfold" aria-label="Collapse" title="Collapse">▴</b><b data-yt="stop" aria-label="Switch YouTube music off" title="Switch YouTube music off">✕</b></div><div id="ytnote"></div><div id="ytframe"><div id="ytplayer"></div></div>`;
+    b.addEventListener('click', (e) => { const t = e.target.closest('[data-yt]'); if (!t) return; const k = t.dataset.yt; if (k === 'next') this.next(); else if (k === 'play') this.toggle(); else if (k === 'fold') this.setCollapsed(!this.collapsed); else this._emit('stop'); });
+    document.body.appendChild(b); document.body.classList.add('ytdock'); this._layout(); return b;
+  },
+  _layout() {
+    const [w, h] = this._size, f = document.getElementById('ytframe'), b = this.box; if (!f || !b) return;
+    b.classList.toggle('min', this.collapsed); b.style.width = w + 'px'; f.style.width = w + 'px'; f.style.height = h + 'px';
+    const fb = document.getElementById('ytfold'); if (fb) { fb.textContent = this.collapsed ? '▾' : '▴'; fb.title = this.collapsed ? 'Expand' : 'Collapse'; fb.setAttribute('aria-label', fb.title); }
+    if (this.player && this.ready) try { this.player.setSize(w, h); } catch (e) { /* ignore */ }
+  },
+  setCollapsed(c) { this.collapsed = !!c; try { localStorage.setItem(CKEY, c ? '1' : '0'); } catch (e) { /* ignore */ } this._layout(); },
+  toggle() {
+    if (!this.player || !this.ready) return;
+    try { const s = this.player.getPlayerState(); if (s === 1 || s === 3) { this.wantPlay = false; this.player.pauseVideo(); } else { this.wantPlay = true; this.player.playVideo(); } } catch (e) { /* ignore */ }
+    this._playIcon();
+  },
+  _playIcon() { const p = document.getElementById('ytplay'); if (!p) return; const on = this.wantPlay; p.textContent = on ? '❚❚' : '▶'; p.title = on ? 'Pause' : 'Play'; p.setAttribute('aria-label', p.title); },
+  /** FIFA-style: music belongs to the menus. on = a match is starting: fade out over 1 s, then pause (not stop) and hide the box. Off = back in the menus: show, play, fade in. */
+  hold(on) {
+    on = !!on; if (this.held === on) return; this.held = on; clearInterval(this._ft);
+    const ramp = (to, done) => { const from = this.fade, t0 = performance.now(); this._ft = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / FADE_MS); this.fade = from + (to - from) * k; this._apply(); if (k >= 1) { clearInterval(this._ft); if (done) done(); } }, 50); };
+    if (on) {
+      if (!this.player || !this.ready) { this.fade = 0; if (this.box) this.box.hidden = true; return; }
+      ramp(0, () => { if (!this.held) return; try { this.player.pauseVideo(); } catch (e) { /* ignore */ } if (this.box) this.box.hidden = true; });
+    } else {
+      if (this.box) this.box.hidden = false;
+      if (!this.player || !this.ready) { this.fade = 1; return; }
+      this.fade = 0; this._apply();
+      if (this.wantPlay && !this.muted) { try { this.player.playVideo(); } catch (e) { /* ignore */ } }
+      ramp(1);
+    }
   },
   _setNote(t) { this.note = t; clearTimeout(this._nt); if (t) this._nt = setTimeout(() => this._setNote(''), 7000); const n = document.getElementById('ytnote'); if (n) { n.textContent = t; n.style.display = t ? 'block' : 'none'; } },
   _setNow() {
@@ -76,17 +110,18 @@ export const ytmusic = {
   async start() {
     this.wantPlay = true;
     this._ensureBox();
+    if (this.held) return;
     if (this.player && this.ready) { this._apply(); try { const s = this.player.getPlayerState(); if (s !== 1 && s !== 3) this.player.playVideo(); } catch (e) { /* ignore */ } return; }
     if (this._starting || this.player) return; this._starting = true;
     try {
       const YT = await loadApi(); if (!this.wantPlay) return;
       this._ensureBox();
       this.player = new YT.Player('ytplayer', {
-        width: SIZE, height: SIZE, videoId: this.curId || undefined, host: 'https://www.youtube-nocookie.com',
+        width: this._size[0], height: this._size[1], videoId: this.curId || undefined, host: 'https://www.youtube-nocookie.com',
         playerVars: { playsinline: 1, rel: 0, controls: 1, origin: location.origin },
         events: {
-          onReady: () => { this.ready = true; this._apply(); this._setNow(); try { if (this.wantPlay) this.player.playVideo(); } catch (e) { /* ignore */ } this._emit('ready'); },
-          onStateChange: (e) => { if (e.data === 0) this.next(); else if (e.data === 1) { this._failed = 0; this._setNow(); } },
+          onReady: () => { this.ready = true; this._apply(); this._setNow(); this._layout(); try { if (this.wantPlay && !this.held) this.player.playVideo(); } catch (e) { /* ignore */ } this._emit('ready'); },
+          onStateChange: (e) => { if (e.data === 0) this.next(); else if (e.data === 1) { this._failed = 0; this._setNow(); this._playIcon(); } else if (e.data === 2) this._playIcon(); },
           onError: (e) => {
             this._setNote(`A video ${[100, 101, 150].includes(e.data) ? 'cannot be played here' : 'did not load'}; skipped.`); this._failed++;
             if (this._failed < this.ids.length) this.next(); else this._setNote('None of the videos can be played here.');
@@ -101,7 +136,7 @@ export const ytmusic = {
     this.wantPlay = false;
     if (this.player) { try { this.player.destroy(); } catch (e) { /* ignore */ } this.player = null; this.ready = false; }
     if (this.box) { this.box.remove(); this.box = null; }
-    this.note = '';
+    document.body.classList.remove('ytdock'); clearInterval(this._ft); this.fade = 1; this.note = '';
   },
   on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   _emit(k) { for (const f of Array.from(listeners)) try { f(k); } catch (e) { /* ignore */ } },

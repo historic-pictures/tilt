@@ -56,7 +56,7 @@ class MusicBus {
   constructor(ga) {
     this.ga = ga; this.vol = MUSIC_DEFAULT; this.off = false; this.ducked = false; this.gain = null; this.tracks = null; this._man = null;
     this.want = null; this.mood = null; this.cur = null; this.last = null;
-    this.yt = null; this._where = 'menu'; this._ytLoad = null;
+    this.yt = null; this._where = 'menu'; this._ytLoad = null; this.held = false;
     this.queue = []; this._tok = 0;      // "your own music": shuffled playlist of the player's tracks (src/mymusic.js)
   }
   /** True while the player's own songs replace the game's music. */
@@ -67,11 +67,18 @@ class MusicBus {
       this._ytLoad = this._ytLoad || import('./ytmusic.js').then(m => { this.yt = m.ytmusic; this.yt.on((k) => { if (k === 'stop') { mymusic.setSource('game'); this.refreshMine(); } }); });
       try { await this._ytLoad; } catch (e) { return; }
     }
-    const y = this.yt; y.setVolume(this.vol); y.duck(this.ducked); y.muted = !!(this.ga.muted || this.off); y.place(this._where);
+    const y = this.yt; y.setVolume(this.vol); y.duck(this.ducked); y.muted = !!(this.ga.muted || this.off); y.place(this._where); y.held = this.held;
     if (go && mymusic.source === 'yt' && !this.off) y.start();
   }
   /** Which corner the YouTube box sits in: 'menu' or 'match'. */
   place(w) { this._where = w; if (this.yt) this.yt.place(w); }
+  /** FIFA-style: true while a match or training runs (the music fades out over 1 s and waits), false back in the menus (it fades in again). The YouTube player is paused, not stopped. */
+  hold(on) {
+    on = !!on; if (this.held === on) return; this.held = on;
+    if (this.yt) this.yt.hold(on);
+    if (on) { this._tok++; if (this.cur) { this._fadeOut(1); this.cur = null; this.mood = null; mymusic.setNow(null); } }
+    else if (this.want) this.play(this.want);
+  }
   get playing() { return !!this.cur; }
   _level() { return lin(MUSIC_DB) * (this.vol / MUSIC_DEFAULT) * (this.ducked ? lin(MUSIC_DUCK_DB) : 1); }
   _attach() { const ga = this.ga; if (this.gain || !ga.ctx) return; this.gain = ga.ctx.createGain(); this.gain.gain.value = this._level(); this.gain.connect(ga.master); if (this.want) this.play(this.want); }
@@ -95,6 +102,7 @@ class MusicBus {
   /** Play a random track of this mood (never the one just played); a track already playing for that mood is left alone. */
   async play(mood) {
     this.want = mood;
+    if (this.held) return;      // a match is on: the music belongs to the menus
     const ga = this.ga; if (!ga.ctx || !this.gain || ga.muted || this.off || this.vol <= 0) return;
     if (mymusic.source === 'yt') { this._yt(true); return; }
     if (mymusic.source === 'files') { await mymusic.list(); if (this.want !== mood) return; }
