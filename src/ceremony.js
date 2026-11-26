@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { LISTS } from './lists.js';
 import { clamp, lerp, smoothstep, drawCrest, drawFace } from './util.js';
 import { ANNOUNCER } from './drama_lines.js';
+import { SPEECH } from './channels.js';
 
 export const INTRO_END = 37.5;       // seconds of the full intro
 export const SKIP_HOLD = 0.8;        // seconds the key is held to skip
@@ -85,7 +86,7 @@ export function createCeremony(scene) {
   /** The barrier trumpeters raise their horns one after the other and hold them for `secs` (the fanfare itself is main.js's call). */
   T.blowLine = (secs = 3) => { T.lineUp = true; T.lineT = secs; T.line.forEach((p, i) => { p.delay = i * 0.1; }); };
   /** The announcer speaks for `secs`: he steps forward to the rail, gestures, and steps back after. */
-  T.speak = (secs = 3) => { T.talkT = Math.max(T.talkT, secs); };
+  T.speak = (secs = 3) => { if (!SPEECH.herald) return; T.talkT = Math.max(T.talkT, secs); };      // he steps forward only when he really speaks (src/channels.js)
   /** The announcer's head, for the speech label above him (null when not built). */
   T.hughHead = () => (T.H ? T.H.head : null);
   /** Where the announcer stands (for the cut to him): writes his chest position, false when not built. */

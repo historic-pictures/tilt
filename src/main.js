@@ -23,6 +23,7 @@ import { GFX, frameTime, bootDone, simSpin, dropTier, setOverride } from './gfx.
 import { stats as loadStats, mb } from './loadmeter.js';
 import { LanceArm, impact, breakAt, bites, rng32, seedOf, refStroke } from './physics.js';
 import { createVoice } from './voice.js';
+import { SPEECH, TEXT, UI, CROWD, gate } from './channels.js';
 import { createField } from './retinue_field.js';
 import { createAftermath } from './aftermath.js';
 import { createLife } from './stands_life.js';
@@ -117,7 +118,7 @@ let audioStarted = false;
 /** The sound code and its samples are fetched once the menu is up (and, below the high tier, once the trees and props are in), so they never compete with what the menu needs. */
 function startAudio() {
   if (audioStarted) return; audioStarted = true;
-  import('./audio.js').then(m => { audio = new m.GameAudio(); G.audio = audio; if (venueIdx >= 0) audio.setVenue(VENUES[venueIdx].id); if (!S.muted) audio.init();
+  import('./audio.js').then(m => { audio = new m.GameAudio(); G.audio = audio; { const oc = audio.crowd.bind(audio); audio.crowd = (...a) => (CROWD.sound && crowdOn() ? oc(...a) : undefined); }      // Settings > Sound > Crowd also mutes the crowd's reactions if (venueIdx >= 0) audio.setVenue(VENUES[venueIdx].id); if (!S.muted) audio.init();
     const c = audio.ctx;      // loaded after the player's first tap? the browser may have left the new audio context asleep: wake it on the next one
     if (c && c.state === 'suspended' && !S.muted) { const wake = () => { window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); try { c.resume(); if (audio.music && audio.music.want) audio.music.play(audio.music.want); } catch (e) { /* ignore */ } }; window.addEventListener('pointerdown', wake); window.addEventListener('keydown', wake); }
   }).catch(e => console.warn('audio unavailable', e));
@@ -141,13 +142,15 @@ function setVoices(on) {
 // and the stands' voices (src/crowd_voices.js: shouts, chants, the sellers, the judges' calls, his men's jeers). localStorage 'tilt.commentary' / 'tilt.chatter'; 'off' silences; default on.
 const commentaryOn = () => { try { return localStorage.getItem('tilt.commentary') !== 'off'; } catch (e) { return true; } };
 function setCommentary(on) { try { localStorage.setItem('tilt.commentary', on ? 'on' : 'off'); } catch (e) { /* ignore */ } if (!on) booth.reset(); }
-const chatterOn = () => { try { return localStorage.getItem('tilt.chatter') !== 'off'; } catch (e) { return true; } };
+const crowdOn = () => { try { return localStorage.getItem('tilt.chatter') !== 'off'; } catch (e) { return true; } }, chatterOn = crowdOn;      // Settings > Sound > Crowd (kept under the old key 'tilt.chatter')
 function setChatter(on) { try { localStorage.setItem('tilt.chatter', on ? 'on' : 'off'); } catch (e) { /* ignore */ } if (!on) crowdVoices.hideAll(); }
 // robot voice per character: [pitch, rate]. Hugh deep and measured, the king slow, the squire young and quick, the vendors brisk. (Some browser voices ignore pitch.)
 const VOICES = { hugh: [0.6, 0.9], king: [0.45, 0.78], squire: [1.3, 1.22], master: [0.72, 0.94], groom: [1.05, 1.08], armourer: [0.65, 0.95], farrier: [0.85, 1.0], pursuivant: [1.12, 1.08], herald: [0.98, 1.06],
   pie: [1.15, 1.25], meat: [0.75, 1.2], wine: [1.4, 1.3], marshal: [0.82, 1.04], pell: [0.88, 1.08], drewe: [0.5, 0.9], lady: [1.45, 1.02], rival: [1.0, 1.15] };
+const SPEAKER_CH = { hugh: 'herald', herald: 'herald', king: 'host', squire: 'retinue', groom: 'retinue', armourer: 'retinue', farrier: 'retinue', pursuivant: 'retinue', lady: 'retinue', master: 'master', rival: 'rival', pie: 'vendors', meat: 'vendors', wine: 'vendors', marshal: 'marshal', pell: 'booth', drewe: 'booth' };
 /** A character speaks aloud: only with sound on and Voices on. Called by the voice director for lines that were really shown (one at a time). key: a VOICES entry. */
 function speak(text, tier = 2, key = 'marshal', at = null) {
+  if (!SPEECH[SPEAKER_CH[key] || 'marshal']) return;      // only the booth speaks (src/channels.js)
   if (S.muted || G.manual || !window.speechSynthesis || !voicesOn()) return;
   try {
     const ss = window.speechSynthesis; if (ss.speaking && (tier === 1 || ss.pending)) ss.cancel();      // a result never waits behind older speech
@@ -159,7 +162,7 @@ function speak(text, tier = 2, key = 'marshal', at = null) {
 /** The booth speaks only into silence: never over the herald, never queued behind him (subtitle only then). onEnd: when the robot voice has finished. */
 let boothUtt = null;
 function boothSpeak(text, key, onEnd) {
-  if (S.muted || G.manual || !window.speechSynthesis || !voicesOn()) return false;
+  if (!SPEECH.booth || !commentaryOn() || S.muted || G.manual || !window.speechSynthesis) return false;
   try {
     const ss = window.speechSynthesis; if (ss.speaking || ss.pending) return false;
     const vp = VOICES[key] || VOICES.marshal, u = new SpeechSynthesisUtterance(text); if (ttsVoice) u.voice = ttsVoice; u.rate = vp[1]; u.pitch = vp[0]; u.volume = 0.8;
@@ -279,7 +282,7 @@ function voicePhase() {
 /** The one voice channel: every ticker line, herald line and shout is scheduled here (src/voice.js). */
 const voice = createVoice({
   phase: voicePhase,
-  show(text, who, speaker) { booth.yield(); const el = $('ticker'); el.innerHTML = `<b>${who}</b>${text}`; el.classList.toggle('scrollcall', /^THE (JUDGES|SCORER)/.test(who)); el.classList.add('on'); speech.show(text, who, speaker); },      // the ticker stays; the label goes over the speaker's head
+  show(text, who, speaker) { if (/^RIDE/i.test(text.replace(/<[^>]+>/g, ''))) booth.yield(); const el = $('ticker'); el.innerHTML = `<b>${who}</b>${text}`; el.classList.toggle('scrollcall', /^THE (JUDGES|SCORER)/.test(who)); el.classList.add('on'); if (TEXT.speechLabels3d) speech.show(text, who, speaker); },      // the ticker stays; the label goes over the speaker's head
   hide() { $('ticker').classList.remove('on'); speech.hide(); },
   speak: (text, tier, key) => speak(text, tier, key),
   dev: /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),
@@ -298,7 +301,8 @@ const ceremony = createCeremony(scene);
 ceremony.judgesCam = (id, u, w, l) => judges.cam(id, u, w, l);      // the intro's cut to the judges' box (src/judges.js)      // trumpeters, the announcer on his dais, the intro camera and cards (src/ceremony.js)
 /** A seller cries his wares (called by src/stands_life.js): a tier-4 ambient line with a label over his head and his own robot voice. Only when the voice is idle: true when taken. */
 function vendorCall(text, who, head, type) {
-  if (!M || M.practice || !chatterOn()) return false;
+  if (!TEXT.vendors && !SPEECH.vendors) return false;      // the sellers are silent (src/channels.js)
+  if (!M || M.practice || !crowdOn()) return false;
   const p = new THREE.Vector3(); head.getWorldPosition(p); p.y += 0.45;
   crowdVoices.say(text, who, p, 'vendor', 0.6);
   if (!voice.cur && !voice.wait && !booth.busy() && !(window.speechSynthesis && window.speechSynthesis.speaking)) speak(text, 4, type, head);      // his robot voice only into silence
@@ -444,7 +448,7 @@ let lateRolled = false;      // a Drinker's lateness is rolled when you arrive a
 function rollLate() {
   lateMen = {}; lateRolled = true;
   if (!M || M.practice || M.online) return;
-  for (const id of Object.keys(profile.retinue || {})) { const r = profile.retinue[id], t = r && TRAITS[r.trait]; if (t && t.late && Math.random() < t.late) { lateMen[id] = true; say(`Your ${(RETINUE[id] && RETINUE[id].name || id).toLowerCase()}, ${r.name}, hasn't turned up: he's been at the wine. No ${(RETINUE[id] && RETINUE[id].name || id).toLowerCase()} this course.`, r.name.toUpperCase(), 2); } }
+  for (const id of Object.keys(profile.retinue || {})) { const r = profile.retinue[id], t = r && TRAITS[r.trait]; if (t && t.late && Math.random() < t.late) { lateMen[id] = true; say(`Your ${(RETINUE[id] && RETINUE[id].name || id).toLowerCase()}, ${r.name}, hasn't turned up: he's been at the wine. No ${(RETINUE[id] && RETINUE[id].name || id).toLowerCase()} this course.`, r.name.toUpperCase(), 2, { ui: 'prompts' }); } }
 }
 /** The sum of one number from every man's temper (calm, rest, welcome) who is here this course. */
 const crew = (k) => S.online ? 0 : Object.keys(profile.retinue || {}).reduce((a, id) => { const r = profile.retinue[id]; return a + (r && !lateMen[id] && TRAITS[r.trait] ? TRAITS[r.trait][k] || 0 : 0); }, 0);
@@ -511,7 +515,9 @@ function rebuildPlayer() {
  * tier: 1 result (strike, verdict, fouls, unhorsing) · 2 course state (marshal, score) · 3 colour (facts, teaching, royals, intros) · 4 ambient (groom, crowd).
  * o: { delay (s), ttl (s), prompt (a screen prompt: not counted in the course budget), phases, free, cat, speak, after: 'strike', prio }
  */
-function say(text, who = 'THE MARSHAL', tier = 2, o = {}) { return voice.line(Object.assign({ text, who, tier }, o)); }
+function say(text, who = 'THE MARSHAL', tier = 2, o = {}) { return lineOut(Object.assign({ text, who, tier }, o)); }
+/** Every ticker / spoken line passes here: src/channels.js decides if its channel is shown and whether it is spoken. Silent channels return false (the caller's fallback may then try something else). */
+function lineOut(o) { const g = gate(o); if (!g.show) return false; if (!g.speak) o.speak = false; return voice.line(o); }
 
 // ---- callouts: the big centre text. At most one per strike, the most important (unhorse > break/helm > foul > attaint > miss).
 const CALL = { unhorse: 5, helm: 4, break: 4, turned: 3, foul: 3, across: 2, attaint: 2, miss: 1 };
@@ -632,7 +638,7 @@ function herald(key, delay = 0, o = {}) {
     course: ORD[Math.max(0, M.course - 1)] || 'next', land: M.od.land, horse: HORSES[profile.horse].name.toLowerCase(), hisHorse: (HORSES[M.od.horse] || { name: 'horse' }).name.toLowerCase(), hisArms: `${tinct(M.od.arms.c1)} and ${tinct(M.od.arms.c2)}`, arms: `${tinct(profile.arms.c1)} and ${tinct(profile.arms.c2)}` }, o.vars);
   const text = pk.raw.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   const { vars: _v, onShown, pool: _pl, text: _tx, ...rest } = o;
-  return voice.line(Object.assign({ who: ANNOUNCER.label, key, delay, speaker: speakerOf.hugh, voice: 'hugh' }, HMETA[key] || { tier: 3 }, rest, { text, onShown() { pk.done(); ceremony.speak(3); if (onShown) onShown(); } }));      // he steps forward on his dais while he speaks
+  return lineOut(Object.assign({ who: ANNOUNCER.label, key, delay, speaker: speakerOf.hugh, voice: 'hugh' }, HMETA[key] || { tier: 3 }, rest, { text, onShown() { pk.done(); ceremony.speak(3); if (onShown) onShown(); } }));      // he steps forward on his dais while he speaks
 }
 /** The host of the royal box speaks (a few lines a match): kind = approve | scorn | joke | delight. False when he is silent (budget, no herald). */
 const HOSTKIND = { royalPleased: 'approve', royalRise: 'delight', royalDispleased: 'scorn', royalJoke: 'joke' };
@@ -650,7 +656,7 @@ function nextTeach() { if (!M.teachPick) M.teachPick = pick(['teachAim', 'teachS
 function betweenColour(royalKey) {
   if (!M || M.result || M.practice) return;
   if (C && C.remarkQueued) return;      // the two replay remarks (yours, then his) are this gap's colour
-  if (M.ladyPending) { M.ladyPending = false; if (!herald('ladyFavour', 0.6)) say('A lady sends down her sleeve. Your nerve returns.', 'THE GALLERY', 3, { delay: 0.6, free: true, ttl: 6, phases: 'after' }); return; }
+  if (M.ladyPending) { M.ladyPending = false; if (!herald('ladyFavour', 0.6)) say('A lady sends down her sleeve. Your nerve returns.', 'THE GALLERY', 3, { ui: 'prompts', delay: 0.6, free: true, ttl: 6, phases: 'after' }); return; }
   if (!M.circuit || !HERALD || !voice.colourOk()) return;
   if (M.tourn && M.course >= 2 && M.score[0] !== M.score[1] && (M.stakeAt || 0) < M.course - 1 && Math.random() < 0.7) { M.stakeAt = M.course; if (herald('stakes', 1.2, { pool: M.score[0] > M.score[1] ? STAKES.lead : STAKES.trail })) return; }
   const tk = nextTeach();
@@ -696,6 +702,7 @@ function retSituation(c) {
 }
 /** One retinue line at most per course gap: about half the courses, more after a big moment, never the same line twice in a match. Between courses only, tier 4. */
 function retinueSpeak(sit, chance, wait = 2.6) {
+  if (!TEXT.retinue && !SPEECH.retinue) return;      // squire / armourer / groom / lady are silent (src/channels.js)
   if (!sit || !M || M.practice || !profile.retinue) return;
   if (Math.random() >= (['helm', 'broke', 'struck'].includes(sit) ? 0.8 : chance)) return;
   if (M.ladyFavour && LADY_CALLS[sit] && Math.random() < 0.3) {      // the lady who gave you her sleeve calls down from the gallery instead
@@ -1015,7 +1022,7 @@ function beginCourse(first = false) {
   }
   // The marshal calls the course (the lesson panel and the HUD prompt already say what to do). The lessons of the circuit come at the verdict (betweenColour).
   if (!M.practice) {
-    const ask = () => { if (!((M.course === 1 || (M.course >= M.courses && !extra)) && herald('callKnights')) && !herald('courseStart')) say(extra ? 'Level score. One more course.' : M.course === 1 ? 'Raise your lance, then ride on the signal.' : `Course the ${ORD[M.course - 1]}. To your marks.`, 'THE MARSHAL', 2, { phases: 'ready' }); };
+    const ask = () => { if (!((M.course === 1 || (M.course >= M.courses && !extra)) && herald('callKnights')) && !herald('courseStart')) say(extra ? 'Deciding course' : `Course ${M.course} of ${M.courses}`, 'THE MARSHAL', 2, { ui: 'courseNumber', key: 'courseNo', phases: 'ready' }); };      // (the herald's roll call is a channel of its own, src/channels.js; the course number is UI)
     if (first) { if (C.beat) C.askFn = ask; else voice.later(0.3, ask); } else ask();      // (the first course's roll call is cried at the end of the helm beat, from the cut to the announcer)
   }
   if (first && M.circuit) voice.later(3.2, () => teach('teachSalute', 0, { free: true }));      // the one lesson before the first course
@@ -1048,9 +1055,9 @@ function spur() {
   if (S.mode === 'ready') {
     const R = C.rd;
     if (C.beat) return;      // the squire is at your helm
-    if (player.helmOff) { say('Put your helm on first (H).', 'THE MARSHAL', 2, { prompt: true, phases: 'ready' }); return; }
+    if (player.helmOff) { say('Put your helm on first (H).', 'THE MARSHAL', 2, { ui: 'prompts', prompt: true, phases: 'ready' }); return; }
     if (!R.p) { R.p = true; player.raiseT = 1; if (player.visorUp) toast('VISOR', 'Your visor is up. Press H to close it before you meet.', 5); return; }       // the first W raises the lance
-    if (!R.sig) { if (!R.warned && !G.auto) { R.warned = true; say('Wait for the marshal.', 'THE MARSHAL', 2, { prompt: true, phases: 'ready' }); } return; }
+    if (!R.sig) { if (!R.warned && !G.auto) { R.warned = true; say('Wait for the marshal.', 'THE MARSHAL', 2, { ui: 'prompts', prompt: true, phases: 'ready' }); } return; }
     startCharge();
   }
   if (S.mode !== 'charge' || C.pL.done) return;
@@ -1122,7 +1129,7 @@ function ladyEye() {
   else if (kind === 'glare') { M.agit = clamp(M.agit + 0.05, 0, 1); M.fav.commons = clamp(M.fav.commons - 0.03, -1, 1); }
   M.favour = (M.fav.commons + M.fav.court) / 2;
   say(pick(E.lines), E.who, 2, { prompt: true, free: true, phases: 'ready', ttl: 12, delay: 0.5 + OTS, cat: 'lady', speaker: () => _lady });
-  say(E.note, 'THE GALLERY', 3, { free: true, phases: 'ready', ttl: 12, delay: 9 + OTS, cat: 'lady' });   // after her own line, not queued behind it
+  say(E.note, 'THE GALLERY', 3, { ui: 'prompts', free: true, phases: 'ready', ttl: 12, delay: 9 + OTS, cat: 'lady' });   // after her own line, not queued behind it
   withFeats(() => ladyFeat(profile, kind)); saveProfile();
 }
 
@@ -1361,7 +1368,7 @@ function rideService(j, T) {
 
 /** The marshal's hold and horns, from the plan; true when it is time to give the signal. (C.rd is the course's raise state.) */
 function signalStep(Pl, u) {
-  if (Pl.hold && !Pl.saidHold) { Pl.saidHold = true; say('Hold… not yet.', 'THE MARSHAL', 2, { key: 'hold', phases: 'ready', ttl: 3 }); }      // the flags stay up
+  if (Pl.hold && !Pl.saidHold) { Pl.saidHold = true; say('Hold… not yet.', 'THE MARSHAL', 2, { ui: 'prompts', key: 'hold', phases: 'ready', ttl: 3 }); }      // the flags stay up
   if (Pl.horns && !Pl.hornsUp) { Pl.hornsUp = true; ceremony.blowLine(Pl.hold + 3.4); }
   if (Pl.horns && !Pl.blown && u >= Pl.hold) { Pl.blown = true; fanfare('start'); }      // the horns sound a moment before the flags drop
   return u >= Pl.hold + (Pl.horns ? 1.5 : 0);
@@ -1370,7 +1377,7 @@ function signalStep(Pl, u) {
 function giveSignal(Pl) {
   C.rd.sig = true;
   // the herald's cry, as the marshal's signal: text and the herald's voice (drama: "Laissez-aller!")
-  say(pick(OFFICIALS.signal), ANNOUNCER.label, 2, { key: 'signal', urgent: true, prompt: true, phases: 'ready', ttl: 3, speak: profile.herald !== false, speaker: speakerOf.hugh, voice: 'hugh', onShown() { ceremony.speak(3); } });
+  say('Ride!', 'THE MARSHAL', 2, { ui: 'rideSignal', key: 'signal', urgent: true, prompt: true, phases: 'ready', ttl: 3, onShown() { ceremony.speak(3); } });      // the signal is UI text only now (src/channels.js)
   if (!Pl.horns) fanfare('short'); flagmen.sweep(); audio.crowd('cheer', 0.55 + 0.1 * Math.min(4, M.course));
 }
 
@@ -1588,7 +1595,7 @@ function updateRide(dt, dtReal) {
       M.hp.body = Math.max(0, M.hp.body - 0.06);
       if (!M.result) { M.score[0] += QUINTAIN.bagPoints; if (C.pts) C.pts[0] += QUINTAIN.bagPoints; updateHud(true); }
       callout('THE SANDBAG CAUGHT YOU &nbsp;−1', 'bad');
-      say('Too slow away. Ride on at a canter after the stroke.', 'THE MASTER OF ARMS', 3, { free: true, cat: 'sandbag', phases: 'after', speaker: speakerOf.man('master') });
+      say('Too slow away. Ride on at a canter after the stroke.', 'THE MASTER OF ARMS', 3, { ui: 'lessonGoals', free: true, cat: 'sandbag', phases: 'after', speaker: speakerOf.man('master') });
     }
   }
   const antic = S.mode === 'charge' && gap > 0 ? clamp(1 - gap / 80, 0, 1) : 0;
@@ -1797,7 +1804,7 @@ function planSignal() {
   const last = M.course >= M.courses, pen = M.course === M.courses - 1;
   return { hold: Math.random() < (last ? 0.6 : pen ? 0.4 : 0.25) ? 1.5 + Math.random() * 1.5 : 0, horns: M.course === 1 || last };
 }
-const HELM_FIT = 2.0, HELM_LOOK = 1.6, HELM_LADY = 2.4, HELM_HERALD = 3.6;      // seconds: the squire at your stirrup, the view through your visor slit (held), then (offline) a lady of the gallery, the quiet second before the flag, and the announcer's roll call with his scroll
+const HELM_FIT = 2.0, HELM_LOOK = 1.6, HELM_LADY = 2.4, HELM_HERALD = TEXT.herald ? 3.6 : 1.2;      // seconds: the squire at your stirrup, the view through your visor slit (held), then (offline) a lady of the gallery, the quiet second before the flag, and the announcer's roll call with his scroll
 function startHelmBeat() {
   C.beat = { kind: 'helm', t: 0, stage: 0, pend: true };
   if (player.visor) player.visorUp = true;      // up, so that the squire can close it
@@ -1820,7 +1827,7 @@ function stepBeat(dtReal) {
     else B.stage = 3;
   }
   if (B.stage === 2 && B.t >= t1 + HELM_LADY) B.stage = 3;
-  if (B.stage === 3 && !B.herald) { B.herald = true; B.hAt = B.t; C.cut = { kind: 'herald', t: 99 }; fireAsk(); ceremony.speak(HELM_HERALD - 0.4); }
+  if (B.stage === 3 && !B.herald) { B.herald = true; B.hAt = B.t; if (TEXT.herald) C.cut = { kind: 'herald', t: 99 }; fireAsk(); ceremony.speak(HELM_HERALD - 0.4); }
   const end = B.herald ? B.hAt + HELM_HERALD : B.stage >= 2 ? Infinity : t1;
   if (B.t >= end) endBeat(false);
 }
@@ -2526,10 +2533,10 @@ function startTend() {
   const line1 = who ? (cond === 'UNFIT' ? `The surgeon kneels by ${nm}.` : `The surgeon runs to ${nm}.`) : cond === 'FIT' ? 'The surgeon is at your stirrup. "A hard knock. Breathe."' : 'The surgeon is at your stirrup.';
   const line2 = cond === 'UNFIT' ? (who ? '"He cannot ride on." The judges agree.' : '"I forbid it, my lord. You are not fit to ride."')
     : cond === 'DOUBTFUL' ? (who ? '"He may ride on. I would not."' : `"You may ride on, my lord. I would not." You may yield (${touchMode ? 'tap YIELD' : 'Y'}).`) : null;
-  const sp = { stop: true, speak: true, voice: 'master', phases: ['after', 'ready', 'end'], ttl: 9 };      // tier 1: nothing outranks the surgeon
+  const sp = { stop: true, voice: 'master', phases: ['after', 'ready', 'end'], ttl: 9 };      // tier 1: nothing outranks the surgeon
   const spare = who ? `${nm}'s armourer fits the spare helm.` : 'Your armourer fits the spare helm.';
   const next = line2 ? [line2, 'THE SURGEON'] : null; if (swapped && line2) toast('SPARE HELM', spare, 4);      // the second line follows once the first has been shown
-  voice.later(0.2, () => say(swapped && !line2 ? spare : line1, 'THE SURGEON', 1, Object.assign({ urgent: true, onShown() { if (next) voice.later(2.2, () => say(next[0], next[1], 1, sp)); } }, sp)));
+  if (!who && line2) voice.later(0.2, () => say(line2, 'THE SURGEON', 1, Object.assign({ ui: 'injury', urgent: true }, sp)));      // only the decision (unfit / may yield) is shown, to the player, unspoken; the rest of the surgeon's talk is silent
   audio.armourClank(0.6);
 }
 function stepTend(m, dtReal) {

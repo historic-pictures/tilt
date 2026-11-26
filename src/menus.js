@@ -151,11 +151,9 @@ export function initMenus(api) {
           ${row('After a pass', opt(p.autoRide !== false, 'autoride', 'Ride back for me', 'data-v="1"') + opt(p.autoRide === false, 'autoride', 'By hand', 'data-v="0"'), 'The horse can take you back to your mark.|By hand: W/S set the gait, A/D steer.')}
         </section>
         <section class="sect"><h5>Sound</h5>
-          ${row('Herald', opt(p.herald !== false, 'herald', 'Speaks', 'data-v="1"') + opt(p.herald === false, 'herald', 'Silent', 'data-v="0"'), 'The speaker button, or M, mutes everything.')}
-          ${row('Voices', opt(voices, 'voices', 'On', 'data-v="1"') + opt(!voices, 'voices', 'Off', 'data-v="0"'), 'Robot voices for the king, your men and the sellers.')}
-          ${row('Commentary', opt(comm, 'commentary', 'On', 'data-v="1"') + opt(!comm, 'commentary', 'Off', 'data-v="0"'), 'Master Pell and Sir Walter in the booth: small subtitles, spoken only when the herald is quiet.')}
-          ${row('Crowd chatter', opt(chat, 'chatter', 'On', 'data-v="1"') + opt(!chat, 'chatter', 'Off', 'data-v="0"'), 'Shouts, chants and the sellers, from where they stand in the stands; the judges and the marshal.')}
-          ${row('Music', opt(!mOff, 'musicon', 'On', 'data-v="1"') + opt(mOff, 'musicon', 'Off', 'data-v="0"'), 'The note button in the corner does the same.|It silences the music only: the herald, voices, crowd and effects stay.')}
+          ${row('Commentary', opt(comm, 'commentary', 'On', 'data-v="1"') + opt(!comm, 'commentary', 'Off', 'data-v="0"'), 'Master Pell and Sir Walter in the booth: the one voice in the game, with small subtitles.')}
+          ${row('Crowd', opt(chat, 'chatter', 'On', 'data-v="1"') + opt(!chat, 'chatter', 'Off', 'data-v="0"'), 'Cheers, groans, applause and the odd war cry from the stands.')}
+          ${row('Music', opt(!mOff, 'musicon', 'On', 'data-v="1"') + opt(mOff, 'musicon', 'Off', 'data-v="0"'), 'The note button in the corner does the same.|It silences the music only: the commentary, crowd and effects stay.')}
           ${row('Volume', `<label class="vol"><input type="range" id="musicVol" min="0" max="100" step="5" value="${vol}"> <span id="musicPct">${vol}%</span></label>`)}
           ${SFX_HAS_OLD ? row('Sound pack', opt(sfxPack() === 'new', 'sfxpack', 'New', 'data-v="new"') + opt(sfxPack() !== 'new', 'sfxpack', 'Old', 'data-v="old"'), 'Changing the pack reloads the game.') : ''}
         </section>

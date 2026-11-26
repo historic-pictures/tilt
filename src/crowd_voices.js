@@ -5,6 +5,7 @@
 // Also home of the booth's subtitle strip (boothUI) and the shared CSS.
 import * as THREE from 'three';
 import { SHOUT, CHANT, CRY, CROWD_VOICES, COLOUR_WORDS, VENDOR } from './crowd_lines.js';
+import { CROWD, TEXT } from './channels.js';
 
 const CSS = `
 #booth { position: fixed; z-index: 7; left: 50%; bottom: 30px; transform: translateX(-50%); max-width: min(620px, calc(100vw - 32px)); padding: 4px 12px 5px; text-align: center;
@@ -58,7 +59,9 @@ export function createCrowdVoices(camera, host) {
   for (let i = 0; i < N; i++) { const el = document.createElement('div'); el.className = 'cvl'; el.innerHTML = '<i></i><span></span>'; document.body.appendChild(el); L.push({ el, pos: new THREE.Vector3(), on: false, t0: 0, life: 0, sc: 1 }); }
   const CV = { t: 0, log: [], usedSh: new Map(), idleT: 6, queue: [] };
 
-  function label(text, tag, pos, style = '', gain = 0.6, life = null) {
+  function label(text, tag, pos, style = '', gain = 0.6, life = null, ok = false) {
+    // src/channels.js: floating text shouts are cut to a few short war cries / name chants (ok = it comes from chant()), only when the stands are excited, one at a time. Officials/vendors/rivals/ladies pass ok = true only if their channel is switched on.
+    if (!ok) { if (!CROWD.shouts || host.excite() < CROWD.shoutExcite || L.filter(x => x.on).length >= CROWD.maxShoutLabels) return; }
     let s = L.find(x => !x.on); if (!s) { s = L.reduce((a, b) => (a.t0 < b.t0 ? a : b)); }
     s.on = true; s.t0 = CV.t; s.life = life ?? Math.min(3.6, 1.3 + 0.28 * text.split(/\s+/).length); s.pos.copy(pos); s.sc = 0.82 + 0.42 * gain;
     s.el.className = 'cvl on ' + style; s.el.firstChild.textContent = tag || ''; s.el.lastChild.textContent = text;
@@ -90,10 +93,12 @@ export function createCrowdVoices(camera, host) {
   }
   /** A voice of type `type` speaks `text` from the stands (side: +1 / -1 / 0 any). */
   function voice(type, text, side = 0, style = '', delay = 0, gain = gainNow()) {
+    const chantNow = CV._chant;      // (captured now: a delayed shout is still part of the chant that asked for it)
+    if (!chantNow) return;      // only chants / war cries get a label
     const T = CROWD_VOICES[type] || CROWD_VOICES.man, sp = host.spot(T.cls, type === 'dog' ? -1 : T.kind, side, host.focusZ());
     if (!sp) return;
     const pos = new THREE.Vector3(sp.x, sp.y + (type === 'dog' ? -1.0 : 0), sp.z);
-    const go = () => { label(type === 'dog' ? text : text, T.tag, pos, style, gain); if (host.play) host.play(`crowd.${type}`, pos, gain); };
+    const go = () => { label(text, T.tag, pos, style, gain); if (host.play) host.play(`crowd.${type}`, pos, gain); };
     if (delay > 0) CV.queue.push({ at: CV.t + delay, go }); else go();
   }
   CV.voice = voice;
@@ -116,21 +121,24 @@ export function createCrowdVoices(camera, host) {
   /** Supporters chant for a side: n voices, their name, their colours, their war cry. */
   CV.chant = function chant(side, n = 2, delay = 0) {
     if (!host.enabled()) return;
+    CV._chant = true; try { chantInner(side, n, delay); } finally { CV._chant = false; }
+  };
+  function chantInner(side, n, delay) {
     const P = side < 0 ? CHANT.him : CHANT.you;
     for (let k = 0; k < n; k++) { const e = pickA(P), text = fillShout(e, side); if (text) voice(e[0], text, 0, '', delay + k * rnd(0.3, 0.7)); }
     if (Math.random() < 0.25) { const e = pickA(CHANT.honour); voice(e[0], e[1], 0, 'lady', delay + 0.8); }
   };
   /** A man of the lists calls (the marshal's "Ho!", the judges): text at a world position. */
   CV.official = function official(text, pos, tag = 'THE MARSHAL', delay = 0) {
-    if (!host.enabled() || !pos) return;
+    if (!TEXT.marshal || !host.enabled() || !pos) return;      // the marshal's and judges' floating calls are off (src/channels.js)
     const p = pos.clone ? pos.clone() : new THREE.Vector3(pos.x, pos.y, pos.z);
-    const go = () => { label(text, tag, p, 'official', 0.9, 2.2); if (host.play) host.play('official', p, 0.9); };
+    const go = () => { label(text, tag, p, 'official', 0.9, 2.2, true); if (host.play) host.play('official', p, 0.9); };
     if (delay > 0) CV.queue.push({ at: CV.t + delay, go }); else go();
   };
   /** Any line at a position (a seller, his squire jeering, your lady): style 'vendor' | 'rival' | 'lady'. */
   CV.say = function say(text, tag, pos, style = '', gain = 0.7, delay = 0) {
-    if (!host.enabled() || !pos) return false;
-    const p = pos.clone ? pos.clone() : new THREE.Vector3(pos.x, pos.y, pos.z), go = () => label(text, tag, p, style, gain);
+    if (!host.enabled() || !pos || !TEXT[{ vendor: 'vendors', rival: 'rival', lady: 'lady' }[style] || 'retinue']) return false;      // a seller / his squire / a lady: each its own channel (src/channels.js)
+    const p = pos.clone ? pos.clone() : new THREE.Vector3(pos.x, pos.y, pos.z), go = () => label(text, tag, p, style, gain, null, true);
     if (delay > 0) CV.queue.push({ at: CV.t + delay, go }); else go();
     return true;
   };
@@ -141,7 +149,7 @@ export function createCrowdVoices(camera, host) {
     if (L.filter(s => s.on).length >= 2) return;
     const r = Math.random();
     if (r < 0.15) { const fav = host.vars().favour; CV.chant(fav >= 0 ? 1 : -1, 1); return; }
-    if (r < 0.28) { const k = pickA(['ale', 'nuts', 'wafers']), sp = host.spot([0, 1], 1, 0, host.focusZ()); if (sp) label(pickA(VENDOR[k]), { ale: 'AN ALE-WIFE', nuts: 'A NUT-SELLER', wafers: 'A WAFERER' }[k], new THREE.Vector3(sp.x, sp.y, sp.z), 'vendor', 0.5); return; }
+    if (r < 0.28) { const k = pickA(['ale', 'nuts', 'wafers']), sp = host.spot([0, 1], 1, 0, host.focusZ()); if (sp && TEXT.vendors) label(pickA(VENDOR[k]), { ale: 'AN ALE-WIFE', nuts: 'A NUT-SELLER', wafers: 'A WAFERER' }[k], new THREE.Vector3(sp.x, sp.y, sp.z), 'vendor', 0.5); return; }
     const e = pickShout(P === 'ready' && Math.random() < 0.45 ? 'ready' : P === 'intro' && Math.random() < 0.5 ? 'start' : 'idle'); if (!e) return;
     const text = fillShout(e, 1); if (text) voice(e[0], text, 0, e[0] === 'lady' ? 'lady' : '');
   }

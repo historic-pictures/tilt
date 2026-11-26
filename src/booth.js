@@ -1,5 +1,5 @@
 // The commentary booth (Master Pell and Sir Walter, src/booth_lines.js): a second voice channel beside the main one (src/voice.js), shown as small subtitles.
-// It never talks over the herald:
+// The herald no longer speaks (src/channels.js), so the booth has the floor. It still yields to the one remaining main-channel line (the marshal's 'Ride!'):
 //   * it starts a line only when the main channel is idle (nothing up, nothing waiting) and has been for a moment, and only if the next line the main channel
 //     has scheduled (voice.later timers) is far enough off for this one to finish; the impact exclamations (2-4 words) are the only exception to the moment;
 //   * when the main channel shows a line, the booth yields at once (its speech stops, its subtitle goes; the rest of an exchange waits to resume);
@@ -13,8 +13,8 @@ const strip = (s) => String(s).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').t
 const words = (s) => strip(s).split(/\s+/).filter(Boolean).length;
 export const turnTime = (s, fast = false) => Math.max(fast ? 1.1 : 1.7, 0.36 * words(s) + (fast ? 0.5 : 0.9));      // subtitle time for a turn (reading pace; the robot voice ends it sooner or later via onEnd)
 const PRIO = { exclaim: 6, away: 5, charge: 5, result: 6, after: 4, celebrate: 4, momentum: 3, score: 3, stakes: 2.5, ready: 2, agenda: 2, filler: 1 };
-const BUDGET = 7;          // turns per course (the exclamation and the charge lines do not count)
-const GAP = 0.7, MAIN_CLEAR = 0.5, EX_GAP = 0.3, QMAX = 5, TIGHT = 4.2;
+const BUDGET = 10;          // turns per course (the exclamation and the charge lines do not count)
+const GAP = 0.5, MAIN_CLEAR = 0.5, EX_GAP = 0.3, QMAX = 6, TIGHT = 7;
 const used = new Map();    // pool path -> indexes used (session-wide)
 
 /** The pool at a dotted path of BOOTH ('after.breakYou', 'venue.smithfield'). */
@@ -159,9 +159,9 @@ export function createBooth(host) {
     if (B.cur || B.q.length || !['ready', 'after', 'intro'].includes(P) || host.mainBusy()) return;
     if (host.soon && host.soon()) return;      // the lances are up: the marshal is about to cry the signal
     const still = B.t - B.quietSince, mi = host.mainIdle(), mq = host.mainQuiet();
-    if (still < (P === 'intro' ? 1.2 : 3) || mi < 1.5 || mq < 3.5) return;
+    if (still < (P === 'intro' ? 1.0 : 2) || mi < 1.0 || mq < 3.5) return;
     if (B.agenda.length && B.turns < BUDGET - 2) { const k = B.agenda.shift(); B.say(k, { cat: 'agenda', prio: PRIO.agenda, ttl: 4 }); return; }
-    if (P !== 'intro' && still > 7 && B.t - B.fillerAt > 25 && B.turns < BUDGET - 2) { B.fillerAt = B.t; B.say(Math.random() < 0.8 ? 'filler' : 'history', { cat: 'filler', ttl: 4 }); }
+    if (P !== 'intro' && still > 5 && B.t - B.fillerAt > 14 && B.turns < BUDGET - 2) { B.fillerAt = B.t; B.say(Math.random() < 0.8 ? 'filler' : 'history', { cat: 'filler', ttl: 4 }); }
   }
 
   B.update = function update(dt) {
