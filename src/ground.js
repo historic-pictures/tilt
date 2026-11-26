@@ -50,7 +50,7 @@ vec3 gTile(sampler2D s, vec2 uv, int mode){
  *   kind: 'sand' | 'grass'        diff: the colour texture for grass (sand uses its own .map)     mean: that texture's average linear colour
  *   dirt: [r,g,b] linear colour of trampled earth (grass)    lane: x of the riding lanes    half: [x, z] half extent of the sand strip
  */
-const GAINS = '1.62', GAING = '1.0';      // linear gain on the sand (patches and wear take about a quarter of the light); grass: none
+const GAINS = '0.78', GAING = '1.0';      // linear gain on the sand (patches and wear take about a quarter of the light); grass: none
 export function groundShader(mat, { kind = 'sand', diff = null, mean = [0.32, 0.236, 0.106], dirt = [0.3, 0.22, 0.12], lane = 0.95, half = [9.5, 51], detail = 0.35 } = {}) {
   const tile = GFX.tier === 'high' ? 3 : GFX.tier === 'medium' ? 2 : 0;      // 3 = colour + normal + roughness stochastic, 2 = colour + normal, 0 = plain
   const sand = kind === 'sand';

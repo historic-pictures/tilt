@@ -28,7 +28,7 @@ const TIERS = {
   high: {
     antialias: true, post: touchMode ? 'lite' : 'full', shadow: touchMode ? 2048 : 4096, aniso: 8, halfTex: false,
     sky: '4k', skyWait: true, cards: ALL_CARDS, halfCards: false, models: ALL_MODELS,
-    crowd: 1, trees: 1, bushes: 1, grass: 1, flowers: 1, tents: 1, px: 8e6,
+    crowd: 1, trees: 1, bushes: 1, grass: 1, flowers: 1, tents: 1, px: 5.5e6,
     pr: () => (touchMode ? (dpr() > 2.5 ? 1 : Math.min(dpr(), 1.25)) : Math.min(dpr(), 1.75)),      // (what main.js always used)
   },
   medium: {
@@ -45,6 +45,7 @@ const TIERS = {
   },
 };
 export const PR_FLOOR = 0.7;      // the safety net does not take the pixel ratio below this before it drops a tier (or below the tier's own, if that is lower)
+const PX_SIDE = 3200;             // the longest side of the drawing buffer (and so of the post targets), in device pixels: an ultrawide window must not ask the GPU for a 3500 px wide HDR multisampled stack
 const PR_MIN = 0.4;               // nothing, not even a player's override, draws below this
 
 // ------------------------------------------------------------------ storage
@@ -134,7 +135,8 @@ function baseRatio() {
   const t = TIERS[GFX.tier], o = GFX.ov;
   if (o.res) return Math.max(PR_MIN, dpr() * o.res);
   const css = Math.max(1, window.innerWidth * window.innerHeight);
-  return Math.max(PR_MIN, Math.min(t.pr(), Math.sqrt(t.px / css)));
+  const side = PX_SIDE / Math.max(1, window.innerWidth, window.innerHeight);      // a very wide or tall window: no side of the drawing buffer beyond PX_SIDE device pixels
+  return Math.max(PR_MIN, Math.min(t.pr(), Math.sqrt(t.px / css), side));
 }
 /** Put the tier's numbers, then the player's overrides, on GFX. */
 function apply(tier) {
@@ -153,6 +155,17 @@ function apply(tier) {
 }
 /** Use the new horse and rider (true) or the old code-built ones? Settings > Graphics > Models; Auto: everything but Low. (?horse=old and ?rider=old still win.) */
 export const wantNewModels = () => (GFX.model === 'new' ? true : GFX.model === 'old' ? false : GFX.tier !== 'low');
+
+/** The GPU lost its context or showed only black frames: take the cap down one tier now and keep it (Auto only; a named tier is what he chose, but a black screen is no use to him either). Returns the new tier, or '' when already on Low. */
+export function dropTier(why) {
+  if (GFX.tier === 'low') return '';
+  const next = TIER_ORDER[TIER_ORDER.indexOf(GFX.tier) - 1];
+  for (const k of ['res', 'shadow', 'post', 'dof']) delete GFX.ov[k];
+  lsSet(K.set, Object.keys(GFX.ov).length ? JSON.stringify(GFX.ov) : null);
+  setTier(next, 'tier', 'net', { note: why || 'graphics reset' }); GFX.dropped = true;
+  if (persist) { lsSet(K.cap, next); saveDevice(next, 'net', { note: GFX.auto.note }); }
+  return next;
+}
 
 /** The player's choice: 'auto' | 'low' | 'medium' | 'high'. (Per device: it is not kept in the cloud profile, a phone's Low must not follow him to his desktop.) */
 function readPref() {

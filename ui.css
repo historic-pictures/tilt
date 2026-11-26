@@ -527,7 +527,6 @@ body.touch.compact .menu h1.wmark .wm-text { font-size: 66px; }
    Callouts and titles that the game writes in capitals are set in sentence case here; small labels use the small-caps face. */
 #flashTxt, #cardTitle { text-transform: lowercase; }
 #flashTxt::first-letter, #cardTitle::first-letter { text-transform: uppercase; }
-#toast b { font-family: var(--caps); font-weight: 500; letter-spacing: .06em; }
 .online .roomcode b { font-family: var(--caps); font-weight: 500; letter-spacing: .3em; }
 .menu h1.wmark { display: block; width: 100%; }
 .menu h1.wmark .wordmark { max-width: none; }
@@ -573,3 +572,54 @@ body.touch.compact #audioBtns button { width: 36px; height: 36px; } body.touch.c
 body.touch.compact #audioBtns button::before { inset: -4px; }
 /* phones: keep page headers (Done, Back, Ride) clear of the two audio buttons in the corner */
 body.touch #screen .sheet .top, body.touch #screen .stop { padding-right: 92px; }
+
+/* ---------- notifications: "Combo B" ----------
+   A red Lombardic initial (span.ci, put there by src/lombard.js; GW Lombardic has A-Z only) then Pirata One textura in mixed case. Over the 3D view the words are
+   parchment-gold with an ink outline; on parchment they are ink. Used by: the big callouts (#flashTxt), the judges' and scorer's calls (#ticker.scrollcall), toasts,
+   the lesson heading, the end-of-match card title and the celebration prompt. The card subtitle, small labels and body text keep EB Garamond; menu titles keep Grenze Gotisch. */
+:root { --note: 'Pirata One', 'Grenze Gotisch', Georgia, serif; --initial: 'GW Lombardic', 'Pirata One', Georgia, serif; --note-gold: #f1d98e; --inkdeep: #1c1109; }
+:is(#flashTxt, #toast b, #ticker.scrollcall, #royalCap, #cardTitle, #lessonTitle, #celPrompt .cpHint) .ci { font-family: var(--initial); font-weight: 400; font-style: normal; text-transform: uppercase; font-size: 1.35em; line-height: 0; letter-spacing: 0; margin-right: .03em;
+  color: var(--vermilion); paint-order: stroke fill; -webkit-text-stroke: .11em var(--inkdeep); text-shadow: none; }
+#flashTxt, #toast b, #ticker.scrollcall, #royalCap, #celPrompt .cpHint { font-family: var(--note); font-weight: 400; letter-spacing: .01em; }
+/* the big callouts, over the 3D view */
+#flashTxt { font-size: clamp(38px, 6.2vw, 84px); line-height: 1.12; color: var(--note-gold); -webkit-text-stroke: .1em var(--inkdeep); paint-order: stroke fill; text-shadow: 0 4px 18px rgba(0, 0, 0, .75); padding: 0 4vw; }
+#flashTxt.good { color: var(--note-gold); } #flashTxt.bad { color: #f4d3c4; }
+#flashTxt .ci { -webkit-text-stroke: .1em var(--inkdeep); }
+body.touch #flashTxt { font-size: clamp(30px, 6.4vw, 54px); }
+body.touch.portrait #flashTxt { font-size: clamp(30px, 9vw, 52px); }
+/* titles on parchment: ink */
+#cardTitle, #lessonTitle, #lesson #lessonTitle, #card #cardTitle { font-family: var(--note); font-weight: 400; color: var(--ink); letter-spacing: .01em; }
+#cardTitle, #card #cardTitle { font-size: 60px; line-height: 1.05; text-shadow: 0 1px 0 rgba(240, 214, 138, .6); }
+#lessonTitle, #lesson #lessonTitle { font-size: 30px; }
+#cardTitle .ci, #lessonTitle .ci { -webkit-text-stroke: .07em var(--inkdeep); }
+body.touch.compact #card #cardTitle { font-size: 44px; } body.touch.portrait #card #cardTitle { font-size: 42px; }
+/* the celebration prompt, over the 3D view */
+body #celPrompt .cpHint { font-family: var(--note); font-weight: 400; font-size: 21px; color: var(--note-gold); letter-spacing: .02em; text-shadow: 0 1px 3px #000, 0 0 8px #000; }
+body #celPrompt .cpHint .ci { -webkit-text-stroke: .1em var(--inkdeep); }
+/* the scroll: the one backing for the judges' calls, the scorer's and toasts. A soft ink-wash band with two thin ruled vermilion lines and no ends; to change the
+   scroll's design, change only this class (the ::before). It unrolls from the middle in 0.2 s when it appears. */
+.scrollcall { color: var(--note-gold); isolation: isolate; }
+.scrollcall > .paper { display: none; }
+:is(#ticker, #toast, #royalCap).scrollcall::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; filter: none; transform-origin: 50% 50%;
+  background:
+    linear-gradient(90deg, transparent, var(--vermilion) 14%, var(--vermilion) 86%, transparent) 0 6px / 100% 2px no-repeat,
+    linear-gradient(90deg, transparent, var(--vermilion) 14%, var(--vermilion) 86%, transparent) 0 calc(100% - 6px) / 100% 2px no-repeat,
+    linear-gradient(90deg, transparent 0, rgba(24, 14, 7, .86) 14%, rgba(24, 14, 7, .86) 86%, transparent 100%); }
+#ticker.scrollcall.on::before, #toast.scrollcall.show::before, #royalCap.scrollcall:not(.hidden)::before { animation: scrollOpen .2s ease-out both; }
+@keyframes scrollOpen { from { transform: scaleX(.12); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #ticker.scrollcall.on::before, #toast.scrollcall.show::before, #royalCap.scrollcall:not(.hidden)::before { animation: none; } }
+#ticker.scrollcall { font-style: normal; font-size: 25px; line-height: 1.2; color: var(--note-gold); text-shadow: 0 1px 4px #000, 0 0 2px #000; padding: 14px 44px 15px; }
+#ticker.scrollcall b { color: var(--gold2); font-size: 12px; letter-spacing: .22em; margin-bottom: 2px; text-shadow: 0 1px 3px #000; }
+#toast.scrollcall { padding: 18px 48px 19px; color: var(--note-gold); text-shadow: 0 1px 4px #000, 0 0 2px #000; }
+#toast.scrollcall b { font-size: 31px; line-height: 1.1; color: var(--note-gold); }
+#toast.scrollcall > span { font-family: var(--body); font-style: italic; font-size: 18px; color: #eadcb4; margin-top: 3px; }
+#toast.seal b::before { color: var(--note-gold); }
+body.touch #ticker.scrollcall { font-size: 20px; padding: 10px 34px 11px; }
+#royalCap.scrollcall { font-style: normal; font-size: clamp(24px, 3.2vw, 40px); line-height: 1.15; padding: 12px 8vw 14px; text-shadow: 0 1px 4px #000, 0 0 2px #000; }
+body.touch #royalCap.scrollcall { font-size: clamp(20px, 3.6vw, 30px); padding: 8px 6vw 9px; }
+#royalCap.scrollcall { top: 124px; bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: max(340px, min(900px, calc(100vw - 580px))); }
+body.touch #royalCap.scrollcall { max-width: calc(100vw - 260px); top: 50px; }
+body.touch.portrait #royalCap.scrollcall { max-width: calc(100vw - 16px); top: 100px; }
+.scrollcall .ci { color: #e2492f; -webkit-text-stroke: .07em var(--inkdeep); }
+body.touch #toast.scrollcall { top: calc(var(--st) + 78px); }
+body.touch #royalCap.scrollcall { top: calc(var(--st) + 86px); }

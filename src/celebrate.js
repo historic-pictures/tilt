@@ -10,6 +10,7 @@
 //   * celCam: the low tracking shot and the close-up (main.js uses it only in non-interactive time).
 // Purely cosmetic: nothing here touches scores, timing or the strike code. A replay skips it (the snapshot does not carry it).
 import * as THREE from 'three';
+import { initialHtml } from './lombard.js';
 import { solveArm } from './rider_rig.js';
 import { touchMode } from './touch.js';
 
@@ -449,7 +450,7 @@ export function showPrompt(choices, def, onPick, ms = 1500) {
   let el = document.getElementById('celPrompt'); if (!el) { el = document.createElement('div'); el.id = 'celPrompt'; document.body.appendChild(el); }
   const radial = touchMode, spots = [[66, 0], [124, 56], [66, 112], [8, 56]];      // up, right, down, left of the radial (px from the corner of its box)
   el.className = radial ? 'radial' : '';
-  el.innerHTML = `<div class="cpHint">${radial ? 'Celebrate' : 'Celebrate: <b style="color:#fff">1-4</b> or arrows'}</div><div class="cpRow">${choices.map((id, i) => `<div class="cpBtn ${id === def ? 'def' : ''}" data-cel="${id}" style="${radial ? `left:${spots[i][0]}px;top:${spots[i][1]}px` : ''}" title="${CELEBS[id].name}"><kbd>${i + 1}</kbd>${giCel(id)}<b>${CELEBS[id].name}</b></div>`).join('')}</div><div class="cpBar"><i></i></div>`;
+  el.innerHTML = `<div class="cpHint">${radial ? initialHtml('Celebrate') : initialHtml('Celebrate') + ': <b style="color:#fff">1-4</b> or arrows'}</div><div class="cpRow">${choices.map((id, i) => `<div class="cpBtn ${id === def ? 'def' : ''}" data-cel="${id}" style="${radial ? `left:${spots[i][0]}px;top:${spots[i][1]}px` : ''}" title="${CELEBS[id].name}"><kbd>${i + 1}</kbd>${giCel(id)}<b>${CELEBS[id].name}</b></div>`).join('')}</div><div class="cpBar"><i></i></div>`;
   void el.offsetWidth; el.classList.add('on');
   const bar = el.querySelector('.cpBar i'); bar.style.transition = `transform ${ms}ms linear`; requestAnimationFrame(() => { bar.style.transform = 'scaleX(0)'; });
   const h = { choices, onPick, done: false, timer: setTimeout(() => hidePrompt(), ms), el };

@@ -28,3 +28,7 @@ They are embedded as a small inline sprite in `src/icons.js` (backgrounds remove
 ## Logo (AI-generated for the game, then drawn by hand)
 
 `icons/emblem-{256,128,64}.webp` and the app icons in `../app/` (icon-192, icon-512, icon-maskable-512 on lapis, apple-touch-icon on parchment, favicon-32) come from the owner's AI-generated emblem (the knight in a gold-rimmed lapis roundel, lance breaking out of the rim; cut-outs in `shots/genart/logos/`). `logo.svg` is a simplified vector redraw made by hand in SVG (flat fills, ink outlines, readable at 16-64 px) for the favicon and print.
+
+## Notification lettering ("Combo B")
+
+Callouts, judges' calls, toasts, lesson headings, card titles and the celebration prompt use a red Lombardic initial followed by Pirata One textura. Fonts are self-hosted in `../fonts/`, subset to Latin and converted to woff2 with fonttools: Pirata One (SIL OFL 1.1, `OFL-pirataone.txt`) and George Williams' Lombardic (BSD 3-clause, `BSD-gwlombardic.txt`; capitals only). Credits are also in `../CREDITS.md`. The backing for the judges' calls and toasts is plain CSS (the `.scrollcall` class in `ui.css`): no image files are used, so there is nothing to attribute there. An AI-generated banderole ribbon was tried and dropped on the owner's say-so (originals in `shots/genart/`, not shipped).

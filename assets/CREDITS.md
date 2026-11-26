@@ -119,3 +119,9 @@ They are embedded as a small inline sprite in `src/icons.js` (backgrounds remove
 ## Heraldic charges (`assets/heraldry/charges*.webp`)
 
 The beasts, plants, objects and crosses in the charge atlas are drawings from Wikimedia Commons, all public domain or CC0: the engravings of A. C. Fox-Davies, *A Complete Guide to Heraldry* (1909) as vectorised on Commons, lions by Inductiveload, the heraldic crosses by AnonMoos and others. One entry per file (page, author, licence) is in `tools/heraldry/licences.json`; `tools/heraldry/build_atlas.py` turns them into the atlas. No attribution is owed; it is recorded all the same.
+
+## Notification lettering (`assets/fonts/PirataOne-400.woff2`, `GWLombardic.woff2`)
+
+The callouts, judges' and scorer's calls, toasts, lesson headings, card titles and the celebration prompt are set as a red Lombardic initial followed by Pirata One in mixed case (src/lombard.js, ui.css "notifications"). Both are Latin subsets in woff2 (Lombardic A-Z only; it has no digits or punctuation).
+- Pirata One, by Rodrigo Fuenzalida and Nicolas Massi, SIL Open Font License 1.1 (`assets/fonts/OFL-pirataone.txt`).
+- Lombardic, by George Williams (1988-2001), BSD 3-clause licence: the copyright notice and disclaimer are in `assets/fonts/BSD-gwlombardic.txt`. The author's name is not used to endorse the game.

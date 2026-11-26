@@ -19,7 +19,7 @@ const tw = (t) => !touchMode || !t ? t : t.replace(/Hold LEFT MOUSE to (lower th
 import { Quintain } from './quintain.js';
 import { drawHitMap, drawDoll } from './verdict.js';
 import { SCANS, preloadScans, loadSkyList, loadSky } from './scans.js';
-import { GFX, frameTime, bootDone, simSpin } from './gfx.js';
+import { GFX, frameTime, bootDone, simSpin, dropTier, setOverride } from './gfx.js';
 import { stats as loadStats, mb } from './loadmeter.js';
 import { LanceArm, impact, breakAt, bites, rng32, seedOf, refStroke } from './physics.js';
 import { createVoice } from './voice.js';
@@ -33,6 +33,7 @@ import { createCrowdVoices, boothUI, colourWords } from './crowd_voices.js';
 import { OFFICIALS } from './officials_lines.js';
 import { createFlagmen } from './flagmen.js';
 import { createJudges } from './judges.js';
+import { watchInitial } from './lombard.js';
 import { createCeremony, INTRO_END, SKIP_HOLD, MOVE } from './ceremony.js';
 import { ANNOUNCER, HOST_LINES, INTRO, hostOf, hailName, bioOf, boastFor, fill, CIRCUIT, STAKES, HOST_FINAL } from './drama_lines.js';
 import * as career from './career.js';
@@ -190,6 +191,63 @@ const afterM = createAftermath({ scene, fx, emit: (name, d) => aftermathEvent(na
 let clackT = 0; fx.onClack = (p, v) => { if (S.time - clackT < 0.05) return; clackT = S.time; const [d, pan] = hear(p); audio.splinterTick(d, v, pan); };
 let post = createPost(renderer, scene, camera, { lite: GFX.post !== 'full', plain: GFX.post === 'plain', dof: GFX.dof });      // (let: Settings > Graphics can rebuild it)
 let postCfg = { level: GFX.post, dof: !!GFX.dof };
+// ------------------------------------------------------------------ a black screen must never stay black
+// Three things can leave the 3D view black while the HUD (plain DOM) goes on: the GPU drops the WebGL context, the frame throws before it draws, or a pass of the
+// pipeline draws nothing on this GPU. Each is caught here: context loss is recovered (and the graphics lowered a step), a throwing frame is logged and drawn anyway,
+// and a watchdog reads a few pixels once in a while and steps the graphics down (plain pipeline, then a lower tier, then an offer to reload on Low).
+const glFix = { lost: false, black: 0, stage: 0, next: 0, errs: 0, note: null };
+function glNote(text, click) {
+  if (!glFix.note) {
+    const d = document.createElement('div'); d.id = 'glNote';
+    d.style.cssText = 'position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:99999;padding:18px 30px;background:#f0e4c4;color:#3a1a10;border:2px solid #7a1f14;font:600 22px/1.3 serif;text-align:center;box-shadow:0 6px 30px #000a;cursor:pointer;max-width:80vw';
+    document.body.appendChild(d); glFix.note = d;
+  }
+  glFix.note.textContent = text; glFix.note.style.display = text ? '' : 'none'; glFix.note.onclick = click || null;
+}
+const glReload = () => { try { const u = new URL(location.href); u.searchParams.set('gfx', 'low'); location.href = u.toString(); } catch (e) { location.reload(); } };
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault(); glFix.lost = true; console.warn('[gfx] WebGL context lost');
+  glNote('Graphics reset — recovering…');
+  setTimeout(() => { if (glFix.lost) glNote('Graphics reset — tap to continue', glReload); }, 4000);
+});
+canvas.addEventListener('webglcontextrestored', () => {      // (three.js has already set its state up again; the render targets and textures follow on the next draw)
+  glFix.lost = false; glFix.black = 0; glFix.next = performance.now() + 3000; glNote('');
+  try { const t = dropTier('the graphics were reset'); console.warn('[gfx] WebGL context restored' + (t ? ', now on ' + t : '')); } catch (e) { console.warn(e); }
+  try { setOverride('post', 'plain'); } catch (e) { /* ignore */ }
+  try { resize(); } catch (e) { /* ignore */ }
+});
+const _px = new Uint8Array(4);
+/** True when five spread-out pixels of the frame just drawn are all pure black (the scene always has a sky, grass or a wall somewhere there). */
+function frameIsBlack() {
+  const gl = renderer.getContext(); if (!gl || (gl.isContextLost && gl.isContextLost())) return false;
+  const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+  for (const [fx, fy] of [[0.5, 0.9], [0.2, 0.85], [0.8, 0.85], [0.5, 0.6], [0.1, 0.5]]) {
+    gl.readPixels(Math.floor(W * fx), Math.floor(H * fy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, _px);
+    if (_px[0] + _px[1] + _px[2] > 0) return false;
+  }
+  return true;
+}
+function cameraOk() { const m = camera.matrixWorld.elements, q = camera.projectionMatrix.elements; for (let i = 0; i < 16; i++) if (!Number.isFinite(m[i]) || !Number.isFinite(q[i])) return false; return true; }
+/** Draw the frame through the post pipeline; never throws; checks for black now and then. */
+function drawFrame(dt) {
+  if (glFix.lost) return;
+  try { post.render(dt); } catch (e) {
+    if (glFix.errs++ < 5) console.error('[render] frame failed:', e);
+    try { renderer.render(scene, camera); } catch (e2) { /* the next frame tries again */ }
+  }
+  const now = performance.now(); if (now < glFix.next) return; glFix.next = now + 1500;
+  let black = false; try { black = frameIsBlack(); } catch (e) { return; }
+  if (glFix.force) black = true;      // (test hook)
+  if (!black) { glFix.black = 0; return; }
+  if (!cameraOk()) { resetCamera(); console.error('[render] the camera was not a number: reset'); glFix.black = 0; return; }
+  if (++glFix.black < 2) return;
+  glFix.black = 0; glFix.stage++;
+  console.warn('[gfx] black frames, step ' + glFix.stage);
+  if (glFix.stage === 1) { try { setOverride('post', 'plain'); } catch (e) { /* ignore */ } }
+  else if (glFix.stage === 2) { const t = dropTier('black frames'); try { setOverride('post', 'plain'); } catch (e) { /* ignore */ } toast('Graphics', 'The picture went dark, so the graphics were lowered' + (t ? ' to ' + t : ''), 8); }
+  else { glFix.force = false; glNote('Graphics problem — tap to continue on Low', glReload); }
+}
+window.__glFix = glFix;
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -221,7 +279,7 @@ function voicePhase() {
 /** The one voice channel: every ticker line, herald line and shout is scheduled here (src/voice.js). */
 const voice = createVoice({
   phase: voicePhase,
-  show(text, who, speaker) { booth.yield(); const el = $('ticker'); el.innerHTML = `<b>${who}</b>${text}`; el.classList.add('on'); speech.show(text, who, speaker); },      // the ticker stays; the label goes over the speaker's head
+  show(text, who, speaker) { booth.yield(); const el = $('ticker'); el.innerHTML = `<b>${who}</b>${text}`; el.classList.toggle('scrollcall', /^THE (JUDGES|SCORER)/.test(who)); el.classList.add('on'); speech.show(text, who, speaker); },      // the ticker stays; the label goes over the speaker's head
   hide() { $('ticker').classList.remove('on'); speech.hide(); },
   speak: (text, tier, key) => speak(text, tier, key),
   dev: /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),
@@ -458,6 +516,8 @@ function say(text, who = 'THE MARSHAL', tier = 2, o = {}) { return voice.line(Ob
 // ---- callouts: the big centre text. At most one per strike, the most important (unhorse > break/helm > foul > attaint > miss).
 const CALL = { unhorse: 5, helm: 4, break: 4, turned: 3, foul: 3, across: 2, attaint: 2, miss: 1 };
 let strikeCall = null;      // { t0, best: [text, cls, prio], fired }
+// Combo B lettering (ui.css, 'notifications'): the first letter of each of these is a red Lombardic initial, whatever the game writes in.
+for (const [id, skip] of [['flashTxt'], ['cardTitle'], ['lessonTitle'], ['ticker', 'b']]) watchInitial($(id), skip); watchInitial($('toast').querySelector('b')); watchInitial($('royalCap'));
 function flashCall(text, cls) { const el = $('flashTxt'); el.innerHTML = text; el.className = ''; void el.offsetWidth; el.className = `show ${cls}`; }
 /** prio = null: show at once (the barrier, a lance left low). prio = a number: a blow of this strike, buffered a moment so the best one is shown. */
 function callout(text, cls = 'good', prio = null) {
@@ -499,7 +559,7 @@ function discover(id) {
   if (!profile.arts) profile.arts = {};
   if (profile.arts[id] || !ARTS[id] || (M && M.online)) return;
   profile.arts[id] = true; saveProfile();
-  toast(`ART DISCOVERED — ${ARTS[id].name}`, ARTS[id].text, DISCOVERY_SECONDS, true);
+  toast(`Art discovered — ${ARTS[id].name}`, ARTS[id].text, DISCOVERY_SECONDS, true);
 }
 /** Feats earned just now: a toast for each (it waits out the charge and the replay) and the save. Returns the ids. */
 function showFeats(ids) {
@@ -969,7 +1029,7 @@ function beginCourse(first = false) {
     else if (!first && M.course === M.courses && !M.mode.firstBreak) booth.say('momentum.lastCourse', { delay: 1.5, ttl: 9, prio: 3 });
     else if (!first && Math.random() < 0.3) booth.say('ready', { delay: 2.5, ttl: 9, prio: 2 });
   }
-  if (M.bondUp) setTimeout(() => toast('BOND', `Your ${player.horseDef.name.toLowerCase()} trusts you more with every course. Bond ${BOND_NAMES[bondLevel(profile.bond[profile.horse])]}: steadier and bolder.`), 1500);
+  if (M.bondUp) setTimeout(() => toast('Bond', `Your ${player.horseDef.name.toLowerCase()} trusts you more with every course. Bond ${BOND_NAMES[bondLevel(profile.bond[profile.horse])]}: steadier and bolder.`), 1500);
   updateHud(true);
 }
 
@@ -1867,7 +1927,7 @@ function raiseJudges(overReplay) {
   judgeCall(cy, ch, lead);      // the middle judge says it, the scorer reads it back (src/crowd_voices.js)
   C.cut = { kind: 'judges', t: lead + hold, total: lead + hold, split: lead };
   $('verdict').classList.add('hidden');
-  $('royalCap').textContent = `THE JUDGES · YOU: ${lab(cy, true)} · HIM: ${lab(ch, false)}`; $('royalCap').classList.remove('hidden');
+  $('royalCap').textContent = `The judges · you: ${lab(cy, true).toLowerCase()} · him: ${lab(ch, false).toLowerCase()}`; $('royalCap').classList.remove('hidden');
 }
 /** The flags are down: Hugh gives his combined result call, and the replay's coaching line may follow it. */
 function releaseCall(Cc) {
@@ -3868,6 +3928,7 @@ function updateMask() {
 // ------------------------------------------------------------------ camera
 const camPos = new THREE.Vector3(0, 6, -50), camLook = new THREE.Vector3(0, 2, 0), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
 let fov = 58;
+function resetCamera() { camPos.set(0, 6, -50); camLook.set(0, 2, 0); fov = 58; S.kx = S.ky = S.kvx = S.kvy = 0; S.shake = 0; camera.position.copy(camPos); camera.fov = 58; camera.updateProjectionMatrix(); camera.lookAt(camLook); camera.updateMatrixWorld(true); }
 /** State of the lazy follow cam used while the scripted ride-back runs: its yaw lags the horse's heading (about 1.7 s), and it is eased in over the first second or two.
  *  Runs every frame (also under a cut) so it is current when the cut ends. Returns true when the follow cam is the active one. */
 const FC = { yaw: 0, hd: 0, b: 0 };
@@ -4037,6 +4098,7 @@ function updateCamera(dtReal) {
   }
   if (!own && S.mode !== 'menu' && camera.aspect < 1.3) wantFov = Math.min(84, 2 * Math.atan(Math.tan(wantFov * Math.PI / 360) * Math.sqrt(1.78 / camera.aspect)) * 180 / Math.PI);      // phone held upright: the cinematic cuts are framed for 16:9, so widen them (the judges' box and the announcer must fit across)
   if (S.focusOn) wantFov -= 9;
+  if (!(Number.isFinite(camPos.x + camPos.y + camPos.z + camLook.x + camLook.y + camLook.z + want.x + want.y + want.z + wantLook.x + wantLook.y + wantLook.z + fov + wantFov))) { resetCamera(); want.copy(camPos); wantLook.copy(camLook); wantFov = 58; snap = true; if (glFix.errs++ < 5) console.error('[camera] not a number: reset'); }      // (a NaN would stay in the lerp for ever: the 3D view black, the HUD still running)
   if (snap || camPos.distanceTo(want) > 60) { camPos.copy(want); camLook.copy(wantLook); }
   const k = 1 - Math.exp(-rate * dtReal);
   camPos.lerp(want, k); camLook.lerp(wantLook, 1 - Math.exp(-rate * 1.2 * dtReal));
@@ -4080,7 +4142,10 @@ function tick(now) {
   const dt = clock.getDelta();
   frameTime(dt * 1000, S.paused || document.hidden || S.mode === 'menu');      // the live safety net (src/gfx.js); the capped menus would read as slow
   if (S.mode === 'menu' && attract.running) attract.sample(dt * 1000);      // (the menu joust has its own check, against the menus' 30 a second)
-  frame(Math.min(dt, 0.05));
+  try { frame(Math.min(dt, 0.05)); } catch (e) {      // a throwing frame must not leave the screen black or stop the loop: log it, draw what there is
+    if (glFix.errs++ < 5) console.error('[frame] failed:', e);
+    drawFrame(0);
+  }
 }
 // the benchmark, the safety net or Settings > Graphics changed something: apply what can change on the fly (trees and crowd change with the next venue build, the sky and models on the next load)
 let shadowNow = GFX.shadow, shadowOnNow = GFX.shadowOn;
@@ -4108,8 +4173,8 @@ G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) 
 function frame(dtReal) {
   touch.update();
   if (S.paused && !S.online) {      // (online the pause menu opens but the match goes on)
-    if (R && R.hl) { S.time += dtReal; updateReplay(dtReal, dtReal); replayDress(); updateCamera(dtReal); updateMask(); post.render(dtReal); }      // a highlight plays while the match stands still
-    else post.render(0);
+    if (R && R.hl) { S.time += dtReal; updateReplay(dtReal, dtReal); replayDress(); updateCamera(dtReal); updateMask(); drawFrame(dtReal); }      // a highlight plays while the match stands still
+    else drawFrame(0);
     return;
   }
   if (R && R.live) replayUndress();      // (back to the real poses before anything of the match runs)
@@ -4176,7 +4241,7 @@ function frame(dtReal) {
   voice.update(dtReal); booth.update(dtReal); crowdVoices.update(dtReal); flushCall(); pumpToast();
   dazeStep(dtReal); celTick(dtReal);
   post.setFocus(S.focusOn ? 1 : 0); post.setSpeed(M && player && S.mode === 'charge' ? clamp((player.speed - 6.2) / 3, 0, 1) * 0.5 : 0);
-  post.render(dtReal);
+  drawFrame(dtReal);
 }
 
 // ------------------------------------------------------------------ boot

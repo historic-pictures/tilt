@@ -225,7 +225,7 @@ export function createPost(renderer, scene, camera, opts = {}) {
     // HalfFloat + MSAA target so HDR values survive and edges stay anti-aliased.
     const target = new THREE.WebGLRenderTarget(size.x * pr, size.y * pr, {
       type: THREE.HalfFloatType,
-      samples: lite ? 2 : 4,
+      samples: lite || size.x * size.y * pr * pr > 3.2e6 ? 2 : 4,      // (a big buffer: half the multisampling, the GPU memory would be doubled)
     });
     if (useDof) target.depthTexture = new THREE.DepthTexture(size.x * pr, size.y * pr);      // (the composer clones it, so both buffers have one: the scene is drawn into whichever is current)
     const composer = new EffectComposer(renderer, target);

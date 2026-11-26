@@ -5,3 +5,8 @@
 @font-face { font-family: 'EB Garamond'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('EBGaramond-500.woff2') format('woff2'); }
 @font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('EBGaramond-500i.woff2') format('woff2'); }
 @font-face { font-family: 'EB Garamond SC'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('EBGaramondSC-500.woff2') format('woff2'); }
+
+/* Combo B (notifications): a red Lombardic initial (George Williams Lombardic, BSD 3-clause, BSD-gwlombardic.txt; A-Z only, no digits or punctuation)
+   followed by Pirata One textura in mixed case (SIL OFL 1.1, OFL-pirataone.txt). Latin subsets, woff2. */
+@font-face { font-family: 'GW Lombardic'; font-style: normal; font-weight: 400; font-display: swap; src: url('GWLombardic.woff2') format('woff2'); }
+@font-face { font-family: 'Pirata One'; font-style: normal; font-weight: 400; font-display: swap; src: url('PirataOne-400.woff2') format('woff2'); }
