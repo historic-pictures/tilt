@@ -67,6 +67,7 @@ export function harness(armourId, helmId) {
   return Object.assign({}, b, { helm: h.id, helmDef: h, vision: h.vision, helmProt: h.protection, weight: b.weight + (h.kg - own.kg) * 0.012, kg: PHYS.armourKg[b.id] - own.kg + h.kg });
 }
 
+// The first-visit page offers these few (old names: `pale` parts the field, the rest are ordinaries in the second tincture); the Armoury's editor has the whole set (heraldry.js).
 export const PATTERNS = ['plain', 'pale', 'fess', 'quarterly', 'bend', 'chevron', 'chief', 'paly'];
 export const CHARGES = ['none', 'cross', 'fleur', 'star', 'tower', 'crescent', 'diamond', 'roundel', 'feathers'];
 export const TINCTURES = [
@@ -74,20 +75,23 @@ export const TINCTURES = [
   ['Sable', '#191919'], ['Purpure', '#6b2478'], ['Tenné', '#b5561c'], ['Celeste', '#5a9ccb'],
 ];
 
+// Their arms are the real ones where they are known (docs/heraldry-plan.md has the blazons and what they rest on); the saved shape is explained in heraldry.js.
 // Opponents. skill = aim, seat = how hard they are to unhorse, drive = how fast they come.
 export const KNIGHTS = [
   { id: 'clifford', name: 'Sir Thomas Clifford', short: 'Clifford', land: 'England', arms: { c1: '#e0b83c', c2: '#1f4690', c3: '#a81e1e', pattern: 'chequy', charge: 'none', over: [{ kind: 'fess', c: '#a81e1e' }] }, horse: 'rouncey', armour: 'mail', skill: 0.32, seat: 0.45, drive: 0.72 },
-  { id: 'renaud', name: 'Renaud de Roye', short: 'de Roye', land: 'France', arms: { c1: '#1f4690', c2: '#e0b83c', c3: '#e0b83c', pattern: 'plain', charge: 'fleur' }, horse: 'courser', armour: 'bascinet', skill: 0.5, seat: 0.55, drive: 0.95 },
-  { id: 'boucicaut', name: 'Jean le Meingre, "Boucicaut"', short: 'Boucicaut', land: 'France', arms: { c1: '#ece8dc', c2: '#a81e1e', c3: '#a81e1e', pattern: 'chief', charge: 'crescent' }, horse: 'destrier', armour: 'bascinet', skill: 0.62, seat: 0.72, drive: 0.85 },
-  { id: 'lalaing', name: 'Jacques de Lalaing', short: 'Lalaing', land: 'Burgundy', arms: { c1: '#a81e1e', c2: '#ece8dc', c3: '#ece8dc', pattern: 'paly', charge: 'diamond' }, horse: 'courser', armour: 'milanese', skill: 0.72, seat: 0.7, drive: 0.92 },
-  { id: 'quinones', name: 'Suero de Quiñones', short: 'Quiñones', land: 'León', arms: { c1: '#e0b83c', c2: '#1f4690', c3: '#a81e1e', pattern: 'quarterly', charge: 'none' }, horse: 'andalusian', armour: 'milanese', skill: 0.78, seat: 0.66, drive: 0.88 },
-  { id: 'freydal', name: 'Maximilian, "Freydal"', short: 'Freydal', land: 'Empire', arms: { c1: '#191919', c2: '#e0b83c', c3: '#e0b83c', pattern: 'fess', charge: 'star' }, horse: 'destrier', armour: 'stechzeug', skill: 0.88, seat: 0.9, drive: 0.9, armourTint: 0x30333a },
+  { id: 'renaud', name: 'Renaud de Roye', short: 'de Roye', land: 'France', arms: { c1: '#a81e1e', c2: '#ece8dc', c3: '#ece8dc', pattern: 'plain', charge: 'none', over: [{ kind: 'bend', c: '#ece8dc' }] }, horse: 'courser', armour: 'bascinet', skill: 0.5, seat: 0.55, drive: 0.95 },
+  { id: 'boucicaut', name: 'Jean le Meingre, "Boucicaut"', short: 'Boucicaut', land: 'France', arms: { c1: '#ece8dc', c2: '#ece8dc', c3: '#a81e1e', pattern: 'plain', charge: 'eagletwo' }, horse: 'destrier', armour: 'bascinet', skill: 0.62, seat: 0.72, drive: 0.85 },
+  { id: 'lalaing', name: 'Jacques de Lalaing', short: 'Lalaing', land: 'Burgundy', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#ece8dc', pattern: 'plain', charge: 'lozenge', over: [{ kind: 'ten', c: '#000000' }] }, horse: 'courser', armour: 'milanese', skill: 0.72, seat: 0.7, drive: 0.92 },
+  { id: 'quinones', name: 'Suero de Quiñones', short: 'Quiñones', land: 'León', arms: { c1: '#a81e1e', c2: '#1f4691', c3: '#ece8dc', pattern: 'chequy', charge: 'none' }, horse: 'andalusian', armour: 'milanese', skill: 0.78, seat: 0.66, drive: 0.88 },
+  { id: 'freydal', name: 'Maximilian, "Freydal"', short: 'Freydal', land: 'Empire', arms: { c1: '#e0b83c', c2: '#e0b83c', c3: '#191919', pattern: 'plain', charge: 'eagle' }, horse: 'destrier', armour: 'stechzeug', skill: 0.88, seat: 0.9, drive: 0.9, armourTint: 0x30333a },
   // Palman (documented 1333–1356; "Palman of Letinberch", Littenberg in Lower Styria; Latin "Palmanus Teutonicus"), a German knight
   // who captained the German mercenaries (about 300) of Stefan Dušan, King of Serbia (emperor only from 1346). "Bracht" is not in the
-  // records (docs/era-atmosphere-research.md). No jousting is recorded for him. No arms of his are known; these are the game's.
-  { id: 'palman', name: 'Palman Bracht', short: 'Palman', land: 'Styria', arms: { c1: '#ece8dc', c2: '#191919', c3: '#191919', pattern: 'bend', charge: 'none' }, horse: 'destrier', armour: 'bascinet', skill: 0.74, seat: 0.82, drive: 0.9 },
-  { id: 'ulrich', name: 'Ulrich von Liechtenstein', short: 'Liechtenstein', land: 'Styria', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#1f4690', pattern: 'chief', charge: 'none', over: [{ kind: 'chevron', c: '#1f4690' }] }, horse: 'destrier', armour: 'mail', skill: 0.8, seat: 0.8, drive: 0.95 },
-  { id: 'blackprince', name: 'Edward, the Black Prince', short: 'the Prince', land: 'England', arms: { c1: '#191919', c2: '#191919', c3: '#ece8dc', pattern: 'plain', charge: 'feathers' }, horse: 'destrier', armour: 'bascinet', skill: 0.92, seat: 0.88, drive: 0.95 },
+  // records (docs/era-atmosphere-research.md). No jousting is recorded for him. His look is the owner's design, researched partly from
+  // Paja Jovanović's painting: azure, a cross fleury argent, on shield, jupon and trapper; plate over mail; a flat-topped great helm with a
+  // gilt cross over the face, crested with two tall gilt horns, blue and white mantling. Fixed: do not change it without him.
+  { id: 'palman', name: 'Palman Bracht', short: 'Palman', land: 'Styria', arms: { c1: '#1f4690', c2: '#1f4690', c3: '#ece8dc', pattern: 'plain', charge: 'crossflory' }, horse: 'destrier', armour: 'bascinet', helm: 'greathelm', crest: 'horns', mantling: true, helmCross: true, skill: 0.74, seat: 0.82, drive: 0.9 },
+  { id: 'ulrich', name: 'Ulrich von Liechtenstein', short: 'Liechtenstein', land: 'Styria', arms: { c1: '#ece8dc', c2: '#191919', c3: '#191919', pattern: 'plain', charge: 'none', over: [{ kind: 'bendlets', c: '#191919' }] }, horse: 'destrier', armour: 'mail', skill: 0.8, seat: 0.8, drive: 0.95 },
+  { id: 'blackprince', name: 'Edward, the Black Prince', short: 'the Prince', land: 'England', arms: { c1: '#191919', c2: '#191919', c3: '#ece8dc', pattern: 'plain', charge: 'feather', over: [{ kind: 'three', c: '#000000' }] }, horse: 'destrier', armour: 'bascinet', skill: 0.92, seat: 0.88, drive: 0.95 },
 ];
 
 // The circuit. Each venue re-dresses the lists.
@@ -185,7 +189,7 @@ export const CAPARISONS = {
 export const DEFAULT_PROFILE = {
   name: 'Sir Nameless', named: false, arms: { c1: '#1f4690', c2: '#e0b83c', c3: '#ece8dc', pattern: 'chevron', charge: 'cross' },
   horse: 'rouncey', armour: 'mail', helm: 'greathelm', lance: 'standard', venue: 0, table: null, firstPerson: false, bond: {},
-  caparison: 'livery', gold: 60, owned: { horses: ['rouncey'], armours: ['mail'], helms: ['greathelm'], caparisons: ['livery', 'none'] }, difficulty: 1, herald: true, arts: {}, lesson: 0,
+  caparison: 'livery', gold: 60, owned: { horses: ['rouncey'], armours: ['mail'], helms: ['greathelm'], caparisons: ['livery', 'none'] }, difficulty: 1, herald: true, celebs: [], arts: {}, lesson: 0,
   renown: 0, skills: {}, retinue: { squire: 1 }, courses: 5,
   achievements: {}, stats: {},      // achievements: id -> date earned; stats: running counts for them (see src/achievements.js)
 };
@@ -210,7 +214,7 @@ export const DIFFICULTY = [
 export const purse = (vIdx, result, circuit) => { const base = circuit ? 90 + 45 * vIdx : 35; return result.startsWith('win') ? base + (result === 'win-unhorse' && !circuit ? 30 : 0) : result === 'draw' ? Math.round(base / 2) : result === 'practice' ? 0 : Math.round(base / 5); };
 
 // ---------------------------------------------------------------------------------------------------------
-// The purse. All money is in marks; economy.js turns a finished match into a ledger using only these numbers.
+// The purse. All money is in marks (shown to the player as coins); economy.js turns a finished match into a ledger using only these numbers.
 export const ECON = {
   entry: [15, 10],                                   // circuit entry fee: first venue, and how much more at each venue after
   lance: { light: 2, standard: 3, heavy: 5 },        // each lance you break is yours to pay for (reckon() scales this down in matches longer than four courses)
@@ -246,8 +250,8 @@ export const trainCost = (id, rec) => (rec && rec.level < RETINUE_UP.max && RETI
 export const TRAITS = {
   steady:   { name: 'Steady', text: 'Cool in a crowd: your horse settles a little more between courses.', calm: 0.03, color: '#4d7ea8' },
   quick:    { name: 'Quick', text: 'Quick on his feet: your horse gets a little more wind back each course.', rest: 0.05, color: '#c28a2b' },
-  thrifty:  { name: 'Thrifty', text: 'Haggles over every penny: his wage is 1 mark less.', wage: -1, color: '#5f8e4c' },
-  boastful: { name: 'Boastful', text: 'Shouts your name to the stands: a warmer welcome, but he wants 1 mark more.', welcome: 0.04, wage: 1, color: '#a8361f' },
+  thrifty:  { name: 'Thrifty', text: 'Haggles over every penny: his wage is 1 coin less.', wage: -1, color: '#5f8e4c' },
+  boastful: { name: 'Boastful', text: 'Shouts your name to the stands: a warmer welcome, but he wants 1 coin more.', welcome: 0.04, wage: 1, color: '#a8361f' },
   devout:   { name: 'Devout', text: 'Prays before every course. It can\'t hurt.', color: '#7b5c9c' },
   drinker:  { name: 'Drinker', text: 'Good company, but one course in six he turns up late and the work isn\'t done.', late: 1 / 6, color: '#8c5e30' },
 };
@@ -311,20 +315,34 @@ export const SKILLS = {
   largesse: { name: 'Largesse', text: 'The gallery gives more freely, and every joust adds more to your name.', gift: 1.6, renown: 1.25 },
 };
 
-// Real medieval arms that the simple blazon set can draw honestly.
+// Real medieval arms the blazon set can draw honestly (the note says where one is simplified).
 export const HISTORIC_ARMS = [
-  { name: 'Scrope', note: 'Azure, a bend or — fought over in the Court of Chivalry, 1389', arms: { c1: '#1f4690', c2: '#e0b83c', c3: '#e0b83c', pattern: 'bend', charge: 'none' } },
-  { name: 'Austria', note: 'Gules, a fess argent', arms: { c1: '#a81e1e', c2: '#ece8dc', c3: '#ece8dc', pattern: 'fess', charge: 'none' } },
-  { name: 'Aragon', note: 'Or, four pallets gules', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#a81e1e', pattern: 'paly', charge: 'none' } },
-  { name: 'Stafford', note: 'Or, a chevron gules', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#a81e1e', pattern: 'chevron', charge: 'none' } },
-  { name: 'St George', note: 'Argent, a cross gules', arms: { c1: '#ece8dc', c2: '#ece8dc', c3: '#a81e1e', pattern: 'plain', charge: 'cross' } },
-  { name: 'Savoy', note: 'Gules, a cross argent — also borne by the Hospitallers', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#ece8dc', pattern: 'plain', charge: 'cross' } },
-  { name: 'After France', note: 'Azure, a single fleur-de-lis or (the royal arms bear three)', arms: { c1: '#1f4690', c2: '#1f4690', c3: '#e0b83c', pattern: 'plain', charge: 'fleur' } },
-  { name: 'Hohenzollern', note: 'Quarterly argent and sable', arms: { c1: '#ece8dc', c2: '#191919', c3: '#191919', pattern: 'quarterly', charge: 'none' } },
+  { name: 'Scrope', note: 'Azure, a bend or — fought over in the Court of Chivalry, 1389', arms: { c1: '#1f4690', c2: '#e0b83c', c3: '#e0b83c', pattern: 'plain', charge: 'none', over: [{ kind: 'bend', c: '#e0b83c' }] } },
+  { name: 'Austria', note: 'Gules, a fess argent', arms: { c1: '#a81e1e', c2: '#ece8dc', c3: '#ece8dc', pattern: 'plain', charge: 'none', over: [{ kind: 'fess', c: '#ece8dc' }] } },
+  { name: 'Aragon', note: 'Or, four pallets gules (drawn paly of six)', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#a81e1e', pattern: 'paly', charge: 'none' } },
+  { name: 'Stafford', note: 'Or, a chevron gules', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#a81e1e', pattern: 'plain', charge: 'none', over: [{ kind: 'chevron', c: '#a81e1e' }] } },
+  { name: 'St George', note: 'Argent, a cross gules', arms: { c1: '#ece8dc', c2: '#ece8dc', c3: '#a81e1e', pattern: 'plain', charge: 'none', over: [{ kind: 'cross', c: '#a81e1e' }] } },
+  { name: 'Savoy', note: 'Gules, a cross argent — also borne by the Hospitallers', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#ece8dc', pattern: 'plain', charge: 'none', over: [{ kind: 'cross', c: '#ece8dc' }] } },
+  { name: 'France ancient', note: 'Azure, semé of fleurs-de-lis or', arms: { c1: '#1f4690', c2: '#1f4690', c3: '#e0b83c', pattern: 'plain', charge: 'fleur', over: [{ kind: 'semy', c: '#000000' }] } },
+  { name: 'France modern', note: 'Azure, three fleurs-de-lis or', arms: { c1: '#1f4690', c2: '#1f4690', c3: '#e0b83c', pattern: 'plain', charge: 'fleur', over: [{ kind: 'three', c: '#000000' }] } },
+  { name: 'England', note: 'Gules, three lions passant guardant or (drawn two and one; the arms set them in pale)', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#e0b83c', pattern: 'plain', charge: 'leopard', over: [{ kind: 'three', c: '#000000' }] } },
+  { name: 'Scotland', note: 'Or, a lion rampant gules (the royal tressure left off)', arms: { c1: '#e0b83c', c2: '#e0b83c', c3: '#a81e1e', pattern: 'plain', charge: 'lion' } },
+  { name: 'Flanders', note: 'Or, a lion rampant sable', arms: { c1: '#e0b83c', c2: '#e0b83c', c3: '#191919', pattern: 'plain', charge: 'lion' } },
+  { name: 'León', note: 'Argent, a lion rampant purpure', arms: { c1: '#ece8dc', c2: '#ece8dc', c3: '#6b2478', pattern: 'plain', charge: 'lion' } },
+  { name: 'Bohemia', note: 'Gules, a lion rampant argent (the forked tail and crown left off)', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#ece8dc', pattern: 'plain', charge: 'lion' } },
+  { name: 'Empire', note: 'Or, an eagle displayed sable', arms: { c1: '#e0b83c', c2: '#e0b83c', c3: '#191919', pattern: 'plain', charge: 'eagle' } },
+  { name: 'Brandenburg', note: 'Argent, an eagle displayed gules', arms: { c1: '#ece8dc', c2: '#ece8dc', c3: '#a81e1e', pattern: 'plain', charge: 'eagle' } },
   { name: 'Castile', note: 'Gules, a castle or', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#e0b83c', pattern: 'plain', charge: 'tower' } },
-  { name: 'Teutonic Order', note: 'Argent, a cross sable', arms: { c1: '#ece8dc', c2: '#ece8dc', c3: '#191919', pattern: 'plain', charge: 'cross' } },
+  { name: 'Brittany', note: 'Ermine plain', arms: { c1: '#ece8dd', c2: '#ece8dd', c3: '#191919', pattern: 'plain', charge: 'none' } },
+  { name: 'Beauchamp', note: 'Gules, a fess between six cross-crosslets or (three drawn)', arms: { c1: '#a81e1e', c2: '#e0b83c', c3: '#e0b83c', pattern: 'plain', charge: 'crosscrosslet', over: [{ kind: 'fess', c: '#e0b83c' }, { kind: 'three', c: '#000000' }] } },
+  { name: 'Hohenzollern', note: 'Quarterly argent and sable', arms: { c1: '#ece8dc', c2: '#191919', c3: '#191919', pattern: 'quarterly', charge: 'none' } },
+  { name: 'Bavaria', note: 'Lozengy argent and azure (the lozenges drawn upright, not bendwise)', arms: { c1: '#ece8dc', c2: '#1f4690', c3: '#1f4690', pattern: 'lozengy', charge: 'none' } },
+  { name: 'Teutonic Order', note: 'Argent, a cross sable', arms: { c1: '#ece8dc', c2: '#ece8dc', c3: '#191919', pattern: 'plain', charge: 'none', over: [{ kind: 'cross', c: '#191919' }] } },
+  { name: 'Neville', note: 'Gules, a saltire argent', arms: { c1: '#a81e1e', c2: '#ece8dc', c3: '#ece8dc', pattern: 'plain', charge: 'none', over: [{ kind: 'saltire', c: '#ece8dc' }] } },
+  { name: 'Clare', note: 'Or, three chevronels gules', arms: { c1: '#e0b83c', c2: '#a81e1e', c3: '#a81e1e', pattern: 'plain', charge: 'none', over: [{ kind: 'chevronels', c: '#a81e1e' }] } },
+  { name: 'Warenne', note: 'Checky or and azure', arms: { c1: '#e0b83c', c2: '#1f4690', c3: '#1f4690', pattern: 'chequy', charge: 'none' } },
   { name: 'Albret', note: 'Gules plain', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#a81e1e', pattern: 'plain', charge: 'none' } },
-  { name: 'Waldeck', note: 'Or, a star sable', arms: { c1: '#e0b83c', c2: '#e0b83c', c3: '#191919', pattern: 'plain', charge: 'star' } },
+  { name: 'Waldeck', note: 'Or, a star sable (the arms bear it of eight points)', arms: { c1: '#e0b83c', c2: '#e0b83c', c3: '#191919', pattern: 'plain', charge: 'mullet' } },
 ];
 
 export const DISCOVERY_SECONDS = 10;   // how long an "art discovered" notice stays on screen
@@ -355,7 +373,9 @@ export const PHYS = {
   horseKg: { destrier: 620, courser: 520, andalusian: 500, rouncey: 450 },
   armourKg: { mail: 20, bascinet: 27, milanese: 30, stechzeug: 45 },
   // Williams, Edge & Capwell (2016) measured 90-200 J from a couched lance without a rest and about 250 J with one.
-  lance: { light: { kg: 3.5, breakJ: 190 }, standard: { kg: 5.5, breakJ: 260 }, heavy: { kg: 8, breakJ: 340 } },
+  // failN: the load (N) at which the shaft fails end-on (Euler buckling of a fir or ash pole, about 2.45 m between the rest and the point, cut down
+  // by the hollowing and fluting that made a tournament lance break; see docs/physics-model.md). breakJ: the old energy cap (impactLegacy only).
+  lance: { light: { kg: 3.5, breakJ: 190, failN: 5000 }, standard: { kg: 5.5, breakJ: 260, failN: 6500 }, heavy: { kg: 8, breakJ: 340, failN: 8800 } },
   refJ: 250,            // a standard lance broken square from the rest: the yardstick for "a full stroke"
   pointShare: 0.092,     // share of the collision energy that can pass through the lance point
   zoneShare: { helm: 0.9, shield: 1.0, body: 0.95, horse: 0.8 },
@@ -363,11 +383,50 @@ export const PHYS = {
   upperKg: 46, upperInertia: 5.5,                         // rider's trunk, head and arms about the hips (kg, kg·m²); harness adds 0.2 kg·m² per kg
   seatK: 2000, braceK: 3900,                               // N·m/rad holding the rider upright: loose seat, and leaning in
   seatMax: 0.7,                                           // lean (rad) past which he cannot recover and goes over the cantle
+  // How the rigged rider rides the horse (rider_rig.js rideStep). The saddle (the horse's seat height `bob`, body pitch, a synthetic sway) drives a chain of damped followers,
+  // hips -> spine -> spine1 -> chest -> neck -> head, each following the one below it (z'' = w^2 (in - z) - 2 zeta w z'). The torso therefore lags and overshoots a little each stride,
+  // and the head, further up, lags more. What each stage lags BEHIND its parent is turned into bone rotation: the spine bends, the helm nods. It is an additive layer on the poses; the
+  // puppet drivers (hit reactions, lean) are untouched. Walk to gallop comes from the horse's own bob and pitch growing with the gait; `walk` scales only the synthetic sway.
+  // To set from measured footage: amplitude of the helm's vertical bob (m) ~ the saddle's bob x (1 - lag): raise `spineY`/`headY` until the head bob matches; phase delay of the head is set by
+  // `chain` (lower w = later); tip wobble `tipY` is the lance tip's cm of vertical travel per metre the hand moves.
+  ride: {
+    on: 1,                 // master scale: 0 = the old rigid seat, 1 = as tuned, 1.5 = a man who is riding badly
+    walk: 0.25,            // share of the synthetic side sway and roll that is left at the walk (at the gallop all of it); the horse's own bob grows with the gait by itself
+    chain: [[50, 0.9], [32, 0.9], [26, 0.9], [20, 0.9], [16, 0.95], [13, 0.95]],   // [w rad/s, zeta] of: hips, spine, spine1, chest, neck, head. Lower w = more lag; lower zeta = more ring
+    absorb: 0.55,          // share of the saddle's up-and-down (about its mean) that the spine takes up: the helm bobs this much less than the saddle (0 = the trunk rides it rigidly)
+    hipY: 0.9, hipX: 0.9,  // the pelvis's give relative to the saddle (m per m): a little, he is sitting in a high cantle
+    spineY: 0.5,            // rad of forward flex per metre a stage's vertical lag (a torso sinking into the pelvis slumps, one stretching up arches)
+    spineP: 0.3,           // rad per rad of the saddle's pitch that a stage lags (the torso stays level while the horse rocks under it)
+    spineR: 0.3, spineX: 0.15,   // roll (rad) per metre of sideways lag and per radian of roll lag
+    headY: 0.5, headP: 0.3,     // extra of the head's nod, over the chest's (the helmet nods with a phase delay; 0 = a head nailed to the shoulders)
+    sway: 0.008, roll: 0.012, yaw: 0.012,   // synthetic saddle motion at full gallop: sideways (m), roll (rad), twist of the pelvis (rad), once per stride
+    surgeW: 8, surgeZ: 0.5, surgeK: 0.08, surgeMax: 0.16,   // jolt at the start and the stop: w and zeta of the follower on ground speed; rad of trunk pitch per m/s of lag (back on starting, forward on stopping)
+    legF: 2.5, legSwing: 1.4, legSide: 1.2,    // legs: thigh flex (rad) per metre of the pelvis's vertical give; shin fore-aft swing (rad) per rad of pitch lag; sideways rad per metre of sway lag
+    tipW: 20, tipZ: 0.16, tipY: 0.9, tipX: 0.5,    // couched lance, a heavy beam: bending w (rad/s) and zeta; the tip's travel (m) per metre the hand moves up/down and sideways
+    // PENDING PLAYTEST: aimTip is the VISIBLE stride bob of the lance tip (m of tip travel, amplitude; with the chain's own ~8 cm it gives about 40 cm p-p at full gallop, as filmed). Only `aimShare` of it
+    // (strike tip about 35% of the visible bob p-p) perturbs the aim: Jouster.tipWorld (what every strike reads) turns the tip back by the rest. Raise aimShare to make the bob matter more; 0 = pure show.
+    aimTip: 0.18,
+    aimShare: 0.23,      // measured with tools/ride_probe.js meas(10.5,1): visible tip 40.5 cm p-p, strike tip 14 cm p-p (35%) with the chain's own 8 cm included
+    shW: 16, shZ: 0.22, shK: 0.8,    // the shield arm: w, zeta, and how much of the chest's motion it adds as shake
+    // The horse's BODY under the rider (Jouster._horseMotion): film (docs/mocap-findings.md) shows the rider sits still on the horse (helm 4.9 cm p-p against the poll, torso 1.4 deg) and the
+    // visible 'jumping about' is the horse pitching (14 deg p-p, 2.3-2.5 Hz) and rolling (7 deg p-p) under him. Added on the body and the model about a point near the girth, once per
+    // stride (roll partly at half the stride), scaled walk -> canter -> gallop. The clip's own pitch (about 6 deg p-p) is already in the total.
+    synth: 0.1,            // share kept of the old synthetic posting (3.5 cm) and torso rock (1.7 deg) of the rigged rider: the chain and the horse's body give the motion now
+    horseFollow: 1.0,      // the saddle (tack, cloth, rider) turns with the clip's own back line (croup to withers, ~12 deg p-p at the gallop); the skin already shows it. 0 = the old level saddle
+    horsePitch: 0.012,     // rad amplitude of extra pitch at the gallop on skin and saddle alike, over that
+    horseRoll: 0.063,      // rad amplitude of the roll at the gallop
+    horsePivot: [0.0, 0.62, 0.25],   // the point (x, y as a share of the horse's withers height, z m) the body turns about: near the centre of mass, so the hooves stay put
+    horseWalk: 0.14,       // share of it left at the walk (the canter, halfway up the gait, gets about 0.55)
+    horsePhase: [2.6, 0.9, 0.4],     // phase (rad, of the stride cycle) of the pitch, the roll once per stride, the roll once per two strides
+    // The camera gets a share of that body motion (smoothed): 0 = a locked camera, 1 = bolted to the saddle. Too much makes the chase view sick-making.
+    camShare: 0.4, camDamp: 9,
+  },
   // The angle of the stroke. A point that meets a surface more obliquely than this many degrees from square skids instead of biting
   // (a three-pronged coronel grips less well than a sharp point). zone values shift that limit; a helm's own `deflect` lowers it further.
   // slide: how far the skidding point travels (m) - it may land on the next thing along.  keep: share of the blow a pure glance still delivers.
   // carry: share of the stroke left after a skid onto a second surface.
-  glance: { coronel: 60, sharp: 70, helm: -6, body: -2, shield: 0, slide: 0.32, keep: 0.3, carry: 0.75 },
+  // scatter: +- degrees the limit varies stroke to stroke (a boss, a rivet, the grain of the wood; a seeded draw, see physics.js bites()).
+  glance: { coronel: 60, sharp: 70, helm: -6, body: -2, shield: 0, slide: 0.32, keep: 0.3, carry: 0.75, scatter: 4 },
   // The lance as a beam: radius (m) at distances from the grip (m), and where it can fail. rest: where the arm and rest hold it.
   // flaw: how much the grain varies along the shaft (it decides between places the load makes nearly equal).
   lanceShape: [[1.0, 0.040], [1.7, 0.034], [2.7, 0.022]],
@@ -437,23 +496,77 @@ export const PHYS = {
   fall: { kg: 105, inertia: 13, bounce: 0.18, friction: 0.65 },
   // The moment of a blow (all visual: nothing here changes a stroke's result; main.js strike(), jouster.js hit(), fx.js lanceBurst()).
   //  Break classes by stroke power (1 = a full stroke): crack < cleanAt <= clean < shatterAt <= shatter.
-  //  long / chips: how many long splinters and small chips each class throws; len: splinter length range (m); spray: speed along the stroke (m/s) and
+  //  big / long / slivers / chips: what each class throws (see below); len: splinter length range (m); spray: speed along the stroke (m/s) and
   //  out to the side; keep: seconds the splinters lie on the sand (the rest of the course, then fade over `fade`).
   //  coronel: the crown tip stays with the struck helm or shield for hold (+ per power) seconds, then bounces off.
   //  hitStop (s, scaled by power between hsFrom..1, offline only; online the sim is never paused, the sparks just hang) and slow (S.slowT seconds per class).
   //  react: spring-damper reaction of the struck rider (see Jouster.hit): leanMax = rad he can be bent back before the cantle stops him (divided by kit.cantle),
   //  headSide / headYaw: the helm snapped sideways and turned; lag: seconds before the torso follows a helm blow; jolt: how far the lance arm is thrown back (m);
-  //  push: how far a heavy blow shoves him back in the saddle (m); toss/check: the horse's head toss and stride check; whip: the striker's lance whip, recoil: his arm.
+  //  push: how far a heavy blow shoves him back in the saddle (m); toss/check: the horse's head toss and stride check; whip: the striker's lance whip, recoil: his arm;
+  //  stagJ: how hard the horse is rocked sideways per m/s of the blow's sideways momentum over horse and rider.
+  //  leanGain: the torso kick (rad/s) per radian of the physics' peak lean (impact().theta): with the posture spring in jouster.js (38, 6.5) the drawn peak lean
+  //  then equals theta (5 deg at a shield break, 12-15 deg for a hard one, as measured on film). headJ: N s of a helm stroke per rad/s of head whip.
   impact: {
+    // ---- the collision model (physics.js impact(); docs/physics-model.md). SI units.
+    // mass: the part of the struck man the point must move in the first hundredths of a second (kg) = base + arm x harness kg + up x trunk
+    //   (upperKg + half the harness) + horse x horse kg (twice when he leans in). Head and helm are light and loosely held; a shield is backed by the trunk.
+    // gyr: radius of gyration of each part over its marking radius: a stroke (1 - cent) off centre moves only m / (1 + ((1 - cent) / gyr)^2).
+    // k: contact stiffness (N/m) of the armour, the padding beneath and the shield on its strap; sets how fast the force rises (w = sqrt(k / mu)).
+    // hold: the force (N) the hand and armpit (loose) up to the lance rest (rest) can pass before the lance slides back; queue: x for a Rennzeug's queue.
+    // thrust: share of the boost (the thrust, the hidden arts) that adds to the normal speed; grain: +- share of failN from lance to lance (seeded);
+    // bend: share of the strength lost when the load comes fully sideways (sin theta = 1); after: share of the lance's own momentum the broken head still delivers.
+    // e: restitution of a lance that holds (it springs back); gripMu: sideways grip of a biting point; slipMu: friction of a skidding one;
+    // glanceShare: share of the normal bounce a skidding point delivers before it slides off the curved surface; turned: share a shield thrown up lets through.
+    // seatScatter: +- share of the lean the seat varies by (seeded); ref: the reference stroke (power 1) - closing speed and coupling, standard lance, square on a shield.
+    mass: { helm: { base: 5, arm: 0.12, up: 0.12, horse: 0 }, shield: { base: 4, arm: 0.1, up: 0.5, horse: 0.02 }, body: { base: 0, arm: 0.3, up: 0.8, horse: 0.04 }, horse: { base: 150, arm: 0, up: 0, horse: 0.1 } },
+    gyr: 0.45,
+    k: { helm: 20000, shield: 15000, body: 17000, horse: 12000, quintain: 15000 },
+    hold: { loose: 600, rest: 9000, exp: 2, queue: 1.6 },
+    slipT: 0.012, thrust: 0.15, grain: 0.15, bend: 0.35, after: 0.15, e: 0.2, gripMu: 0.3, slipMu: 0.25, glanceShare: 0.35, turned: 0.3, seatScatter: 0.06,
+    ref: { v: 14, q: 0.85 },
+    // flex (visual, jouster.js): bow = peak bow of the shaft (m) at the failure load; ring = a lance that holds bows by load x ring (m) and rings at ringHz
+    // (a 2.6 m fir cantilever held at the hand: first mode about 5 Hz) dying by ringZeta; stumpHz: the stump's ring after the break.
+    // pin (jouster.js pinLance): after the point meets him it stays on his surface. margin: m off the face; slide: how far the lance can go back through the
+    // hand and the rest (m; the arm folds with it); bow: what the shaft's bow takes up beyond that (m) before the point skids off up and along the face at
+    // skidV m/s, freed once clear m along it; bowGain: extra drawn bow per m taken up; tMax: s at most.
+    pin: { margin: 0.012, slide: 0.42, bow: 0.16, skidV: 6, clear: 0.4, bowGain: 0.5, tMax: 0.5 },
+    // burstBack: share of the burst thrown back off the struck face; burstCarry: share of the struck man's velocity the pieces take with them (fx.js lanceBurst).
+    burstBack: 0.5, burstCarry: 0.35,
+    flex: { bow: 0.16, ring: 0.12, ringHz: 5.2, ringZeta: 0.12, stumpHz: 11, stump: 0.25 },
     cleanAt: 0.42, shatterAt: 0.85, slowTouch: 0.4,
-    crack: { long: 6, chips: 22, len: [0.3, 0.6], spray: 3.5, side: 1.6, up: 1.5, slow: 0, shake: 0.2 },
-    clean: { long: 13, chips: 50, len: [0.3, 1.0], spray: 5.5, side: 2.4, up: 2.2, slow: 0.45, shake: 0.4 },
-    shatter: { long: 24, chips: 90, len: [0.3, 1.2], spray: 8, side: 3.4, up: 3, slow: 0.75, shake: 0.6 },
+    // (26 Nov, after the review of the strips: a break is two to four big pieces, many small slivers and a short puff of dust, not a firework of sticks.)
+    // big: how many big pieces fly (range; the stump stays in his hand); long: a few long splinters (len m); slivers: small rods; chips: flying bits.
+    crack: { big: [1, 1], long: 2, slivers: 10, chips: 18, len: [0.15, 0.45], spray: 3.5, side: 0.7, up: 1.0, slow: 0, shake: 0.2 },
+    clean: { big: [1, 2], long: 3, slivers: 16, chips: 30, len: [0.15, 0.55], spray: 5, side: 0.9, up: 1.3, slow: 0.45, shake: 0.4 },
+    shatter: { big: [2, 3], long: 5, slivers: 24, chips: 44, len: [0.2, 0.7], spray: 6.5, side: 1.2, up: 1.6, slow: 0.75, shake: 0.6 },
     keep: 60, fade: 4, foreSpin: [5, 9], coronel: { hold: 0.22, perPower: 0.2, size: 0.11 },
     hsFrom: 0.5, hitStop: [0.04, 0.09], hsBreak: 1.25,
-    react: { leanMax: 0.62, headSide: 2.0, headYaw: 1.1, lag: 0.09, lagShare: 0.6, jolt: 0.3, push: 0.12, toss: 1.1, check: 0.9, checkAt: 0.7, whip: 1.5, recoil: 0.16, shoulder: 0.8 },
-    fall: { skid: 1.6, burst: 1.2, ground: 0.5 },
+    react: { leanMax: 0.62, headSide: 2.0, headYaw: 1.1, lag: 0.09, lagShare: 0.6, jolt: 0.3, push: 0.12, toss: 1.1, check: 0.9, checkAt: 0.7, whip: 1.5, recoil: 0.16, shoulder: 0.8, stagJ: 1.6, leanGain: 11.5, headJ: 14 },
+    // fall: how the unhorsed man leaves the saddle (main.js strike, from the impulse). out + outRand x a draw: m/s out to the side away from the tilt;
+    // lat: share of the blow's sideways momentum he keeps; up + upPower x power: m/s upward; spin0 + spin x wOver (rad/s the seat could not hold):
+    // his turn backward over the cantle, kept within spinMin..spinMax; delay: seconds he stays in the saddle being driven back (film: 0.42), shorter
+    // for a blow that turns him faster than wRef rad/s.
+    // Two styles (mocap 2.3): over the cantle (delay ~0.55 s to leave the saddle, ground ~0.85 s) and thrown out sideways when the blow's sideways share
+    // passes sideJ or the stroke lands past sideOff of the mark's radius off centre (leaves at ~0.3 s, sideOut x the outward speed, sideSpin x the turn over the cantle).
+    fall: { skid: 1.6, burst: 1.2, ground: 0.5, out: 0.6, outRand: 0.8, lat: 1, up: 0.7, upPower: 0.45, spin0: 2.4, spin: 0.25, spinMin: 2.2, spinMax: 5.2, delay: 0.55, delaySide: 0.3, wRef: 9, upMax: 2.0,
+      sideJ: 0.35, sideOff: 0.55, sideOut: 2.2, sideSpin: 0.55,
+      // The rigged rider's fall (jouster.js _detach / _fallPose) follows the authored mocap curves (assets/motion/yt/rider_fall_*.json) for the pose and
+      // the pelvis path while he is on the horse, then flies ballistically: keep = share of the horse's forward speed he keeps; tGround = when the footage
+      // has him on the sand (s from the blow; the launch is solved to land then); lieH = pelvis height lying (m); vyMin / vyMax = the launch's vertical
+      // speed is held within these (m/s: sliding down off the rump, thrown up over the shoulder); turn = how far he turns in the air (rad): back over the
+      // cantle (cantle, with a little roll, cantleRoll), or over sideways (side, with sideBack). flail: the arms windmill deg at hz while he is in the air,
+      // and a burst on landing that dies at decay /s. horseCarry / horseStop: the riderless horse carries on (s), then stops at horseStop m/s2 (mocap 2.3).
+      keep: 0.9, tGround: { cantle: 0.9, side: 1.3 }, lieH: 0.25, vyMin: -2.5, vyMax: 3.5,
+      turn: { cantle: 1.7, cantleRoll: 0.35, side: 1.5, sideBack: 0.4 }, flail: { deg: 24, hz: 2.2, decay: 2.5 }, horseCarry: 1.6, horseStop: 6, wMax: 6,
+      // shyJ: a blow of more than this (N s) startles the loose horse: a stumble or a shy (shyV m/s out from the barrier, dying away; shyYaw rad of turn)
+      shyJ: 200, shyV: 1.6, shyYaw: 0.3 },
   },
+  // The unhorsed rider's ragdoll (src/ragdoll.js; high and medium graphics; the low tier keeps the rigid-body fall). h: substep (s, fixed, so the fall is the
+  // same at any frame rate); iters: constraint passes per substep; damp: velocity kept per substep (air and the harness's give); hinge: m a knee must stay in
+  // front of (an elbow behind) its bone line; mu: friction of the sand on a sliding point (Coulomb); impactMu: extra grip per m/s it hit the sand at (a body
+  // that lands hard ploughs in); bounce: share of the landing speed thrown back up; sleepV / sleepT: asleep once nothing moves faster than this (m/s) for sleepT s.
+  // fade: s of the cross-fade from the authored pose to the ragdoll at the exit; helmKg: the helm's share of the harness (it makes the head heavy).
+  ragdoll: { h: 1 / 120, iters: 10, damp: 0.9995, hinge: 0.01, mu: 0.55, impactMu: 0.08, bounce: 0.12, sleepV: 0.3, sleepT: 0.5, fade: 0.12, helmKg: 5 },
   quintainKg: 250,      // the board, its arm and sandbag, and the reaction of the post
   // Drama: injuries, the surgeon, yielding, a dropped lance, helm ringing and daze (main.js, "drama" section; all offline: online play keeps none of it).
   // heavyHelm / heavyBody: stroke power (1 = a full 250 J stroke) that makes a hit "heavy" (the battered-knight close-up; a lance broken on the helm always is). battered: seconds of that close-up; batterGap: courses between two close-ups.

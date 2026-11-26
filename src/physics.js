@@ -68,14 +68,133 @@ export function breakAt(sinT, u = Math.random(), rs = 1) {
   return lerp(B.from, B.to, best / n) * rs;      // (rs: this lance's length over the 2.8 m the numbers are written for; a longer lance fails proportionally farther out)
 }
 
+// ------------------------------------------------------------------------------------------------ seeded randomness
+/** A small seeded random stream (mulberry32): the same seed gives the same numbers on every machine. */
+export function rng32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+/** Mix integers into one 32-bit seed (match seed, course, side...). */
+export function seedOf(...k) { let h = 0x811c9dc5; for (const v of k) { h ^= (v | 0); h = Math.imul(h, 0x01000193); h ^= h >>> 13; } return h >>> 0; }
+
 /**
- * One lance striking one target.
- * s (striker): { horseKg, armourKg, lanceKg, breakJ, coupling 0..1 (how well seat, arm and rest lock the rider behind the lance), boost }
+ * Does the point bite, or skid? A point meeting a surface at theta degrees from square stays put only while the sideways share of the
+ * blow is inside its grip (the friction cone of the coronel's prongs or a sharp point in the surface): theta below `limitDeg` bites.
+ * The surface is not perfect (a boss, a rivet, the grain of the shield's wood): the limit is scattered by PHYS.glance.scatter degrees (u: a seeded draw).
+ */
+export function bites(cosT, limitDeg, u = 0.5) {
+  const th = Math.acos(clamp(cosT, 0, 1)) * 57.29578;
+  return th <= limitDeg + (u - 0.5) * 2 * (PHYS.glance.scatter || 0);
+}
+
+/** The reference stroke ("power" 1): a standard lance broken square and true on a shield, from the rest, at 14 m/s closing. Computed once. */
+let REF = null;
+/** Forget the cached reference stroke (after re-tuning PHYS.impact at run time). */
+export function resetRef() { REF = null; }
+export function refStroke() {
+  if (REF) return REF;
+  const R = PHYS.impact.ref, h = impact(R.v, { horseKg: 560, armourKg: 30, lanceKg: PHYS.lance.standard.kg, failN: PHYS.lance.standard.failN, coupling: R.q }, { horseKg: 560, armourKg: 30, braced: false, seat: 0.6, protection: 0.7 }, 'shield', 1, { square: 1, forceBreak: true, rng: () => 0.5, ref: true });
+  REF = { J: h.J, Ework: h.Ework, tb: h.tb };
+  return REF;
+}
+
+/**
+ * One lance striking one target: a collision of two bodies through a spring (the armour, the padding under it, the shield on its strap) with
+ * the lance as a strut that fails at a load.
+ *
+ *   masses   the striker's side is the lance plus as much of him and his horse as seat, arm and rest lock behind it (coupling); the defender's
+ *            side is the part of him the point must move in the first few hundredths of a second (head and helm, shield and arm, the trunk),
+ *            less when the point lands off the centre of that part (a rigid body struck at r from its centre has 1/m_eff = 1/m + r^2/I).
+ *   contact  normal closing speed vn = v cos(theta). Through a contact stiffness k the force rises as a half sine: F(t) = vn sqrt(k mu) sin(w t),
+ *            w = sqrt(k/mu). The rider's grip and the rest can only pass so much force (hold); past that the lance slides back in the hand and
+ *            only the lance's own mass drives on.
+ *   lance    it fails when the force reaches its strength (failN, x the grain of this lance, less when it is loaded obliquely and bends).
+ *            It flexes for tb = asin(Fcap/F)/w seconds first (a few to a few tens of ms), then breaks; the impulse it delivered is what the
+ *            force carried up to then. A lance that holds delivers the whole bounce, (1 + e) mu vn: so a strong lance that does NOT break hits hardest.
+ *   glance   past the grip angle (see bites) the point skids: only the normal impulse and the sliding friction (impact.slipMu) go home, nothing breaks.
+ *   seat     the impulse J at height h above the seat kicks the trunk back about the hips: omega = J h / I. The seat holds like a spring K (seat,
+ *            leaning in); the cantle and harness (hold) set how far he can go (thetaMax). Peak lean theta = omega / sqrt(K / I); past thetaMax he goes over.
+ *   recoil   the striker takes the same impulse back through the rest and his arm (Newton's third law).
+ *
+ * s (striker): { horseKg, armourKg, lanceKg, failN (N), coupling 0..1, boost (the thrust and the hidden arts: x the hand's speed and hold) }
  * d (defender): { horseKg, armourKg, braced, seat 0..1, protection 0..1 } or { quintain: true }
- * opts: { lock (saddle hold), sharpJ (J a sharp point needs to unseat), springJ (J at which the shield flies), soft (a stroke on the sack), turned, forceBreak, bite, hold, sharp, square 0..1 (cosine of the angle from square), glance (the point skidded) }
- * Returns { vClose, Eavail, E (J delivered), J (N·s), broke, omega (rad/s kick to the torso), theta (peak lean, rad), thetaMax, unhorse, power }
+ * opts: { square 0..1 (cos of the angle from square), glance (the point skidded), h (m: contact height above the seat, else PHYS.zoneLever), lock, hold (cantle),
+ *         queue (a queue catches the lance), sharp, sharpJ (J), springJ (J), soft, turned, forceBreak, bite, pass, rng (seeded () => 0..1) }
+ * Returns, besides the old fields (vClose, Eavail, E, J, broke, omega, theta, thetaMax, unhorse, sprang, power):
+ *   vn, vt (m/s), mS, mD, mu (kg), k (N/m), Fpeak, Fpoint, Fcap (N), load (Fpoint / Fcap), slip (the lance slid in the hand), tb (s, flex before the break),
+ *   tc (s, contact), Jn, Jt (N·s), recoil (N·s on the striker), wSeat (rad/s, his seat's natural frequency), wOver (rad/s left when he goes over), u (the draws)
  */
 export function impact(vClose, s, d, zone, cent, opts = {}) {
+  const P = PHYS, I = P.impact, rng = opts.rng || Math.random;
+  const u = { grain: rng(), seat: rng(), at: rng() };      // always three draws, in this order: the stream stays in step whatever the outcome
+  const sq = clamp(opts.square ?? 1, 0, 1), sinT = Math.sqrt(1 - sq * sq);
+  const rider = P.riderKg + s.armourKg, q = clamp(s.coupling, 0, 1), boost = s.boost || 1;
+  const mS = s.lanceKg + (0.25 + 0.55 * q) * rider + (0.03 + 0.07 * q) * s.horseKg;
+  // ---- the defender's side of the contact
+  let mD;
+  if (d.quintain) mD = P.quintainKg;
+  else {
+    const Z = I.mass[zone] || I.mass.body, up = P.upperKg + 0.5 * d.armourKg;
+    mD = Z.base + Z.arm * d.armourKg + Z.up * up + Z.horse * (d.braced ? 2 : 1) * d.horseKg * (opts.lock ?? 1);
+    const off = (1 - clamp(cent, 0, 1)) / I.gyr;                       // off the centre of what it struck, in radii of gyration
+    mD /= 1 + off * off;
+  }
+  const mu = mS * mD / (mS + mD), mL = s.lanceKg, muL = mL * mD / (mL + mD);
+  const k = (d.quintain ? I.k.quintain : I.k[zone] || I.k.body) * (opts.soft ? P.kit.soft : 1) * (opts.bite || 1);      // (a sharp point digs in: a stiffer contact)
+  const w = Math.sqrt(k / mu), vn = vClose * sq * (1 + I.thrust * (boost - 1)), vt = vClose * sinT;
+  const Fpeak = vn * Math.sqrt(k * mu);
+  // ---- the hand: what the grip and the rest can pass before the lance slides back (the queue of a Rennzeug catches it)
+  const Fhold = lerp(I.hold.loose, I.hold.rest, Math.pow(q, I.hold.exp)) * boost * (opts.queue ? I.hold.queue : 1);
+  const FlanceOnly = vn * Math.sqrt(k * muL);
+  const slip = Fpeak > Fhold + FlanceOnly;
+  const Fpoint = slip ? Fhold + FlanceOnly : Fpeak;
+  const wEff = w;      // (slipping, the pulse keeps the whole pair's period but carries only the force the hand could pass)
+  // ---- the lance's strength this time
+  const Fcap = (s.failN || 6500) * (1 + I.grain * (u.grain * 2 - 1)) * (1 - I.bend * sinT);
+  const glance = !!opts.glance, turned = !!opts.turned, soft = !!opts.soft;
+  const broke = !glance && !turned && !soft && (Fpoint >= Fcap || !!opts.forceBreak);
+  const e = I.e;
+  let Jn, Jt, tb = 0, tc = Math.PI / wEff;
+  if (broke) {
+    const F = Math.max(Fpoint, Fcap * 1.0001), x = Math.asin(Math.min(1, Fcap / F));
+    tb = x / wEff;
+    Jn = (F / wEff) * (1 - Math.cos(x)) + I.after * mL * vn;          // what the force carried while the shaft bowed, and the broken head's own momentum
+    Jt = Math.min(I.gripMu * Jn, mu * vt * x / Math.PI);              // (the sideways part, for as long as the point held)
+    tc = tb;
+  } else {
+    // the lance holds: the whole bounce, (1 + e) mu vn. If it slid in the hand, only the lance's own bounce and the hand's drag for the contact go home.
+    const Jhold = slip ? (1 + e) * muL * vn + Fhold * Math.min(I.slipT, 2 / wEff) : (1 + e) * mu * vn;      // (slipT: until the lance has slid back to the stop, or skidded off)
+    if (glance) { Jn = Jhold * I.glanceShare; Jt = I.slipMu * Jn; tc *= I.glanceShare; }      // the point slides off the curved face before the normal speed is stopped; the sideways part only rubs
+    else { Jn = Jhold; Jt = Math.min(I.gripMu * Jn, mu * vt); }         // a biting point also carries the sideways part with it
+  }
+  if (turned) { Jn *= I.turned; Jt *= I.turned; }
+  Jn *= opts.pass ?? 1;
+  const Jtot = Math.hypot(Jn, Jt);
+  const Eavail = 0.5 * mu * vClose * vClose;
+  // Ework: the energy the stroke took out of the closing motion (the work of the impulse on the reduced pair, J). E: the stroke on the old
+  // yardstick, power x PHYS.refJ (so "a share of refJ" thresholds such as kit.sharpJ and kit.spring keep their meaning).
+  const Ework = Math.max(0, vn * Jn - Jn * Jn / (2 * mu));
+  const R0 = opts.ref ? { J: Jtot || 1 } : refStroke();
+  let power = Jtot / R0.J, E = power * P.refJ;
+  if (d.quintain) return { vClose, vn, vt, mS, mD, mu, k, Fpeak, Fpoint, Fcap, load: Fpoint / Fcap, slip, tb, tc, Jn, Jt, Eavail, Ework, E, J: Jtot, broke, omega: 0, theta: 0, thetaMax: 9, unhorse: false, sprang: false, recoil: Jtot, power, wSeat: 0, wOver: 0, u };
+  // ---- a shield that gives way (the Renntartsche on its spring) takes up a share of the blow, once, and the stroke scores for it
+  const sprang = !!opts.springJ && zone === 'shield' && !glance && !turned && !soft && cent >= P.kit.springCent && E >= opts.springJ;
+  let Jb = Jtot * (sprang ? 1 - P.kit.springAbsorb : 1);
+  // ---- the seat: the impulse levers his trunk back about the hips
+  const Iu = P.upperInertia + 0.2 * d.armourKg;
+  const h = opts.h ?? P.zoneLever[zone] ?? 0.35;
+  const omega = Jb * clamp(h, 0.05, 1.0) * (0.25 + 0.75 * sq) / Iu;      // (the part of the impulse along the lance's line does the levering; the sideways rub mostly turns him)
+  const K = P.seatK * (0.7 + 0.6 * (d.seat ?? 0.6)) + (d.braced ? P.braceK : 0);
+  const wSeat = Math.sqrt(K / Iu);
+  const theta = omega / wSeat * (1 - P.kit.lockTheta * ((opts.lock ?? 1) - 1));
+  const thetaMax = (P.seatMax + 0.15 * ((d.protection ?? 0.7) - 0.55)) * (opts.hold || 1);
+  const sharpOk = !opts.sharp || E >= (opts.sharpJ || 0);
+  const unhorse = !turned && !soft && sharpOk && theta * (1 + (u.seat - 0.5) * 2 * I.seatScatter) > thetaMax;
+  // what is left of his turning when the cantle no longer holds him: he goes over with it
+  const wOver = unhorse ? Math.sqrt(Math.max(0, omega * omega - (wSeat * thetaMax) ** 2)) : 0;
+  if (sprang) { power *= 1 - P.kit.springAbsorb; E = power * P.refJ; }
+  return { vClose, vn, vt, mS, mD, mu, k, Fpeak, Fpoint, Fcap, load: Fpoint / Fcap * (glance ? I.glanceShare : 1), slip, tb, tc, Jn, Jt, Eavail, Ework, E, J: Jb, broke, omega, theta, thetaMax, unhorse, sprang, recoil: Jtot, power, wSeat, wOver, u };
+}
+
+/** The old energy-share model (kept for comparison in tools/sim_strikes.mjs; nothing in the game calls it). */
+export function impactLegacy(vClose, s, d, zone, cent, opts = {}) {
   const P = PHYS;
   const rider = P.riderKg + s.armourKg;
   const mS = s.lanceKg + (0.25 + 0.55 * s.coupling) * rider + (0.03 + 0.07 * s.coupling) * s.horseKg;
@@ -100,6 +219,6 @@ export function impact(vClose, s, d, zone, cent, opts = {}) {
   const K = P.seatK * (0.7 + 0.6 * (d.seat ?? 0.6)) + (d.braced ? P.braceK : 0);
   const theta = omega / Math.sqrt(K / I) * (1 - P.kit.lockTheta * ((opts.lock ?? 1) - 1));                                  // peak lean of an undamped seat
   const thetaMax = (P.seatMax + 0.15 * ((d.protection ?? 0.7) - 0.55)) * (opts.hold || 1);     // deep jousting saddles and locked harness hold longer
-  const unhorse = (broke || (opts.sharp && E >= (opts.sharpJ || 0))) && theta * (1 + (Math.random() - 0.5) * 0.12) > thetaMax;   // a sharp point that has bitten bears him back whether or not the lance breaks
+  const unhorse = (broke || (opts.sharp && E >= (opts.sharpJ || 0))) && theta * (1 + ((opts.rng || Math.random)() - 0.5) * 0.12) > thetaMax;   // a sharp point that has bitten bears him back whether or not the lance breaks
   return { vClose, Eavail, E, J, broke, omega, theta, thetaMax, unhorse, sprang, power: E / P.refJ };
 }

@@ -201,7 +201,7 @@ const DofShader = {
 export function createPost(renderer, scene, camera, opts = {}) {
   const lite = !!opts.lite;      // phones: no bloom, no ambient occlusion, lighter MSAA
   const plain = !!opts.plain;
-  const useDof = !lite && !plain && GFX.tier === 'high' && opts.dof !== false;      // depth of field: high tier on desktop only    // lowest tier: no composer at all (the scene is drawn straight to the screen; the canvas does the tone mapping)
+  const useDof = !lite && !plain && (opts.dof === undefined ? GFX.tier === 'high' : !!opts.dof);      // depth of field: high tier on desktop only    // lowest tier: no composer at all (the scene is drawn straight to the screen; the canvas does the tone mapping)
   const state = {
     enabled: true,
     composer: null,

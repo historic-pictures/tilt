@@ -1,5 +1,7 @@
-/* Lettering for TILT. All three families (Almendra, Almendra SC, Fondamento) are under the SIL Open Font License 1.1 (see assets/CREDITS.md). Latin subset. */
-@font-face { font-family: 'Almendra'; font-style: normal; font-weight: 500 900; font-display: swap; src: url('Almendra-700.woff2') format('woff2'); }
-@font-face { font-family: 'Almendra SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('AlmendraSC-400.woff2') format('woff2'); }
-@font-face { font-family: 'Fondamento'; font-style: normal; font-weight: 400; font-display: swap; src: url('Fondamento-400.woff2') format('woff2'); }
-@font-face { font-family: 'Fondamento'; font-style: italic; font-weight: 400; font-display: swap; src: url('Fondamento-400i.woff2') format('woff2'); }
+/* Lettering for TILT, all SIL Open Font License 1.1 (OFL-*.txt beside this file; see assets/CREDITS.md). Latin subsets, woff2, pinned weights.
+   Grenze Gotisch: a gothic textura display face (titles, rubrics). EB Garamond: a 16th-c. Garamond revival (reading text); the "SC" face is the same
+   font with the lowercase mapped to its small capitals, so labels and buttons can ask for it by name. */
+@font-face { font-family: 'Grenze Gotisch'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('GrenzeGotisch-700.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('EBGaramond-500.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('EBGaramond-500i.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond SC'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('EBGaramondSC-500.woff2') format('woff2'); }

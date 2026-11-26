@@ -50,8 +50,11 @@ All files in this folder are public domain (CC0 1.0) and free to use commerciall
 
 `fonts/` (latin subset, woff2, as served by Google Fonts; the licence texts are alongside as `OFL-*.txt` and must ship with the game).
 
-- **Almendra Bold** and **Almendra SC** — Ana Sanfelippo. Titles, scores and callouts; labels, menu entries and buttons.
-- **Fondamento** (regular and italic) — Brian J. Bonislawsky, Astigmatic. All reading text.
+- **Grenze Gotisch** (Bold) — Omnibus-Type. A gothic textura: titles, rubrics, scores and callouts.
+- **EB Garamond** (Medium, regular and italic) — Georg Duffner and Octavio Pardo. All reading text; the "EB Garamond SC" face is the same font with the lowercase mapped to its small capitals (labels, menu entries and buttons).
+- Source: github.com/google/fonts (ofl/grenzegotisch, ofl/ebgaramond), subset to Latin and converted to woff2.
+
+## Interface art — see `ui/SOURCES.md`
 
 ## Music — Kevin MacLeod (incompetech.com), CC BY 4.0
 
@@ -103,3 +106,16 @@ None used. Pixabay answers scripted requests with 403 (Cloudflare), so no Pixaba
 ### Temporary fallback (never shipped)
 
 `cheer_single`, `jeer_single`, `groan_single` and `horse_moving` still use the old Total War: Rome II cuts (`sfx/`) in the local `sfx_free/manifest.json`; the public build drops those four categories, so they are silent online until replaced.
+
+## Icons (game-icons.net, CC BY 3.0)
+
+The gold-leaf icons (helm, horse head, laurels and trophy, cog, mounted knight, castle, open book, coins) are from https://game-icons.net, repository https://github.com/game-icons/icons, licensed Creative Commons Attribution 3.0 (https://creativecommons.org/licenses/by/3.0/), commercial use allowed with attribution:
+- "Visored helm", "Horse head", "Cog", "Open book" by Lorc
+- "Laurels trophy", "Castle", "Coins" by Delapouite
+- "Mounted knight" by Skoll
+
+They are embedded as a small inline sprite in `src/icons.js` (backgrounds removed, filled with a gold gradient and given an ink outline). Attribution: icons by Lorc, Delapouite, Skoll and contributors, CC BY 3.0, game-icons.net.
+
+## Heraldic charges (`assets/heraldry/charges*.webp`)
+
+The beasts, plants, objects and crosses in the charge atlas are drawings from Wikimedia Commons, all public domain or CC0: the engravings of A. C. Fox-Davies, *A Complete Guide to Heraldry* (1909) as vectorised on Commons, lions by Inductiveload, the heraldic crosses by AnonMoos and others. One entry per file (page, author, licence) is in `tools/heraldry/licences.json`; `tools/heraldry/build_atlas.py` turns them into the atlas. No attribution is owed; it is recorded all the same.

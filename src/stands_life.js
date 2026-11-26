@@ -1,10 +1,12 @@
 // Life around the stands: a small band on a platform by the royal box (drum, shawm, lute, bagpipe) and three vendors walking slowly along the front of the stands
 // (pies, cat's meat on skewers, hot spiced wine). Cheap meshes in the style of ceremony.js; poses are eased toward targets, there is no animation system.
 // The band plays in the intro and between courses, and stops to look when the riders charge. The vendors stop at people, offer their wares, and now and then call out
-// (the call goes through opts.call, which main.js sends to the voice director, so it gets a speech label and a robot voice).
+// (the call goes through opts.call: main.js puts it over his head through the crowd's voices (src/crowd_voices.js), and lets the robot voice say it when nothing else is talking; the cries are VENDOR in src/crowd_lines.js).
 // Layout: east side is x > 0. The platform stands where the groundlings leave a gap beside the dais (x 10.1-11.9, z 6.25-9.55), facing the lists (-x).
 import * as THREE from 'three';
+import { LISTS } from './lists.js';
 import { person, mesh, grp } from './ceremony.js';
+import { VENDOR } from './crowd_lines.js';      // what the sellers cry (plain data, shared with the TTS inventory)
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -29,9 +31,9 @@ const BAND = [
 ];
 // the vendors: the side of the lists (west -1, east +1), the stretch of z they walk, their wares, and what they cry
 export const VENDORS = [
-  { type: 'pie', who: 'A PIE-SELLER', side: -1, lo: -32, hi: -3, coat: '#a0613a', hose: '#4e4a40', hat: 'straw', calls: ['Hot pies! Hot mutton pies, a penny apiece!', 'Pies! Kidney and onion, hot from the oven!', 'Fresh pies for the hungry! Hot pies!'] },
-  { type: 'meat', who: "THE CAT'S-MEAT MAN", side: 1, lo: 10.8, hi: 32, coat: '#5b4332', hose: '#6b4a32', hat: 'cap', calls: ["Cat's meat! Hot skewers, a farthing each!", 'Meat on a stick! Hot from the fire, good sirs!', "Cat's meat! Penny a skewer, penny a skewer!"] },
-  { type: 'wine', who: 'THE WINE-SELLER', side: -1, lo: 3, hi: 32, coat: '#8a1a46', hose: '#3a2a1c', hat: 'brim', calls: ['Hot spiced wine! Warm your bones, good sirs!', 'Wine, hot and spiced! A farthing the cup!', 'Mulled wine for the cold and the thirsty!'] },
+  { type: 'pie', who: 'A PIE-SELLER', side: -1, lo: -32, hi: -3, coat: '#a0613a', hose: '#4e4a40', hat: 'straw', calls: VENDOR.pie },
+  { type: 'meat', who: "THE CAT'S-MEAT MAN", side: 1, lo: 10.8, hi: 32, coat: '#5b4332', hose: '#6b4a32', hat: 'cap', calls: VENDOR.meat },
+  { type: 'wine', who: 'THE WINE-SELLER', side: -1, lo: 3, hi: 32, coat: '#8a1a46', hose: '#3a2a1c', hat: 'brim', calls: VENDOR.wine },
 ];
 const LANE = 11.95;      // x of the walk, in front of the stand wall (12.3) and behind the groundlings (11.2-11.7)
 
@@ -42,7 +44,7 @@ export function createLife(scene, opts = {}) {
   let t = 0, cool = 0;
 
   function buildBand() {
-    const pf = new THREE.Mesh(G.platform, new THREE.MeshLambertMaterial({ color: '#6b4f30' })); pf.position.set(11.0, 0.15, 7.9); pf.receiveShadow = true; root.add(pf);
+    const pf = new THREE.Mesh(G.platform, new THREE.MeshLambertMaterial({ color: '#6b4f30' })); pf.position.set(11.0, 0.15, 7.9); pf.receiveShadow = true; pf.userData.cheapList = true; pf.visible = !LISTS.on; root.add(pf);      // (the modelled dais reaches under the band, src/lists.js)
     BAND.forEach((c, i) => {
       const p = person(root, { hose: c.hose, coat: c.coat, tab: null, skin: SKIN[(i * 2 + 1) % SKIN.length], hat: c.hat });
       p.g.position.set(11.0, 0.3, c.z); p.g.rotation.y = -Math.PI / 2; p.type = c.type; p.k = 0; p.ph = i * 1.9;

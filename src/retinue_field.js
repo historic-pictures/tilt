@@ -305,7 +305,7 @@ export function createField(scene, isLate) {
     clear() { mine.clear(); his.clear(); },
     /** opp: { name, arms } to give the opponent a squire at his end (not in practice). */
     setup(retinue, arms, practice, opp) { mine.setup(retinue, arms, practice, true); if (opp && !practice) his.setup({ squire: { name: opp.name || 'squire' } }, opp.arms, true); else his.clear(); },
-    begin: (info) => mine.begin(info), talk: (id) => mine.talk(id), head: (id) => mine.head(id),
+    begin: (info) => mine.begin(info), talk: (id) => mine.talk(id), head: (id) => mine.head(id), hisHead: (id) => his.head(id),      // (his squire, for his men's jeers: src/crowd_voices.js)
     throwStump: (w) => side(w).throwStump(),
     serve: (broken, swap, w, how, took) => side(w).serve(broken, swap, how, took),
     wave: () => mine.wave(), fitHelm: (s, m) => mine.fitHelm(s, m), cheer: () => mine.cheer(), release: () => mine.release(), where: (id, out) => mine.where(id, out),

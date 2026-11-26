@@ -1,16 +1,20 @@
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, damp, loft, loftMesh, limb, ball, box, armsTexture, canvasTex, wobble, photoTex } from './util.js';
+import { TAU, clamp, lerp, smoothstep, damp, loft, loftMesh, limb, ball, box, armsTexture, trapperTexture, canvasTex, wobble, photoTex } from './util.js';
+import { liveryOf } from './heraldry.js';
+import { dressHelm } from './crest.js';
 import { makePBR } from './texgen.js';
 import { PHYS } from './data.js';
-import { lanceRadius } from './physics.js';
+import { lanceRadius, rng32 } from './physics.js';
+import { Ragdoll, RAG_POINTS, RI } from './ragdoll.js';
 import { Cap, Obb, Hit, capCapGap, capObbGap, closestSegSeg, SS } from './collide.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { touchMode } from './touch.js';
-import { GFX } from './gfx.js';
+import { GFX, wantNewModels } from './gfx.js';
 import { expect, progress, done } from './loadmeter.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RIG, KS, riderWanted, figureFor, buildRigRider, poseRig, armsRig, fitLegs, legsRig, posePose } from './rider_rig.js';
+import { celStep, celBody, celLance, celArms } from './celebrate.js';
+import { RIG, KS, riderWanted, figureFor, buildRigRider, poseRig, armsRig, rideStep, fitLegs, legsRig, posePose, rideSave, rideLoad } from './rider_rig.js';
 
 // The rigged horse (Quaternius, CC0). Loaded once; every rider gets his own skinned copy.
 // If it is missing the code-built horse is used instead.
@@ -50,13 +54,13 @@ const DRAPE_FIT = new Map();   // caparison fit per horse scale + girth: the rig
 export async function preloadHorse(url) {
   expect('horse', 'boot', GFX.tier === 'low' ? 2.6e6 : 3.9e6); expect('knight', 'boot', 2.2e6);
   const knight = preloadKnight();      // (both models download side by side)
-  const wantNew = !url && GFX.tier !== 'low' && new URLSearchParams(location.search).get('horse') !== 'old';      // ?horse=old: the smooth horse on any tier
+  const wantNew = !url && wantNewModels() && new URLSearchParams(location.search).get('horse') !== 'old';      // ?horse=old: the smooth horse on any tier
   const tryLoad = async (u, mgr) => new GLTFLoader(mgr).loadAsync(u, (e) => progress('horse', e));
   HORSE_MODEL = null; HORSE_NEW = false; HORSE_SEAT = null; MODEL_WITHERS = 0;
   if (wantNew) {
     try {
       // medium: the 512 textures (the file names them horse/<name>; they sit in horse/512/ too, all but the mane's hair texture)
-      const mgr = new THREE.LoadingManager(); if (GFX.tier === 'medium') mgr.setURLModifier((u) => u.replace(/\/horse\/(horse_(?:normal|coat_[a-z]+)\.(?:png|jpg))/, '/horse/512/$1'));
+      const mgr = new THREE.LoadingManager(); if (GFX.tier !== 'high') mgr.setURLModifier((u) => u.replace(/\/horse\/(horse_(?:normal|coat_[a-z]+)\.(?:png|jpg))/, '/horse/512/$1'));
       const g = await tryLoad(MODEL_DIR + 'horse_new.glb', mgr), seat = g.parser.json.scenes[0].extras && g.parser.json.scenes[0].extras.seat;
       if (!seat) throw new Error('horse_new.glb carries no seat data');
       HORSE_MODEL = g; HORSE_SEAT = seat; HORSE_NEW = true;
@@ -220,10 +224,48 @@ const FALL_PTS_RIG = FALL_PTS.map(p => p.map(v => v * KS));      // (the rigged 
 const WALK_OFF = [0.25, 0.75, 0.0, 0.5];   // FL FR HL HR
 const GALLOP_OFF = [0.40, 0.52, 0.0, 0.12];
 
+const _fq = new THREE.Quaternion(), _fv = new THREE.Vector3(), _fq2 = new THREE.Quaternion(), _fq3 = new THREE.Quaternion(), _fa = new THREE.Vector3(), _fb = new THREE.Vector3(), _fc = new THREE.Vector3();
+// The two authored unhorsing falls (assets/motion/yt, from the mocap pass: timeline read off footage, joint angles estimated). Additive degrees per
+// Mixamo bone (x pitch: the bone's far end forward; z roll: its far end to his left; y yaw: turn left) and the pelvis path from the saddle (hipsRel, m,
+// horse frame: x left, y up, z forward). Loaded once; until they arrive (or if they are missing) the old rigid-body fall is used.
+const FALL_CLIPS = {};
+for (const [k, f] of [['cantle', 'rider_fall_over_cantle'], ['side', 'rider_fall_sideways_tumble']]) {
+  try { fetch(`assets/motion/yt/${f}.json`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d && d.euler_deg) FALL_CLIPS[k] = d; }).catch(() => {}); } catch (e) { /* no fetch (node) */ }
+}
+const FALL_BONES = ['Spine', 'Spine1', 'Spine2', 'Neck', 'Head', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm'];
+const FALL_STYLE = ['cantle', 'side'];
+// The ragdoll drives these bones: [bone, from point, to point, ref from, ref to] (the bone's long axis from -> to; ref fixes the roll), or a blend
+// of two others ([bone, 'mix', a, b, share]). Listed parents first.
+const RAG_BONES = [
+  ['Hips', 'pelvis', 'chest', 'hipR', 'hipL'], ['Spine2', 'pelvis', 'chest', 'shR', 'shL'], ['Spine', 'mix', 'Hips', 'Spine2', 1 / 3], ['Spine1', 'mix', 'Hips', 'Spine2', 2 / 3],
+  ['Head', 'chest', 'head', 'shR', 'shL'], ['Neck', 'mix', 'Spine2', 'Head', 0.5],
+  ['LeftArm', 'shL', 'elL', 'shR', 'shL'], ['LeftForeArm', 'elL', 'haL', 'shR', 'shL'], ['LeftHand', 'elL', 'haL', 'shR', 'shL'],
+  ['RightArm', 'shR', 'elR', 'shR', 'shL'], ['RightForeArm', 'elR', 'haR', 'shR', 'shL'], ['RightHand', 'elR', 'haR', 'shR', 'shL'],
+  ['LeftUpLeg', 'hipL', 'knL', 'hipR', 'hipL'], ['LeftLeg', 'knL', 'anL', 'hipR', 'hipL'], ['LeftFoot', 'anL', 'toL', 'hipR', 'hipL'],
+  ['RightUpLeg', 'hipR', 'knR', 'hipR', 'hipL'], ['RightLeg', 'knR', 'anR', 'hipR', 'hipL'], ['RightFoot', 'anR', 'toR', 'hipR', 'hipL'],
+];
+const _rm = new THREE.Matrix4(), _rx = new THREE.Vector3(), _ry = new THREE.Vector3(), _rz = new THREE.Vector3();
+/** A rotation whose x axis runs along a (from -> to) and whose z axis is square to a and to the ref direction (unit quaternion into o). */
+function ragBasis(P, a, b, c, d, o) {
+  _rx.set(P[3 * b] - P[3 * a], P[3 * b + 1] - P[3 * a + 1], P[3 * b + 2] - P[3 * a + 2]).normalize();
+  _ry.set(P[3 * d] - P[3 * c], P[3 * d + 1] - P[3 * c + 1], P[3 * d + 2] - P[3 * c + 2]);
+  _rz.crossVectors(_rx, _ry); if (_rz.lengthSq() < 1e-8) _rz.set(0, 0, 1).cross(_rx); _rz.normalize(); _ry.crossVectors(_rz, _rx);
+  return o.setFromRotationMatrix(_rm.makeBasis(_rx, _ry, _rz));
+}
+/** Value of a clip channel at t seconds (linear between samples, held at the ends). */
+function clipAt(arr, fps, t) {
+  if (!arr || !arr.length) return 0;
+  const x = Math.max(0, t * fps), i = Math.min(arr.length - 1, Math.floor(x)), j = Math.min(arr.length - 1, i + 1), f = Math.min(1, x - i);
+  return arr[i] + (arr[j] - arr[i]) * f;
+}
+/** The pelvis offset from the saddle at t, in the horse frame, mirrored to his right when he goes off that side (out = -1). */
+function hipsAt(c, t, out, k, o) { const h = c.hipsRel_m || {}; return o.set(clipAt(h.x, c.fps, t) * out * k, clipAt(h.y, c.fps, t), clipAt(h.z, c.fps, t) * k); }
 const _v4 = new THREE.Vector3(), _bq = new THREE.Quaternion(), _bv = new THREE.Vector3(), _bp = new THREE.Vector3(), _we = new THREE.Euler(), _wq = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
-const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
+const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0), XA = new THREE.Vector3(1, 0, 0);
 const _hm = new THREE.Matrix4(), _hm2 = new THREE.Matrix4(), _dv = new THREE.Vector3(), _hit = new Hit(), _cs = new Cap();
+const _he = new THREE.Euler(), _hq = new THREE.Quaternion(), _hv = new THREE.Vector3(), _hp = new THREE.Vector3();
+const _ua = new THREE.Quaternion(), _ub = new THREE.Quaternion(), _uc = new THREE.Quaternion(), _uv = new THREE.Vector3();      // (aim-share undo in tipWorld)
 const _lm = new THREE.Matrix4(), _lm2 = new THREE.Matrix4(), _lp = new THREE.Vector3(), _lq = new THREE.Quaternion(), _ls = new THREE.Vector3();
 /** Bounding box of a capsule over a frame (previous and current pose). */
 function capBounds(p, c, lo, hi) {
@@ -293,7 +335,7 @@ export class Jouster {
     this.prevLegPhase = [0, 0, 0, 0];
     this.onHoof = null; this.time = Math.random() * 10;
     this.fall = null; this.caps = [];
-    this.cantle = 1; this.lock = 1; this._fxReset();      // the kit's saddle (main.js sets them per match): a high cantle stops a rider bending back, a locked seat throws him less
+    this.cantle = 1; this.lock = 1; this.strength = 1; this.flex = null; this._fxReset();      // strength: how quickly he comes back upright after a blow (his seat; main.js sets it)      // the kit's saddle (main.js sets them per match): a high cantle stops a rider bending back, a locked seat throws him less
     // armour damage: each region 0..1; dlog = every blow that marked it (key orders it in time, for replays); see damage()
     this.dmg = { shield: 0, helm: 0, breast: 0, pauldronL: 0 }; this.dlog = []; this.askew = 0; this._vAsk = 0; this._vd = { shield: 0, helm: 0, breast: 0, pauldronL: 0 };
     this._vPlume = true; this._plumeGone = false; this._dirty = new Set(); this._shMarks = []; this._vN = 0; this._cut = 0; this._cutSide = 1; this._cloth = [];
@@ -316,13 +358,13 @@ export class Jouster {
     this.hair = new THREE.MeshStandardMaterial({ color: H.mane ?? 0x15110e, roughness: 0.7, envMapIntensity: 0.4, normalMap: T_COAT.normalMap });
     // the caparison: wool weave (fine normal + roughness 0.85-0.95, so no plastic gloss) and a faint fabric sheen at grazing angles
     const wool = (o) => { const m = fancy ? new THREE.MeshPhysicalMaterial(Object.assign({ sheen: 0.55, sheenRoughness: 0.6, sheenColor: new THREE.Color(o.color ?? 0xffffff).lerp(new THREE.Color(0xd8d0c0), 0.55) }, o)) : new THREE.MeshStandardMaterial(o); return m; };
-    const tex = armsTexture(a, 512, 512, [1, 1]);
+    const tex = armsTexture(a, 512, 512, [1, 1], { style: 'cloth' });
     const clothN = photoTex('rough_linen', 'nor_gl', [9, 9]);
     const weave = fancy && T_CLOTH.normalMap ? { normalMap: T_CLOTH.normalMap, roughnessMap: T_CLOTH.roughnessMap } : { normalMap: clothN };
     this.cloth = nScale(wool({ map: tex, roughness: 0.92, side: THREE.DoubleSide, envMapIntensity: 0.3, ...weave }), 0.25);
     this.clothPlain = nScale(wool({ color: a.c1, roughness: 0.92, side: THREE.DoubleSide, envMapIntensity: 0.3, ...weave }), 0.25);
     this.cloth2 = nScale(wool({ color: a.c2, roughness: 0.9, envMapIntensity: 0.3, ...weave }), 0.25);
-    this.shieldMat = new THREE.MeshStandardMaterial({ map: armsTexture(a, 512, 512), roughness: 0.62, metalness: 0, envMapIntensity: 0.35, side: THREE.DoubleSide });
+    this.shieldMat = new THREE.MeshStandardMaterial({ map: armsTexture(a, 512, 512, undefined, { style: 'paint' }), roughness: 0.62, metalness: 0, envMapIntensity: 0.35, side: THREE.DoubleSide });
     this.lanceMat = new THREE.MeshStandardMaterial({
       map: canvasTex(64, 256, (g, w, h) => {
         g.fillStyle = a.c1; g.fillRect(0, 0, w, h); g.fillStyle = a.c2;
@@ -331,7 +373,7 @@ export class Jouster {
     });
     this.armour = phoneMetal(nScale(new THREE.MeshStandardMaterial({ color: a.armourTint ?? AR.tint ?? 0xb4bac3, metalness: 1, roughness: (AR.rough ?? 0.24) + 0.06, envMapIntensity: 1.2, normalMap: T_STEEL.normalMap, roughnessMap: T_STEEL.roughnessMap }), 0.3));
     this.mail = phoneMetal(nScale(new THREE.MeshStandardMaterial({ color: 0x8b9097, metalness: 0.9, roughness: 0.55, envMapIntensity: 0.8, normalMap: T_MAIL.normalMap, map: T_MAIL.map }), 1.2));
-    this.surcoat = nScale(new THREE.MeshStandardMaterial({ map: armsTexture(a, 256, 256, [2, 2]), roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.3, normalMap: clothN }), 0.6);
+    this.surcoat = nScale(new THREE.MeshStandardMaterial({ map: armsTexture(a, 256, 256, [2, 2], { style: 'cloth' }), roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.3, normalMap: clothN }), 0.6);
     this.trim = new THREE.MeshStandardMaterial({ color: a.c2, roughness: 0.6, envMapIntensity: 0.5 });
   }
 
@@ -351,6 +393,14 @@ export class Jouster {
   /** Caparison style: 'livery' (arms), 'plain' (one colour), 'half' (crupper only), 'none' (bare). Toggles the built meshes, so the fit and flutter code are untouched. */
   setCaparison(style = 'livery') {
     this.caparison = style;
+    if (this.capMeshes) {      // the skinned cloth of the modelled horse
+      const N = this.parts, full = style === 'livery' || style === 'plain', mat = style === 'plain' ? this.clothPlainSk : this.clothSk;
+      for (const k of ['Caparison', 'CaparisonRear']) if (N[k]) { N[k].visible = k === 'Caparison' ? full : style === 'half'; N[k].traverse(o => { if (o.isSkinnedMesh && !this.bossMeshes.includes(o)) o.material = mat; }); }
+      for (const o of this.bossMeshes) o.visible = style === 'livery';
+      for (const o of this.padMeshes) o.visible = !full;
+      for (const k of ['BreastStrap', 'Girth', 'Crupper']) if (N[k]) N[k].visible = !full;      // (all under the cloth; skinned on their own, their edges would show through it in places)
+      return;
+    }
     const D = this._drapes || [], front = D[0], rear = D[1], plain = style === 'plain';
     for (const x of D) if (x.mesh) x.mesh.material = plain ? this.clothPlain : this.cloth;
     if (front) front.mesh.visible = style === 'livery' || plain;
@@ -624,7 +674,7 @@ export class Jouster {
       if (mats.has(src)) return mats.get(src);
       const c = src.clone(), n = src.name;
       if (n === 'Coat') { if (HORSE_COATS[H.id]) c.map = HORSE_COATS[H.id]; c.envMapIntensity = 0.6; c.roughness = 0.58; }
-      else if (n === 'Hair') { c.color.set(H.mane ?? 0x15110e).multiplyScalar(1.5).addScalar(0.01); c.alphaTest = 0.4; c.transparent = false; c.side = THREE.DoubleSide; c.envMapIntensity = 0.7; }
+      else if (n === 'Hair') { c.color.set(H.mane ?? 0x15110e).multiplyScalar(1.5).addScalar(0.01); c.alphaTest = 0.4; c.transparent = false; c.alphaToCoverage = true; c.side = THREE.DoubleSide; c.envMapIntensity = 0.7; }
       else if (n === 'Cloth') { c.color.set(this.arms.c1).multiplyScalar(0.75); c.envMapIntensity = 0.3; }
       else if (n === 'Steel' || n === 'Brass') { c.envMapIntensity = 1.1; phoneMetal(c); }
       else c.envMapIntensity = 0.5;
@@ -643,14 +693,14 @@ export class Jouster {
       const arr = Array.isArray(o.material); o.material = arr ? o.material.map(dress) : dress(o.material);
       const g = o.geometry; if (g.morphAttributes && g.morphAttributes.position) { o.geometry = bakeBreed(g, bi); o.morphTargetInfluences = undefined; o.morphTargetDictionary = undefined; }
     });
-    for (const [k, node] of Object.entries(N)) { const shadow = k === 'HorseBody' || k === 'Mane' || k === 'ManeHogged' || k === 'Tail' || k === 'Feathers' || k === 'Saddle'; node.traverse(o => { if (o.isMesh) o.castShadow = shadow; }); }
+    for (const [k, node] of Object.entries(N)) { const shadow = k === 'HorseBody' || k === 'Mane' || k === 'Forelock' || k === 'ManeHogged' || k === 'Tail' || k === 'Feathers' || k === 'Saddle'; node.traverse(o => { if (o.isMesh) o.castShadow = shadow; }); }
     const show = (k, v) => { if (N[k]) N[k].visible = v; };
-    // the file's own caparison goes (it hangs stiff and lets the hooves through); mane long, the destrier's feathers, the rest of the tack on
-    for (const k of ['CaparisonFront', 'CaparisonRear', 'ManeHogged']) if (N[k]) { N[k].removeFromParent(); delete N[k]; }
+    // mane long, the destrier's feathers, the rest of the tack on (the caparison is the file's own skinned cloth: see _skinCloth)
+    for (const k of ['ManeHogged']) if (N[k]) { N[k].removeFromParent(); delete N[k]; }
     for (const k of ['Saddle', 'Girth', 'BreastStrap', 'Crupper', 'Bridle', 'Bit', 'Reins']) show(k, true);
     show('Mane', true); show('Feathers', H.id === 'destrier');
     // the chanfron (a plate down the face) belongs to the later harnesses; the earlier periods ride without
-    show('Chanfron', ['stechzeug', 'milanese'].includes(this.armourDef.id));
+    show('Chanfron', ['stechzeug', 'milanese'].includes(this.armourDef.id)); show('Forelock', !['stechzeug', 'milanese'].includes(this.armourDef.id));      // (the plate covers the forehead: no fringe under it)
     show('Stirrups', true);      // (the rider's own irons hang on his foot bones: this node is hidden while he is up, see _tackUpdate)
     const gx = (H.girth ?? 1);
     m.scale.set(MODEL_SCALE * this.hs * gx, MODEL_SCALE * this.hs, MODEL_SCALE * this.hs); m.position.set(0, 0, MODEL_Z);
@@ -674,7 +724,66 @@ export class Jouster {
     this.saddle.visible = false;
     this.reins.forEach(r => { r.visible = false; });
     this.hasModel = true;
-    this._fitDrapesNew();
+    if (N.Caparison) this._skinCloth(); else this._fitDrapesNew();
+  }
+
+  /**
+   * The modelled horse wears the file's own caparison: one cloth skinned to the horse's bones with the body's weights (horse_new.glb 'Caparison', and 'CaparisonRear' for
+   * the crupper alone), so it moves with the spine, shoulders and quarters in every clip, with no fit pass and nothing to lag or bounce. The game's own drapes (unskinned,
+   * refitted at run time) are dropped here. Only the free hem moves on its own: a sway in the vertex shader (TEXCOORD_1.x = 0 on the body .. 1 at the hem), see update().
+   */
+  _skinCloth() {
+    const N = this.parts;
+    for (const D of this._drapes || []) { D.mesh.removeFromParent(); D.mesh.geometry.dispose(); const i = this.caps.indexOf(D.cap); if (i >= 0) this.caps.splice(i, 1); }
+    this._drapes = []; for (const b of this._bosses || []) b.removeFromParent(); this._bosses = [];
+    this.capU = { value: new THREE.Vector4(0, 0, 0, 0.25) };      // time, gallop, stride phase, strength
+    // the hem (x: dags along one side, y: how deep they are cut, z: the width of the border band; all in the cloth's own hang, 0 body .. 1 hem) and the band's colour
+    const trim = new THREE.Color(liveryOf(this.arms).trim).lerp(new THREE.Color(0x6a5a3a), 0.12);
+    this.hemU = { value: new THREE.Vector4(26, GFX.tier === 'low' ? 0 : 0.13, 0.085, 0) }; this.trimU = { value: trim };
+    const sway = (src) => {
+      const m = src.clone(); m.customProgramCacheKey = () => 'capsk3';
+      m.onBeforeCompile = (sh) => {
+        sh.uniforms.uCap = this.capU; sh.uniforms.uHem = this.hemU; sh.uniforms.uTrim = this.trimU;
+        sh.vertexShader = 'attribute vec2 capw;\nuniform vec4 uCap;\nvarying vec2 vCapw;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+          { float w = capw.x * sqrt(capw.x), ph = capw.y * 44.0, sd = sign(position.x); vCapw = capw;
+            float fl = sin(ph - uCap.x * (4.0 + 9.0 * uCap.y) + sd) * 0.10 + sin(ph * 1.9 + uCap.x * 6.3) * 0.035;
+            transformed += objectNormal * (fl * uCap.w * w); transformed.y += fl * 0.35 * uCap.w * w;       // the hem's flutter: across the cloth, with a ripple up and down the hem
+            transformed.z -= 0.12 * uCap.y * w; transformed.y += (0.05 * uCap.y + sin(uCap.z + ph * 0.35) * 0.03 * uCap.y) * w;      // streaming back and lifting at speed, a beat with the stride
+          }`);
+        // the hem is finished in the shader, from the cloth's own "how far down the hang" (so it follows the hem wherever the cut puts it, on every breed):
+        // dagged (scalloped tongues, cut out), a border band in the livery's metal with a dark seam above it, and the dirt a trapper picks up near the ground
+        sh.fragmentShader = `uniform vec4 uHem; uniform vec3 uTrim; varying vec2 vCapw;
+          float capH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float capN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(capH(i), capH(i + vec2(1.0, 0.0)), f.x), mix(capH(i + vec2(0.0, 1.0)), capH(i + vec2(1.0, 1.0)), f.x), f.y); }
+          ` + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+          { float t = vCapw.x, f = fract(vCapw.y * uHem.x) * 2.0 - 1.0, sc = sqrt(max(0.0, 1.0 - f * f));
+            float edge = 1.0 - uHem.y * (1.0 - sc), d = edge - t;
+            if (d < 0.0) discard;
+            float n = capN(vec2(vCapw.y * 140.0, t * 9.0)), n2 = capN(vec2(vCapw.y * 31.0, t * 3.0));
+            float band = 1.0 - smoothstep(uHem.z - 0.006, uHem.z + 0.006, d);
+            float seam = 1.0 - smoothstep(0.004, 0.014, abs(d - uHem.z - 0.012));
+            diffuseColor.rgb = mix(diffuseColor.rgb, uTrim * (0.86 + 0.2 * n), band * step(0.0001, t));
+            diffuseColor.rgb *= 1.0 - 0.5 * seam * step(0.0001, t);
+            float soil = smoothstep(0.35, 1.0, t) * (0.3 + 0.7 * n2) * 0.3 + smoothstep(0.8, 1.0, t) * 0.1;
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.6, 0.52, 0.42) + vec3(0.03, 0.025, 0.02), soil);
+          }`);
+      };
+      return m;
+    };
+    this.clothSk = sway(this.cloth); this.clothPlainSk = sway(this.clothPlain);
+    // the skinned cloth's own picture: one flank panel, spine to hem (its v runs 1.3 on the spine to -0.34 at the longest hem), laid twice along the horse.
+    // u runs tail to head on both flanks, so it is turned round: on the near (left) side the arms read true and face the horse's head, on the off side they are reversed, as on a real trapper.
+    { const t = trapperTexture(this.arms, GFX.halfTex ? 512 : 1024, 1.64, 1.3, 0.22); t.repeat.set(-1, 1 / 1.64); t.offset.set(0, 0.34 / 1.64); this.clothSk.map = t; }
+    this.capMeshes = []; this.bossMeshes = [];      // (the gilt bosses on the collar are part of the same node, skinned with the cloth)
+    for (const k of ['Caparison', 'CaparisonRear']) if (N[k]) N[k].traverse(o => {
+      if (!o.isSkinnedMesh) return;
+      if (o.material && o.material.name === 'Brass') { this.bossMeshes.push(o); o.castShadow = false; return; }
+      const g0 = o.geometry, g = new THREE.BufferGeometry(); for (const a in g0.attributes) g.setAttribute(a, g0.attributes[a]);      // this rider's own copy of the positions (they are dented under his legs)
+      g.setIndex(g0.index); g.setAttribute('position', g0.attributes.position.clone()); g.setAttribute('capw', g0.attributes.uv1 || new THREE.BufferAttribute(new Float32Array(g0.attributes.position.count * 2), 2));
+      o.geometry = g; o.material = this.clothSk; o.castShadow = true; o.receiveShadow = true; if (k === 'Caparison') this.capMeshes.push(o);
+    });
+    this.padMeshes = []; if (N.Saddle) N.Saddle.traverse(o => { if (o.isMesh && o.material && o.material.name === 'Cloth') this.padMeshes.push(o); });      // the saddle cloth: under the caparison when one is worn
+    this.setCaparison(this.caparison || 'livery');
   }
 
   /** Height (root frame) of the saddle's seat now: the mean of the skinned seat vertices. */
@@ -987,6 +1096,7 @@ export class Jouster {
       const f = tube([[0, 0, 0, 0.012], [a * 0.03, 0.1, -0.03, 0.04, 0.022], [a * 0.07, 0.22, -0.1, 0.05, 0.026], [a * 0.1, 0.3, -0.2, 0.04, 0.02], [a * 0.115, 0.31, -0.29, 0.006]], m, 8);
       f.rotation.x = -0.15 - Math.abs(a) * 0.25; plume.add(f);
     }
+    if (this.arms.crest || this.arms.mantling || this.arms.helmCross) dressHelm(this, this.arms);      // a crest, mantling, gilt work on the helm (crest.js)
     // the targe's two meshes keep the names the shield code uses
     this.shFace = this.shield.getObjectByName('shield_face'); this.shBack = this.shield.getObjectByName('shield_back');
     this.shield.position.set(0, 0, 0);
@@ -1257,7 +1367,7 @@ export class Jouster {
   /** Show the helm (and the plume) or the bare head. Called from update() whenever helmOff changes. */
   _showHelm(on) {
     this._helmShown = on;
-    if (this.rig) { this.plume.visible = on; return; }      // (the rigged head is part of the body: off, the bare head shows; the baked helm is synced in update())
+    if (this.rig) { this.plume.visible = on; if (this.crestG) this.crestG.visible = on; return; }      // (the rigged head is part of the body: off, the bare head shows; the baked helm is synced in update())
     for (const c of this.helm.children) if (c !== this.bareHead && (c.isMesh || c.isGroup)) c.visible = on;
     this.bareHead.visible = !on;
   }
@@ -1311,7 +1421,16 @@ export class Jouster {
     this.aimLocal.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
   }
 
-  tipWorld(out) { return this.lance.localToWorld(out.set(0, 0, this.reach)); }
+  /** The lance tip in the world, as the STRIKE sees it. The visible stride bob (PHYS.ride.aimTip) is drawn in full, but only PHYS.ride.aimShare of it moves this point: `_aimUndo` turns the tip back about the grip. */
+  tipWorld(out) {
+    this.lance.localToWorld(out.set(0, 0, this.reach));
+    if (this._aimUndo) {
+      this.lance.getWorldPosition(_uv); out.sub(_uv);
+      this.torso.getWorldQuaternion(_ua); _ub.copy(_ua).invert(); _uc.copy(_ua).multiply(this._aimUndo).multiply(_ub);
+      out.applyQuaternion(_uc).add(_uv);
+    }
+    return out;
+  }
   /** Where the rider means the lance to point (world). Far out, the lance itself is held wider than this to clear his horse's head. */
   aimWorld(out) { return out.copy(this.aimLocal).applyQuaternion(this.root.quaternion); }
   /**
@@ -1385,9 +1504,9 @@ export class Jouster {
     const R = PHYS.recoil, lat = o.lat || 0;
     this.recoilV += kick * (1 - 0.3 * Math.abs(lat)); this.sideRecoilV += (fromLeft ? -1 : 1) * 0.4 * kick;
     this.twistV += kick * lat * R.twist;
-    if (o.zone === 'helm') this.headV += kick * R.head * (o.headMul ?? 1);
+    if (o.zone === 'helm') this.headV += (o.J > 0 ? o.J / PHYS.impact.react.headJ : kick * R.head) * (o.headMul ?? 1);      // the head takes the blow first (mocap: about 35 deg within 0.1 s on a hard helm stroke)
     if (o.zone === 'shield') this.shV += kick * R.shield;
-    this.stagV += (fromLeft ? -1 : 1) * Math.abs(kick) * R.stagger * 8;
+    if (!(o.J > 0)) this.stagV += (fromLeft ? -1 : 1) * Math.abs(kick) * R.stagger * 8;      // (with the impulse known, _blow rocks the horse by its sideways part)
     if (o.dir) this._blow(kick, o);
   }
 
@@ -1414,18 +1533,129 @@ export class Jouster {
     } else {
       this.twistV += clamp(px / 0.3, -1, 1) * kick * 0.45 * lk; this.shdV += R.shoulder * k * 2.5; this.jZV -= R.jolt * k * 9; this.jXV += sd * k * 0.8; this.jYV -= k * 0.5;
     }
+    if (o.J > 0) {      // the horse under him: rocked sideways by the blow's sideways momentum over horse and rider, and a little by any blow at all
+      const mT = (PHYS.horseKg[this.horseDef && this.horseDef.id] || 520) + PHYS.riderKg + 30, jl = -bd.x * o.J;
+      this.stagV += (jl / mT * R.stagJ + (bd.x >= 0 ? -1 : 1) * o.J / mT * R.stagJ * 0.25) * 8;
+    }
     const heavy = smoothstep(R.checkAt - 0.3, R.checkAt + 0.3, pw);
     if (heavy > 0) { this.pushV -= R.push * 14 * heavy * lk * F; this.tossV += R.toss * 9 * heavy; this.chk = Math.max(this.chk, R.check * heavy); }
   }
   /** The striker feels his own stroke: the arm is driven back along the shaft, the shoulder jolts, and a lance that did not break whips. */
+  /** power: the reaction impulse over the reference stroke's (Newton's third law: he takes back what he gave); dir: its direction (world). */
   strikeKick(power, dir, broke) {
-    const R = PHYS.impact.react, p = clamp(power, 0.1, 1.3), lk = 1 / Math.sqrt(Math.max(0.5, this.lock));
-    this.jZV -= R.recoil * p * 14 * lk; this.shdV += R.shoulder * p * 1.6; this.pushV -= R.push * 4 * p * lk;
-    if (!broke) { this.wXV += R.whip * p * (0.6 + Math.random() * 0.8) * 4; this.wYV += (Math.random() - 0.5) * R.whip * p * 5; }
+    const R = PHYS.impact.react, p = clamp(power, 0.1, 1.6), lk = 1 / Math.sqrt(Math.max(0.5, this.lock));
+    let sx = 0; if (dir) { _bq.copy(this.root.quaternion).invert(); sx = clamp(_bv.copy(dir).applyQuaternion(_bq).x, -1, 1); }
+    this.jZV -= R.recoil * p * 14 * lk; this.jXV += sx * p * 2.5 * lk; this.shdV += R.shoulder * p * 1.6; this.pushV -= R.push * 4 * p * lk;
+    if (!broke) { this.wXV += R.whip * p * (0.6 + Math.random() * 0.8) * 4; this.wYV += (Math.random() - 0.5) * R.whip * p * 5 + sx * R.whip * p * 2; }
   }
+
+  // ------------------------------------------------------------ the lance flexing (visual; numbers in PHYS.impact.flex). A vertex bend on the lance's own
+  // materials: a half sine between the rest and the point (the shaft bowing as a loaded strut) and a cantilever shape from the grip (the lance ringing in the hand).
+  /** Make material m bend with this lance (idempotent). */
+  _bendPatch(m) {
+    if (!m || m._lanceBend === this) return;
+    const U = this._bendU || (this._bendU = { uB: { value: new THREE.Vector4(0, 0, 0, 0) }, uL: { value: this.reach || 2.8 } });
+    m._lanceBend = this;
+    const prev = m.onBeforeCompile && !m.onBeforeCompile._bend ? m.onBeforeCompile : null;
+    const f = (sh, r) => {
+      if (prev) prev(sh, r);
+      if (sh.vertexShader.includes('uLanceL')) return;
+      sh.uniforms.uBend = U.uB; sh.uniforms.uLanceL = U.uL;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec4 uBend; uniform float uLanceL;').replace('#include <begin_vertex>', `#include <begin_vertex>
+        { float zz = transformed.z, L = max(uLanceL, 0.5), r0 = 0.25;
+          float sb = sin(3.14159265 * clamp((zz - r0) / (L - r0), 0.0, 1.0));
+          float u = clamp(zz / L, 0.0, 1.1), cb = u * u * (3.0 - u) * 0.5;
+          transformed.xy += uBend.xy * sb + uBend.zw * cb; }`);
+    };
+    f._bend = true; m.onBeforeCompile = f;
+    const key = m.customProgramCacheKey && !m.customProgramCacheKey._bend ? m.customProgramCacheKey.bind(m) : () => '';
+    const ck = () => key() + '|lanceBend'; ck._bend = true; m.customProgramCacheKey = ck; m.needsUpdate = true;
+  }
+  /**
+   * The shaft takes the load. o.kind 'break': it bows as the force rises for o.tb seconds (o.load = peak force over the failure load), then
+   * o.onBreak() is called and the stump in the hand rings. 'hold': it bows for the contact (o.tc s) and rings at PHYS.impact.flex.ringHz.
+   * o.side: the surface tangent the point slid along (world; the bow goes that way); dead square, the strut picks a side (o.seed).
+   */
+  bendLance(o) {
+    if (this.lanceBroken && o.kind === 'break') { if (o.onBreak) o.onBreak(); return; }
+    if (this.flex && this.flex.onBreak) { const cb = this.flex.onBreak; this.flex.onBreak = null; cb(); }      // (a pending break is never lost)
+    this._bendPatch(this.lanceMat);
+    let dx = 0, dy = 0;
+    if (o.side && o.side.lengthSq() > 1e-6) { this.lance.updateWorldMatrix(true, false); _fq.setFromRotationMatrix(this.lance.matrixWorld).invert(); _fv.copy(o.side).applyQuaternion(_fq); dx = _fv.x; dy = _fv.y; }
+    if (Math.hypot(dx, dy) < 0.3) { const a = rng32((o.seed | 0) ^ 0x5bd1)() * TAU; dx += Math.cos(a) * 0.5; dy += Math.sin(a) * 0.5 + 0.5; }      // square: it buckles to one side, mostly up (the point is pressed from a little below)
+    const l = Math.hypot(dx, dy) || 1;
+    this.flex = { kind: o.kind, t: 0, tb: Math.max(o.tb || 0, 0.004), tc: Math.max(o.tc || 0.05, 0.02), load: o.load || 1, dx: dx / l, dy: dy / l, onBreak: o.onBreak || null, t0: -1 };
+    if (this.flex.kind === 'break' && !this.flex.onBreak) this.flex.t0 = 0;
+  }
+  /** Lance flex, a step of dt seconds (sets the bend uniform). */
+  _flexStep(dt) {
+    const f = this.flex, U = this._bendU; if (!U) return;
+    if (!f) { U.uB.value.set(0, 0, 0, 0); return; }
+    const F = PHYS.impact.flex; f.t += Math.max(0, dt);
+    let sb = 0, cb = 0, L = this.reach;
+    if (f.kind === 'break' && f.onBreak) {
+      // loading: the force rises as a half sine and reaches the failure load at tb; the bow follows the force
+      const x = Math.asin(Math.min(1, 1 / Math.max(1, f.load)));
+      sb = F.bow * Math.sin(x * Math.min(1, f.t / f.tb)) / Math.sin(x);
+      if (f.t >= f.tb) { const cbk = f.onBreak; f.onBreak = null; f.t0 = f.t; cbk(); }
+    } else if (f.kind === 'break') {
+      // broken: what is left in his hand springs back and rings, short and quick
+      const tau = f.t - f.t0, w = TAU * F.stumpHz; L = this.brokeAt || L;
+      cb = F.bow * F.stump * Math.exp(-F.ringZeta * 2 * w * tau) * Math.cos(w * tau);
+      if (tau > 0.8) this.flex = null;
+    } else {
+      // held: bowed while the point is pressed, then the whole lance rings in the hand
+      const A = F.ring * clamp(f.load, 0, 1.3);
+      if (f.t < f.tc) sb = A * Math.sin(Math.PI * f.t / f.tc);
+      const tau = f.t - f.tc * 0.5, w = TAU * F.ringHz;
+      if (tau > 0) cb = A * 0.7 * Math.exp(-F.ringZeta * w * tau) * Math.sin(w * tau);
+      if (tau > 2.5) this.flex = null;
+    }
+    U.uB.value.set(f.dx * sb, f.dy * sb, f.dx * cb, f.dy * cb); U.uL.value = L;
+  }
+  /**
+   * The point has met the other man: from now on it stays on his surface (PHYS.impact.pin). part: the Object3D the contact rides on (his shield, helm,
+   * torso); p, n: the contact and the surface normal (out of it), world; tan: the way the point was sliding along it (world, may be zero);
+   * kind 'hold' | 'break' | 'skid' (a glance: it slides off along tan at once). While pinned, the shaft is aimed at the point, the lance slides back in
+   * the hand and the rest (up to pin.slide), the shaft bows for the rest (up to pin.bow); past that the point skids off, up and along the face.
+   */
+  pinLance(part, p, n, tan, kind) {
+    if (!part || !p || !n) { this.pin = null; return; }
+    part.updateWorldMatrix(true, false); const qi = part.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const nn = n.clone().normalize(), up = new THREE.Vector3(0, 1, 0).addScaledVector(nn, -nn.y);
+    const tg = tan && tan.lengthSq() > 1e-6 ? tan.clone().addScaledVector(nn, -tan.dot(nn)) : new THREE.Vector3();
+    const sd = kind === 'skid' ? (tg.lengthSq() > 1e-6 ? tg : up) : up.multiplyScalar(0.8).addScaledVector(tg.lengthSq() > 1e-6 ? tg.normalize() : tg, 0.6);
+    if (sd.lengthSq() < 1e-6) sd.set(0, 1, 0); sd.normalize();
+    this.pin = { part, pl: part.worldToLocal(p.clone()), nl: nn.applyQuaternion(qi), sl: sd.applyQuaternion(qi), kind, t: 0, s: 0, skid: kind === 'skid', ex: 0 };
+  }
+  /** Hold the point on the surface (called from applyLance, after the aim and the whip; see pinLance). */
+  _pinLance() {
+    const P = this.pin, PN = PHYS.impact.pin;
+    if (!this.lance.visible || this.lanceDropped || (this.replaying ? this.snapUnhorsed : this.unhorsed) || P.part.parent === null) { this.pin = null; return; }
+    P.part.updateWorldMatrix(true, false); P.part.getWorldQuaternion(_fq);
+    const tgt = P.part.localToWorld(_fa.copy(P.pl)), n = _fb.copy(P.nl).applyQuaternion(_fq), sd = _fc.copy(P.sl).applyQuaternion(_fq);
+    tgt.addScaledVector(n, PN.margin).addScaledVector(sd, P.s);
+    const par = this.lance.parent; par.updateWorldMatrix(true, false);
+    const G = par.localToWorld(_v4.copy(this.lance.position));
+    const d = tgt.sub(G), dist = d.length(), L = this.lanceBroken ? (this.brokeAt || 1.0) + 0.05 : this.reach;
+    const ex = L - dist;
+    if (ex <= 0 && (P.t > 0.03 || this.lanceBroken)) { this.pin = null; return; }      // the point no longer reaches him (it broke, he went back, they have passed)
+    if (P.skid && P.s > PN.clear) { this.pin = null; return; }                        // slid off the edge: free
+    if (!P.skid && ex > PN.slide + PN.bow) P.skid = true;                             // nothing more can give: the point skids off
+    if (ex <= 0) return;
+    par.getWorldQuaternion(_fq).invert(); d.applyQuaternion(_fq).normalize();
+    this.lance.quaternion.setFromUnitVectors(Z, d); this._aimUndo = null;      // (the pinned point overrides the stride bob: tipWorld must not undo a bob that is no longer there)
+    const slide = Math.min(ex, PN.slide); this.lance.position.addScaledVector(d, -slide);      // the lance goes back through the hand and the rest (the arm follows it: the IK)
+    P.ex = Math.max(0, ex - slide);
+    if (this._bendU && P.ex > 0) { const f = this.flex, bx = f ? f.dx : 0, by = f ? f.dy : 1; this._bendU.uB.value.x += bx * P.ex * PN.bowGain; this._bendU.uB.value.y += by * P.ex * PN.bowGain; }      // and bows for what is left
+  }
+  /** Where along the shaft a break at `at` m from the grip can fall on this lance (see breakLance). */
+  clampBreak(at) { return clamp(at, LANCE_SPLIT + 0.03, this.reach - 0.3); }
   /** Spring-dampers of the blow's reaction (seconds in dt; dt = 0 leaves them as they are). */
   _reactStep(dt) {
     const R = PHYS.impact.react;
+    if (!this.replaying) this._flexStep(dt);
+    if (this.pin && dt > 0) { this.pin.t += dt; if (this.pin.skid) this.pin.s += PHYS.impact.pin.skidV * dt; if (this.pin.t > PHYS.impact.pin.tMax) this.pin = null; }
     if (dt > 0) {
       for (let i = this.pend.length - 1; i >= 0; i--) { const e = this.pend[i]; e.t -= dt; if (e.t <= 0) { this.recoilV += e.rv; this.sideRecoilV += e.sv; this.twistV += e.tw; this.pend.splice(i, 1); } }
       this._sp('hS', 85, 8, dt); this._sp('hY', 70, 7, dt); this._sp('push', 55, 9, dt); this._sp('jZ', 90, 10, dt); this._sp('jX', 80, 8, dt); this._sp('jY', 80, 8, dt);
@@ -1443,7 +1673,7 @@ export class Jouster {
     at = clamp(at, LANCE_SPLIT + 0.03, this.reach - 0.3);
     this.brokeAt = at; this.lanceBroken = true; this.lanceFore.visible = false; this.lanceStump.visible = true; this.lanceStump.position.z = at + 0.1;
     if (this.rig) {      // the painted fore part, cut off at the break by a clip plane (kept in step in applyLance)
-      const kept = this.lanceFore.clone(true), m = this.lanceMat.clone(); m.clippingPlanes = [this._clip]; m.clipShadows = true;
+      const kept = this.lanceFore.clone(true), m = this.lanceMat.clone(); m.clippingPlanes = [this._clip]; m.clipShadows = true; this._bendPatch(m);
       kept.traverse(o => { if (o.isMesh) o.material = m; }); kept.visible = true; this.lance.add(kept); this.lanceKept = kept; this._keptMat = m;
       this.lanceStump.scale.setScalar(Math.max(0.6, lanceRadius(at / this.rs) * (this.arms.lanceScale ?? 1) / 0.04)); this._clipUpdate();
       const a = this.lance.localToWorld(new THREE.Vector3(0, 0, at)), b = this.lance.localToWorld(new THREE.Vector3(0, 0, this.reach));
@@ -1453,7 +1683,7 @@ export class Jouster {
     for (const p of PHYS.lanceShape) if (p[0] > LANCE_SPLIT && p[0] < at) pts.push(p);
     pts.push([at, lanceRadius(at)]);
     const g = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[1] * k, p[0])), 12); g.rotateX(Math.PI / 2);
-    this.lanceKept = new THREE.Mesh(g, this.lanceMat); this.lanceKept.castShadow = true; this.lance.add(this.lanceKept);
+    this.lanceKept = new THREE.Mesh(g, this.lanceMat); this.lanceKept.castShadow = true; this.lance.add(this.lanceKept); this._bendPatch(this.lanceMat);
     this.lanceStump.scale.setScalar(Math.max(0.6, lanceRadius(at) * k / 0.04));
     const a = this.lance.localToWorld(new THREE.Vector3(0, 0, at)), b = this.lance.localToWorld(new THREE.Vector3(0, 0, this.reach));
     return { a, b, at, r: lanceRadius(at) * k };
@@ -1592,6 +1822,7 @@ export class Jouster {
    * (x, y); dist(x, y, z) is the signed distance to that line in the row nearest z (+ outside the cloth). Built from the rest shape (the flutter is a few millimetres).
    */
   _clothProfile() {
+    if (this.capMeshes) return this._clothProfileSkin();
     const D = this._drapes && this._drapes[0]; if (!D || !this.newHorse) return null;
     this.root.updateMatrixWorld(true); this.rider.updateWorldMatrix(true, false);
     const m = new THREE.Matrix4().copy(this.rider.matrixWorld).invert().multiply(this.inner.matrixWorld), v = new THREE.Vector3(), b = D.cap.base;
@@ -1609,6 +1840,47 @@ export class Jouster {
         const ax = r.xs[j], ay = r.ys[j], dx = r.xs[j + 1] - ax, dy = r.ys[j + 1] - ay, l2 = dx * dx + dy * dy || 1e-9, t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2));
         const qx = px - (ax + dx * t), qy = py - (ay + dy * t), d = Math.hypot(qx, qy);
         if (d < best) { best = d; al = j < ARC ? DENT_ARC : DENT_HANG(j); sg = dx * (py - ay) - dy * (px - ax) >= 0 ? 1 : -1; }
+      }
+      return best * sg + (soft ? al : 0);
+    };
+    const at = (x, y, z, soft) => {
+      let lo = 0, hi = rows.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (rows[mid].z < z) lo = mid; else hi = mid; }
+      if (z < rows[0].z - 0.05 || z > rows[rows.length - 1].z + 0.05) return 1;
+      return seg(rows[z - rows[lo].z < rows[hi].z - z ? lo : hi], Math.abs(x), y, soft);
+    };
+    return { rows, dist: (x, y, z) => at(x, y, z, false), soft: (x, y, z) => at(x, y, z, true), DENT_ARC, DENT_HANG };
+  }
+  /** The same for the skinned cloth: its columns (TEXCOORD_1.y = the place along the hem, one value per column) as they stand now, in the rider's frame. */
+  _clothProfileSkin() {
+    if (!this.capMeshes.length) return null;
+    this.root.updateMatrixWorld(true); this.rider.updateWorldMatrix(true, false);
+    const inv = new THREE.Matrix4().copy(this.rider.matrixWorld).invert(), v = new THREE.Vector3(), colsBy = new Map();
+    for (const o of this.capMeshes) {
+      o.skeleton.update(); const g = o.geometry, P = g.attributes.position, W = g.attributes.capw;
+      for (let i = 0; i < P.count; i++) {
+        if (P.getX(i) < 0) continue;      // one side: the profile is used on |x|
+        o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+        const key = Math.round(W.getY(i) * 1e4); let c = colsBy.get(key); if (!c) colsBy.set(key, c = []);
+        c.push({ x: Math.abs(v.x), y: v.y, z: v.z, t: W.getX(i) });
+      }
+    }
+    const rows = [], DENT_ARC = 0.012, DENT_HANG = (t) => 0.04 + 0.04 * Math.min(1, t);
+    for (const c of colsBy.values()) {
+      const arc = c.filter(p => p.t === 0); if (arc.length < 3) continue;
+      let z0 = 1e9, z1 = -1e9, zs = 0; for (const p of arc) { z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); zs += p.z; }
+      if (z1 - z0 > 0.04) continue;      // (the fans round the breast and the buttocks are not sections across the horse; the legs lie between them)
+      c.sort((p, q) => (p.t - q.t) || (q.y - p.y));
+      const seen = []; for (const p of c) { const l = seen[seen.length - 1]; if (!l || Math.hypot(p.x - l.x, p.y - l.y) > 1e-4) seen.push(p); }
+      rows.push({ z: zs / arc.length, xs: seen.map(p => p.x), ys: seen.map(p => p.y), ts: seen.map(p => p.t) });
+    }
+    if (rows.length < 2) return null;
+    rows.sort((p, q) => p.z - q.z);
+    const seg = (r, px, py, soft) => {
+      let best = 1e9, sg = 1, al = 0;
+      for (let j = 0; j < r.xs.length - 1; j++) {
+        const ax = r.xs[j], ay = r.ys[j], dx = r.xs[j + 1] - ax, dy = r.ys[j + 1] - ay, l2 = dx * dx + dy * dy || 1e-9, t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2));
+        const qx = px - (ax + dx * t), qy = py - (ay + dy * t), d = Math.hypot(qx, qy);
+        if (d < best) { best = d; al = r.ts[j + 1] === 0 ? DENT_ARC : DENT_HANG(r.ts[j + 1]); sg = dx * (py - ay) - dy * (px - ax) >= 0 ? 1 : -1; }
       }
       return best * sg + (soft ? al : 0);
     };
@@ -1640,12 +1912,49 @@ export class Jouster {
     });
     return out;
   }
+  /** The dent in the skinned cloth: the same push in the rider's frame, carried back through each vertex's own blend of bone matrices into the cloth's rest shape. */
+  _dentClothSkin(pts, caps, clr, lifts) {
+    const F = this.clothFit; if (!F) return;
+    this.root.updateMatrixWorld(true); this.rider.updateWorldMatrix(true, false);
+    const rInv = new THREE.Matrix4().copy(this.rider.matrixWorld).invert(), v = new THREE.Vector3(), v0 = new THREE.Vector3(), q = new THREE.Vector3(), ab = new THREE.Vector3(), ap = new THREE.Vector3(), c2 = clr * clr;
+    const S = new THREE.Matrix4(), B = new THREE.Matrix4(), toR = new THREE.Matrix4(), back = new THREE.Matrix4(); let moved = 0;
+    let zmin = 1e9, zmax = -1e9; for (let k = 0; k < pts.length; k += 3) { zmin = Math.min(zmin, pts[k + 2]); zmax = Math.max(zmax, pts[k + 2]); }
+    for (const c of caps) { zmin = Math.min(zmin, c.a.z - c.r, c.b.z - c.r); zmax = Math.max(zmax, c.a.z + c.r, c.b.z + c.r); }
+    for (const o of this.capMeshes) {
+      o.skeleton.update(); const g = o.geometry, P = g.attributes.position, W = g.attributes.capw, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, bm = o.skeleton.boneMatrices;
+      for (let i = 0; i < P.count; i++) {
+        // rest position -> rider's frame:  rInv * meshWorld * bindInverse * (sum of weight * boneMatrix) * bind
+        S.elements.fill(0);
+        for (let k = 0; k < 4; k++) { const w = SW.getComponent(i, k); if (!w) continue; const off = SI.getComponent(i, k) * 16; for (let e = 0; e < 16; e++) S.elements[e] += bm[off + e] * w; }
+        toR.copy(rInv).multiply(o.matrixWorld).multiply(o.bindMatrixInverse).multiply(S).multiply(o.bindMatrix);
+        v0.fromBufferAttribute(P, i).applyMatrix4(toR); v.copy(v0);
+        if (Math.abs(v.x) < 0.02 || v.z < zmin - 0.1 || v.z > zmax + 0.1) continue;
+        const t = W.getX(i), lim = t === 0 ? F.DENT_ARC : F.DENT_HANG(t);
+        for (let pass = 0; pass < 2; pass++) for (const dy of lifts) {
+          for (let k = 0; k < pts.length; k += 3) {
+            const dx = v.x - pts[k], ddy = v.y - pts[k + 1] - dy, dz = v.z - pts[k + 2], d2 = dx * dx + ddy * ddy + dz * dz;
+            if (d2 < c2 && d2 > 1e-10) { const d = Math.sqrt(d2), f = (clr - d) / d; v.x += dx * f; v.y += ddy * f; v.z += dz * f; }
+          }
+          for (const c of caps) {
+            ab.subVectors(c.b, c.a); ap.copy(v).sub(c.a); ap.y -= dy; const tt = Math.max(0, Math.min(1, ap.dot(ab) / (ab.lengthSq() || 1e-9)));
+            q.copy(c.a).addScaledVector(ab, tt); q.y += dy; ap.subVectors(v, q); const d = ap.length(), need = c.r + clr - d;
+            if (need > 0 && d > 1e-6) v.addScaledVector(ap, need / d);
+          }
+        }
+        let dd = v.distanceTo(v0); if (dd < 1e-5) continue; if (dd > lim) { v.lerpVectors(v0, v, lim / dd); dd = lim; }
+        back.copy(toR).invert(); v.applyMatrix4(back); P.setXYZ(i, v.x, v.y, v.z); moved++;
+      }
+      P.needsUpdate = true;
+    }
+    this.dentN = moved;
+  }
   /**
    * The cloth gives way under the rider: every vertex of the caparison is pushed away from the points of his lower body (swept through the lifts his posting gives, so the
    * dent is wide enough for the whole stride) until it clears by `clr`: at most DENT_ARC on the back (it lies a finger above the coat), DENT_HANG on the hang. Done once on the
    * rest shape, so the flutter rides on top of it.
    */
   _dentCloth(pts, caps, clr, lifts) {
+    if (this.capMeshes) return this._dentClothSkin(pts, caps, clr, lifts);
     const D = this._drapes && this._drapes[0], F = this.clothFit; if (!D || !F) return;
     this.rider.updateWorldMatrix(true, false); this.inner.updateWorldMatrix(true, false);
     const m = new THREE.Matrix4().copy(this.rider.matrixWorld).invert().multiply(this.inner.matrixWorld), mi = m.clone().invert(), b = D.cap.base, pa = D.mesh.geometry.attributes.position;
@@ -1676,6 +1985,17 @@ export class Jouster {
    */
   _stirUpdate() {
     if (!this._stir) return;
+    if (this._stirLoose) {
+      const dt = Math.min(0.05, this._dt || 0);
+      for (const S of this._stir) {
+        const want = _fa.copy(S.bar).add(_fb.set(0, -0.62, 0));      // hanging under the bar
+        S.hv.addScaledVector(_fc.subVectors(want, S.iron.position), 160 * dt).multiplyScalar(Math.exp(-6 * dt)); S.iron.position.addScaledVector(S.hv, dt);
+        S.iron.quaternion.slerp(_fq.identity(), 1 - Math.exp(-8 * dt));
+        S.top.getWorldPosition(_fa); this.mount.worldToLocal(_fa);
+        _v4.subVectors(_fa, S.bar); const len = _v4.length() || 1e-3; S.lea.position.copy(S.bar).addScaledVector(_v4, 0.5); S.lea.scale.set(1, len, 1); S.lea.quaternion.setFromUnitVectors(Y, _v4.divideScalar(len)); S.lea2.visible = false;
+      }
+      return;
+    }
     this.rider.updateWorldMatrix(true, false);
     const F = this.rider.parent === this.mount ? this.clothFit : null, Q = this.rider.matrix, T = _v, M = _v2, p = _v3, W = 0.0125 + 0.01;
     const clear = (a, b, c) => {      // worst clearance of the run(s) and where: a -> b (-> c)
@@ -1698,6 +2018,7 @@ export class Jouster {
   }
   /** A fresh lance in the hand. */
   _mendLance() {
+    this.flex = null; this.pin = null; if (!this.unhorsed) this.rag = null; if (this._bendU) this._bendU.uB.value.set(0, 0, 0, 0);
     this.lanceDropped = false; this.lance.visible = true; this.lanceBroken = false; this.lanceFore.visible = true; this.lanceStump.visible = false;
     if (this.lanceKept) { this.lance.remove(this.lanceKept); if (this.lanceKept.geometry) this.lanceKept.geometry.dispose(); if (this._keptMat) { this._keptMat.dispose(); this._keptMat = null; } this.lanceKept = null; }
   }
@@ -1713,14 +2034,42 @@ export class Jouster {
    * in about 0.35 s while he is still in the saddle, his seat leaves it at about 0.45 s, and he is on the ground about a second
    * after the blow. So for `delay` seconds he stays mounted and is driven back; only then does he part from the horse.
    */
-  unhorse(vel, spin, delay = 0.42) {
+  unhorse(vel, spin, delay = 0.42, o = {}) {
     if (this.unhorsed || this.going) return;
-    this.going = { t: delay, vel: vel.clone(), spin };
+    const style = o.style === 'side' ? 'side' : 'cantle';
+    // out: the side he goes off, in the horse's frame (+1 his left): away from the tilt (main.js passes it; else the side away from x = 0)
+    const out = o.out || ((Math.sign(this.root.position.x) || 1) * (this.dir > 0 ? 1 : -1));
+    this.going = { t: delay, tt: 0, vel: vel.clone(), spin, style, k: o.k || 1, out, lat: o.lat || 0 };
+    this.looseT = 0;      // (the riderless horse: main.js looseHorse)
   }
   _detach() {
     const g = this.going; this.going = null;
     this.unhorsed = true;
+    const clip = this.rig && FALL_CLIPS[g.style], F = PHYS.impact.fall;
+    // the horse's velocity at this instant (he keeps most of it: nothing has stopped him yet)
+    const hv = _fa.set(0, 0, this.dir * this.speed);
     this.scene.attach(this.rider);
+    this._stirFree();
+    if (this.onDetach) this.onDetach(this, g);
+    if (clip) {
+      // A ballistic flight from where the authored path has put him, timed to meet the ground when the footage does (F.tGround), with the forward speed
+      // he had on the horse (F.keep of it) plus the path's own motion relative to the saddle; the launch is held to what sliding off the rump or being
+      // thrown over the shoulder can give (F.vyMin..vyMax). Gravity, the sand and the friction do the rest (_updateFall).
+      const T = Math.max(0.3, F.tGround[g.style] - g.tt), y0 = this.rider.position.y, yG = F.lieH;
+      const vy = clamp((yG - y0 + 4.905 * T * T) / T, F.vyMin, F.vyMax);
+      const a = hipsAt(clip, g.tt, g.out, g.k, _fb), b = hipsAt(clip, g.tt + T, g.out, g.k, _fc);
+      const rel = b.sub(a).divideScalar(T); rel.y = 0; rel.applyQuaternion(this.root.quaternion);
+      const v = hv.clone().multiplyScalar(F.keep).add(rel); v.y = vy; v.x += g.lat;      // (g.lat: the blow's sideways momentum over his mass, world x, from main.js)
+      // the turn: over the cantle he goes on rolling back (his legs come over last); thrown sideways he rolls over toward the side he goes
+      const q = this.rider.quaternion, X = _fb.set(1, 0, 0).applyQuaternion(q).clone(), Zf = _fc.set(0, 0, 1).applyQuaternion(q).clone();
+      const w = g.style === 'side'
+        ? Zf.multiplyScalar(-g.out * F.turn.side * g.k / T).addScaledVector(X, -F.turn.sideBack / T)
+        : X.multiplyScalar(-F.turn.cantle * g.k / T).addScaledVector(Zf, -g.out * F.turn.cantleRoll / T);
+      w.y += this.twistV * 0.3; if (w.length() > F.wMax) w.setLength(F.wMax);
+      this.fall = { v, w, landed: false, still: 0, wl: w.clone(), skidT: 0, bounceT: 0, clip: g.style, tt: g.tt, k: g.k, out: g.out, air: 0, kick: 0 };
+      if (GFX.tier !== 'low' && PHYS.ragdoll) this._ragStart(v, w);      // from here an articulated ragdoll (src/ragdoll.js); the low tier keeps the rigid body
+      return;
+    }
     // from here he is one rigid body: he leaves the saddle turning backward over the cantle (spin), with whatever twist the blow gave him
     const w = new THREE.Vector3(1, 0, 0).applyQuaternion(this.rider.quaternion).multiplyScalar(g.spin);
     w.y += this.twistV * 0.6 + (Math.random() - 0.5) * 1.6; w.addScaledVector(_v.set(0, 0, 1).applyQuaternion(this.rider.quaternion), this.sideRecoilV * 0.5 + (Math.random() - 0.5) * 1.2);
@@ -1728,13 +2077,136 @@ export class Jouster {
     this.fall = { v: g.vel, w, landed: false, still: 0, wl: w.clone(), skidT: 0, bounceT: 0 };
   }
 
+  /** The fall's state for the pose: [style, clip time, intensity, side, airborne, flail kick] or null. */
+  _fallState() {
+    if (this.replaying) return this._fcSnap || null;
+    const g = this.going, f = this.fall;
+    if (g && this.rig && FALL_CLIPS[g.style]) return [g.style === 'side' ? 1 : 0, g.tt, g.k, g.out, 0, 0];
+    if (this.unhorsed && f && f.clip) return [f.clip === 'side' ? 1 : 0, f.tt, f.k, f.out, f.landed ? 0 : 1, f.kick || 0];
+    return null;
+  }
+  /**
+   * The authored fall on the rig's bones, added in the rider's own frame (so it holds whatever the rigid body is doing) after the pose and the arm IK:
+   * spine bending back over the cantle (or rolling sideways), the head, the legs coming up and over; once he is out of the saddle the arms too, with a
+   * flail on top that dies away once he is down. Mirrored when he goes off his right side.
+   */
+  _fallPose() {
+    const st = this._fallState(); if (!st || !this.rig) return;
+    if (this.rag && (this.replaying ? this.snapUnhorsed && this._ragSnap && (this._ragSnap.w ?? 1) >= 1 : this.unhorsed && this.rag.t > PHYS.ragdoll.fade)) return;      // (the ragdoll has him)
+    const c = FALL_CLIPS[FALL_STYLE[st[0]]]; if (!c) return;
+    const t = st[1], k = st[2], mir = st[3] < 0, off = (this.replaying ? this.snapUnhorsed : this.unhorsed), FF = PHYS.impact.fall.flail;
+    const B = this.rig.bones, D = Math.PI / 180, wIn = smoothstep(0, 0.08, t);
+    this.rider.updateWorldMatrix(true, false); const rq = this.rider.getWorldQuaternion(_fq3).invert();      // world -> rider frame
+    for (const name of FALL_BONES) {
+      const src = mir ? (name.startsWith('Left') ? 'Right' + name.slice(4) : name.startsWith('Right') ? 'Left' + name.slice(5) : name) : name;
+      const ch = c.euler_deg[src], b = B[name]; if (!b) continue;
+      const arm = /Arm$/.test(name);
+      if (arm && !off) continue;      // (on the horse the arms still hold the lance and the shield: the IK has them)
+      let px = ch ? clipAt(ch.x, c.fps, t) : 0, rz = ch ? clipAt(ch.z, c.fps, t) : 0, yy = ch ? clipAt(ch.y, c.fps, t) : 0;
+      if (mir) { rz = -rz; yy = -yy; }
+      if (arm && off) {      // flailing: the arms windmill while he is in the air, a burst on landing, dying away
+        const sgn = name.startsWith('Left') ? 1 : -1, ph = name.startsWith('Left') ? 0 : 1.7, a = FF.deg * (st[4] ? 1 : Math.max(0, st[5]) * Math.exp(-FF.decay * Math.max(0, t - 0.9)));
+        rz += sgn * a * Math.sin(TAU * FF.hz * t + ph); px += a * 0.8 * Math.sin(TAU * FF.hz * 0.8 * t + ph + 0.9);
+      }
+      const w = wIn * (arm ? smoothstep(0, 0.15, t - (st[0] ? 0.3 : 0.55)) : 1) * (/Leg$|UpLeg$/.test(name) ? k : 1);
+      if (!w || (!px && !rz && !yy)) continue;
+      // the bone's direction in the rider's frame (to its first child bone; the head: up)
+      b.updateWorldMatrix(true, false); b.getWorldPosition(_fa);
+      const kid = b.children.find((o) => o.isBone);
+      if (kid) { kid.getWorldPosition(_fb); _fb.sub(_fa).applyQuaternion(rq); } else _fb.set(0, 1, 0);
+      if (_fb.lengthSq() < 1e-8) continue; _fb.normalize();
+      _fq.identity();
+      if (px) { _fc.crossVectors(_fb, Z); if (_fc.lengthSq() > 1e-6) _fq.premultiply(_fq2.setFromAxisAngle(_fc.normalize(), px * D * w)); }
+      if (rz) { _fc.crossVectors(_fb, XA); if (_fc.lengthSq() > 1e-6) _fq.premultiply(_fq2.setFromAxisAngle(_fc.normalize(), rz * D * w)); }
+      if (yy) _fq.premultiply(_fq2.setFromAxisAngle(Y, yy * D * w));
+      // rider-frame rotation -> the bone's parent frame:  q_local' = P^-1 * q * P * q_local, P = the parent's rotation in the rider frame
+      b.parent.getWorldQuaternion(_fq2).premultiply(rq);
+      _fq.premultiply(_fq3.copy(_fq2).invert()).multiply(_fq2);
+      this.rider.getWorldQuaternion(_fq3).invert();      // (restore rq, used above as scratch)
+      b.quaternion.premultiply(_fq);
+    }
+    this.rig.root ? this.rig.root.updateMatrixWorld(true) : this.rider.updateMatrixWorld(true);
+  }
+  /**
+   * The ragdoll takes him at the exit: its points start where the posed bones are, moving as the launch says (v, and the turn w about the pelvis),
+   * on top of what the pose itself was doing. Each bone keeps its own rotation relative to its points' frame from here on (Q0, B0).
+   */
+  _ragStart(v, w) {
+    const B = this.rig.bones, n = RAG_POINTS.length, pos = new Float32Array(3 * n), vel = new Float32Array(3 * n);
+    this.rider.updateMatrixWorld(true);
+    for (let i = 0; i < n; i++) {
+      const b = B[RAG_POINTS[i][1]]; if (!b) return;
+      b.getWorldPosition(_fa);
+      if (RAG_POINTS[i][0] === 'head' && B.HeadTop_End) { B.HeadTop_End.getWorldPosition(_fb); _fa.lerp(_fb, 0.45); }      // (the middle of the helm)
+      pos[3 * i] = _fa.x; pos[3 * i + 1] = _fa.y; pos[3 * i + 2] = _fa.z;
+    }
+    for (let i = 0; i < n; i++) {
+      _fb.set(pos[3 * i] - pos[0], pos[3 * i + 1] - pos[1], pos[3 * i + 2] - pos[2]); _fc.crossVectors(w, _fb).add(v);
+      vel[3 * i] = _fc.x; vel[3 * i + 1] = _fc.y; vel[3 * i + 2] = _fc.z;
+    }
+    const rd = new Ragdoll(pos, vel, this.armourDef.kg ?? 28, PHYS.ragdoll.helmKg); rd.tiltTop = this.tiltTop || 0;
+    const Q0 = {}, B0 = {};
+    for (const e of RAG_BONES) {
+      const b = B[e[0]]; if (!b) continue; Q0[e[0]] = b.getWorldQuaternion(new THREE.Quaternion());
+      if (e[1] !== 'mix') B0[e[0]] = ragBasis(pos, RI[e[1]], RI[e[2]], RI[e[3]], RI[e[4]], new THREE.Quaternion());
+    }
+    this.rag = { rd, Q0, B0, t: 0, ms: 0, slideT: 0, landed: false, P0: Float32Array.from(pos) };      // (P0: the points at the exit, a seated man: src/aftermath.js measures him from it)
+  }
+  /** A step of the ragdoll (update), with the sounds and the sand of the landing and the slide. */
+  _ragStep(dt) {
+    const G = this.rag, rd = G.rd; if (!rd) return;
+    const t0 = performance.now(); rd.step(dt); G.ms = G.ms * 0.9 + (performance.now() - t0) * 0.1; G.t += dt;
+    if (rd.landed && !G.landed) { G.landed = true; if (this.onLand) this.onLand(_fa.set(rd.landAt[0], rd.landAt[1], rd.landAt[2]), rd.landSpeed); }
+    const s = rd.slide(RI.pelvis); G.slideT -= dt;
+    if (s.down && s.v > PHYS.impact.fall.skid && G.slideT <= 0 && this.onSkid) { G.slideT = 0.07; this.onSkid(_fa.set(rd.p[0], 0.05, rd.p[2]), s.v, _fb.set((rd.p[0] - rd.q[0]) / PHYS.ragdoll.h, 0, (rd.p[2] - rd.q[2]) / PHYS.ragdoll.h)); }
+  }
+  /** Pose the skinned bones from the ragdoll's points (live, or the replay's record), cross-faded in from the authored pose over ragdoll.fade s. */
+  _ragPose() {
+    const G = this.rag; if (!G) return;
+    const P = this.replaying ? (this._ragSnap && this._ragSnap.p) : this.getUp && this.getUp.on ? this.getUp.P : G.rd.p; if (!P) return;      // (getUp: src/aftermath.js takes the points over once he lies still: the roll, the kneel, the stand)
+    const wB = this.replaying ? (this._ragSnap.w ?? 1) : smoothstep(0, PHYS.ragdoll.fade, G.t);
+    const B = this.rig.bones, Rq = {};
+    for (const e of RAG_BONES) {
+      const b = B[e[0]]; if (!b || !G.Q0[e[0]]) continue;
+      if (e[1] === 'mix') { if (!Rq[e[2]] || !Rq[e[3]]) continue; Rq[e[0]] = Rq[e[2]].clone().slerp(Rq[e[3]], e[4]); }
+      else Rq[e[0]] = ragBasis(P, RI[e[1]], RI[e[2]], RI[e[3]], RI[e[4]], new THREE.Quaternion()).multiply(_fq.copy(G.B0[e[0]]).invert());
+    }
+    const GU = !this.replaying && this.getUp && this.getUp.on && this.getUp.W ? this.getUp : null;      // (src/aftermath.js poses the trunk, hips and head from its own frames: the exit pose was bent back over the cantle, so the points of the trunk say nothing of an upright man)
+    for (const e of RAG_BONES) {      // parents first: each bone's world rotation = (its points' turn since the exit) x (its rotation at the exit)
+      const b = B[e[0]], R = Rq[e[0]]; if (!b || !R) continue;
+      _fq.copy(R).multiply(G.Q0[e[0]]); if (GU && GU.W[e[0]]) _fq.slerp(GU.W[e[0]], GU.ww);
+      b.parent.updateWorldMatrix(true, false); b.parent.getWorldQuaternion(_fq2);
+      _fq.premultiply(_fq2.invert());
+      b.quaternion.slerp(_fq, wB); b.updateMatrixWorld(true);
+    }
+    // the figure sits where the pelvis point is
+    B.Hips.getWorldPosition(_fa); _fb.set(P[0], P[1], P[2]).sub(_fa).multiplyScalar(wB);
+    this.rider.position.add(_fb); this.rider.updateMatrixWorld(true);
+  }
+  /** Out of the saddle: the irons stay on the horse, hanging from the bars (they were on his feet). */
+  _stirFree() {
+    if (!this._stir || this._stirLoose) return;
+    this._stirLoose = true;
+    for (const S of this._stir) {
+      const iron = S.top.parent; if (!S.home) S.home = { foot: iron.parent, p: iron.position.clone(), q: iron.quaternion.clone() };
+      this.mount.attach(iron); this.mount.attach(S.lea); this.mount.attach(S.lea2); S.iron = iron;
+      S.hang = iron.position.clone(); S.hv = new THREE.Vector3();
+    }
+  }
+  /** Back in the saddle (a replay, a new course): the irons on his feet again. */
+  _stirHome() {
+    if (!this._stir || !this._stirLoose) return;
+    this._stirLoose = false;
+    for (const S of this._stir) { if (!S.home) continue; S.home.foot.add(S.iron); S.iron.position.copy(S.home.p); S.iron.quaternion.copy(S.home.q); this.rider.add(S.lea); this.rider.add(S.lea2); }
+  }
+
   /** Everything needed to redraw this rider at an instant (for instant replay). */
   snapshot() {
     const r = this.root, s = { px: r.position.x, pz: r.position.z, ry: r.rotation.y, rz: r.rotation.z, dir: this.dir, speed: this.speed, phase: this.phase, time: this.time,
       lanceLower: this.lanceLower, ax: this.aimLocal.x, ay: this.aimLocal.y, az: this.aimLocal.z, brace: this.brace, recoil: this.recoil, sideRecoil: this.sideRecoil,
-      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff, shGone: !!this.shGone, lr: this._lanceRel(), ld: !!this.lanceDropped, fx: [this.hS, this.hY, this.push, this.jZ, this.wX, this.wY, this.toss, this.chk, this.shd, this.jX, this.jY] };      // lr: the lance exactly as it was posed, relative to the root (the live pose rests on eased state and on the other man's body, which a replay does not have)
+      rear: this.rear, guard: this.guard, look: this.look, agit: this.agit || 0, lanceBroken: this.lanceBroken, unhorsed: this.unhorsed, twist: this.twist, headK: this.headK, shK: this.shK, stag: this.stag, raise: this.raise, visorUp: this.visorUp, helmOff: this.helmOff, shGone: !!this.shGone, lr: this._lanceRel(), ld: !!this.lanceDropped, fc: this._fallState(), rg: this.rag && this.unhorsed ? { p: Array.from(this.getUp && this.getUp.on ? this.getUp.P : this.rag.rd.p, (v) => Math.round(v * 1000) / 1000), w: Math.min(1, this.rag.t / PHYS.ragdoll.fade) } : null, bd: this._bendU ? this._bendU.uB.value.toArray() : null, bl: this._bendU ? this._bendU.uL.value : 0, fx: [this.hS, this.hY, this.push, this.jZ, this.wX, this.wY, this.toss, this.chk, this.shd, this.jX, this.jY] };      // lr: the lance exactly as it was posed, relative to the root (the live pose rests on eased state and on the other man's body, which a replay does not have)
     if (this.unhorsed) { const p = this.rider.position, q = this.rider.quaternion; s.rp = [p.x, p.y, p.z]; s.rq = [q.x, q.y, q.z, q.w]; s.tx = this.torsoD.rotation.x; }
-    if (this.rig) { const T = this.torsoD.rotation, H = this.helmD.rotation, S = this.shield; s.limp = this.limp; s.rig = [T.x, T.y, T.z, H.x, H.y, H.z, S.position.x, S.position.y, S.position.z, S.rotation.x, S.rotation.y, S.rotation.z]; }      // the rig's pose: its blend and the puppet's drivers
+    if (this.rig) { const T = this.torsoD.rotation, H = this.helmD.rotation, S = this.shield; s.limp = this.limp; s.rig = [T.x, T.y, T.z, H.x, H.y, H.z, S.position.x, S.position.y, S.position.z, S.rotation.x, S.rotation.y, S.rotation.z]; s.ride = rideSave(this.rig.ride); }      // the rig's pose: its blend and the puppet's drivers
     return s;
   }
   /** The lance's world pose as a position and quaternion in the root's frame. */
@@ -1755,13 +2227,16 @@ export class Jouster {
     this.speed = s.speed; this.phase = s.phase; this.time = s.time; this.lanceLower = s.lanceLower; this.aimLocal.set(s.ax, s.ay, s.az).normalize();
     this.brace = s.brace; this.recoil = s.recoil; this.sideRecoil = s.sideRecoil; this.rear = s.rear; this.guard = s.guard; this.look = s.look; this.agit = s.agit;
     { const f = s.fx || []; [this.hS, this.hY, this.push, this.jZ, this.wX, this.wY, this.toss, this.chk, this.shd, this.jX, this.jY] = [f[0] || 0, f[1] || 0, f[2] || 0, f[3] || 0, f[4] || 0, f[5] || 0, f[6] || 0, f[7] || 0, f[8] || 0, f[9] || 0, f[10] || 0]; }
+    this._snapRide = s.ride || null;      // the rider's give to the saddle as it was (a replay steps with dt 0: it reads this, see _rideUpdate)
     this.twist = s.twist || 0; this.headK = s.headK || 0; this.shK = s.shK || 0; this.stag = s.stag || 0;
+    this._fcSnap = s.fc || null; this._ragSnap = s.rg || null;
+    if (s.bd) { this._bendPatch(this.lanceMat); this._bendU.uB.value.fromArray(s.bd); this._bendU.uL.value = s.bl || this.reach; } else if (this._bendU) this._bendU.uB.value.set(0, 0, 0, 0);
     this.raise = this.raiseT = s.raise || 0; this.visorUp = !!s.visorUp; this.helmOff = !!s.helmOff; if (!!s.shGone !== !!this.shGone) this.setShieldGone(!!s.shGone);
     this.lance.visible = !s.ld; this.lanceFore.visible = !s.lanceBroken; this.lanceStump.visible = s.lanceBroken; if (this.lanceKept) this.lanceKept.visible = s.lanceBroken;
     if (s.unhorsed) {
-      if (this.rider.parent !== this.scene) this.scene.attach(this.rider);
+      if (this.rider.parent !== this.scene) { this.scene.attach(this.rider); this._stirFree(); }
       this.rider.position.set(s.rp[0], s.rp[1], s.rp[2]); this.rider.quaternion.set(s.rq[0], s.rq[1], s.rq[2], s.rq[3]).normalize(); this.torsoD.rotation.x = s.tx;
-    } else if (this.rider.parent !== this.mount) { this.mount.add(this.rider); this.rider.position.set(0, 0, 0); this.rider.quaternion.identity(); }
+    } else if (this.rider.parent !== this.mount) { this.mount.add(this.rider); this.rider.position.set(0, 0, 0); this.rider.quaternion.identity(); this._stirHome(); }
     this.snapUnhorsed = s.unhorsed; this.snapLR = s.lr || null;
     if (this.rig && s.rig) {      // the figure's pose as it was: unhorsed, the springs are not run in a replay, so the recorded drivers are used as they are
       this.limp = s.limp || 0; const r = s.rig; this.torsoD.rotation.set(r[0], r[1], r[2]); this.helmD.rotation.set(r[3], r[4], r[5]);
@@ -1771,7 +2246,9 @@ export class Jouster {
 
   // ------------------------------------------------------------ update
   update(dt) {
+    this._dt = dt;
     this.time += dt; const t = this.time;
+    if (this.cel) celStep(this, dt);
     const sp = this.speed;
     if (!this.manualPos && !this.replaying) this.root.position.z += this.dir * sp * dt;
     const g = this.gait = smoothstep(2.4, 6.4, sp);
@@ -1800,6 +2277,8 @@ export class Jouster {
       }
     }
     const cyc = this.phase * TAU;
+    { const b = this.body, m = this.modelPivot; b.rotation.set(0, 0, 0); b.position.x = b.position.z = 0; if (m) { m.rotation.set(0, 0, 0); m.position.z = -0.75; } }      // (undo last frame's _horseMotion before the clip is sampled)
+    this._lastDt = dt;
     const bob = g * amp * 0.1 * Math.sin(cyc + 2.0) + (1 - g) * amp * 0.022 * Math.sin(cyc * 2);
     const pitch = g * amp * 0.055 * Math.sin(cyc + 0.4);
     this.body.position.y = (BY - 0.075 * g * amp + bob + this.rear * 0.25) * this.hs;
@@ -1819,10 +2298,11 @@ export class Jouster {
       this.root.updateMatrixWorld(true);
       const by = this.newHorse ? this._seatSample() - this.seatRest : this.root.worldToLocal(this.backBone.getWorldPosition(_v3)).y - this.backRest;
       this.body.position.y = (BY + this.rear * 0.25) * this.hs + by;
-      this.body.rotation.x = pitch * 0.5 - this.rear * 0.62;
+      this.body.rotation.x = pitch * 0.5 * (1 - clamp(PHYS.ride.horseFollow, 0, 1)) - this.rear * 0.62;      // (the saddle now takes the clip's own back pitch instead, _horseCalc)
       this.bob = by;
     }
 
+    this._horseCalc();
     // neck & head: stretch out at the gallop, nod with the stride
     const idle = (1 - amp) * (Math.sin(t * 0.9) * 0.04 + Math.max(0, Math.sin(t * 0.31 + 1)) * 0.06);
     this.neck.rotation.x = lerp(-0.02, 0.24, g) + g * 0.07 * Math.sin(cyc + 1.2) + idle + this.rear * 0.25;
@@ -1834,7 +2314,9 @@ export class Jouster {
     this.tail.rotation.x = lerp(0.08, 0.95, g * amp) + Math.sin(cyc + 1) * 0.1 * amp + Math.sin(t * 1.3) * 0.04;
     this.tail.rotation.z = Math.sin(t * 2.1) * 0.08 + Math.sin(cyc * 0.5) * 0.1 * amp;
 
-    // caparison flutter
+    // caparison flutter (the skinned cloth's hem sways in its vertex shader: only the numbers go over; the old drapes are moved here)
+    if (this.capU) this.capU.value.set(t, g * amp, cyc, 0.25 + 0.75 * g * amp);
+    if (this.mantU) this.mantU.value.set(t, g * amp);
     {
       const k = 0.25 + 0.75 * g * amp;
       for (const cap of this.caps) {
@@ -1853,26 +2335,35 @@ export class Jouster {
     }
 
     // rider posture
-    if (this.going) { this.recoilV = 0; this.recoil = Math.min(1.5, this.recoil + 4.0 * dt); this.going.t -= dt; if (this.going.t <= 0) this._detach(); }
-    else { this.recoilV += (-this.recoil * 38 - this.recoilV * 6.5) * dt; this.recoil += this.recoilV * dt; }
+    if (this.going) {
+      const g = this.going; g.tt += dt;
+      if (this.rig && FALL_CLIPS[g.style]) { this.recoilV = 0; this.recoil = damp(this.recoil, 0, 10, dt); }      // (the authored spine curve does the bending back, _fallPose)
+      else { this.recoilV = 0; this.recoil = Math.min(1.5, this.recoil + 4.0 * dt); }
+      g.t -= dt; if (g.t <= 0) this._detach();
+    }
+    else { const st = this.strength || 1; this.recoilV += (-this.recoil * 38 * st - this.recoilV * 6.5 * Math.sqrt(st)) * dt; this.recoil += this.recoilV * dt; }      // a strong seat brings him back upright sooner
     this.sideRecoilV += (-this.sideRecoil * 34 - this.sideRecoilV * 6) * dt; this.sideRecoil += this.sideRecoilV * dt;
     this.twistV += (-this.twist * 30 - this.twistV * 6) * dt; this.twist += this.twistV * dt;            // shoulders turned by a blow off the spine
-    this.headV += (-this.headK * 70 - this.headV * 9) * dt; this.headK += this.headV * dt;                // the head snapped back
+    this.headV += (-this.headK * 70 * (this.strength || 1) - this.headV * 9 * Math.sqrt(this.strength || 1)) * dt; this.headK += this.headV * dt;                // the head snapped back
     this.shV += (-this.shK * 60 - this.shV * 9) * dt; this.shK += this.shV * dt;                          // the shield driven in against the chest
     this.stagV += (-this.stag * 26 - this.stagV * 5) * dt; this.stag += this.stagV * dt;                  // the horse rocked sideways under the blow
     this._reactStep(dt);
     { const sg = clamp(this.stag, -0.16, 0.16); this.body.rotation.z = sg; if (this.modelPivot) this.modelPivot.rotation.z = sg; }
     const off = this.replaying ? this.snapUnhorsed : this.unhorsed;
+    if (this.rig) this._rideUpdate(dt, cyc, off);
     if (this.newHorse) this._tackUpdate(off);
     if (!off) {
-      this.rider.position.y = -bob * 0.12 + g * amp * 0.035 * Math.sin(cyc + 3.4) + this.brace * 0.045;
+      const so = this.rig ? PHYS.ride.synth : 1;      // (the rigged rider's give comes from the chain; the old synthetic posting and torso rock are kept only in a share, PHYS.ride.synth)
+      this.rider.position.y = -bob * 0.12 + g * amp * 0.035 * so * Math.sin(cyc + 3.4) + this.brace * 0.045;
       this.rider.position.z = this.brace * 0.07 + this.push;
+      if (this.going && this.rig && FALL_CLIPS[this.going.style]) { const g = this.going; hipsAt(FALL_CLIPS[g.style], g.tt, g.out, g.k, _fa); this.rider.position.x = _fa.x; this.rider.position.y += _fa.y; this.rider.position.z += _fa.z; }      // lifted and slid back over the cantle
+      else this.rider.position.x = 0;
       this.rider.rotation.x = -this.body.rotation.x * 0.75;
       // the body is thrown back as the horse surges and pitches forward as he checks
       const acc = dt > 0 ? (sp - (this.prevSp ?? sp)) / dt : 0; this.prevSp = sp;
       this.accLean = damp(this.accLean || 0, clamp(-acc * 0.028, -0.2, 0.24), 5, dt);
       const T = this.torsoD.rotation, Hd = this.helmD.rotation;      // (the puppet: the rigged rider turns these into bone rotations, rider_rig.js)
-      T.x = 0.05 + 0.13 * g * amp + this.brace * 0.44 + this.lean + this.accLean - clamp(this.recoil, -0.4, 1.5) - this.shd + g * amp * 0.03 * Math.sin(cyc + 2.6);
+      T.x = 0.05 + 0.13 * g * amp + this.brace * 0.44 + this.lean + this.accLean - clamp(this.recoil, -0.4, 1.5) - this.shd + g * amp * 0.03 * so * Math.sin(cyc + 2.6);
       T.z = clamp(this.sideRecoil, -0.6, 0.6);
       T.y = 0.12 * this.lanceLower + this.look * 0.6 + clamp(this.twist, -0.7, 0.7);
       Hd.x = -0.05 * g + clamp(this.recoil, -0.3, 0.6) * 0.5 - this.brace * 0.2 - clamp(this.headK, -0.3, 0.6);   // chin down, eyes still on the mark
@@ -1880,7 +2371,7 @@ export class Jouster {
       // shield guard: raised it covers the helm and bares the body
       const gd = this.guard, sk_ = clamp(this.shK, -0.3, 0.8), sh = this.shield;
       if (this.rig) {      // offsets from where the targe hangs on the arm (the left hand follows it)
-        sh.position.set(0, (0.2 * gd - 0.04 * sk_) * KS, (0.03 * gd - 0.07 * sk_) * KS); sh.rotation.set(-0.22 * gd - 0.5 * sk_, 0, this._vAsk);
+        const rs = this.rig.ride.sh; sh.position.set(rs[0], (0.2 * gd - 0.04 * sk_) * KS + rs[1], (0.03 * gd - 0.07 * sk_) * KS); sh.rotation.set(-0.22 * gd - 0.5 * sk_ + rs[2], 0, this._vAsk + rs[3]);      // (+ the shake of the arm, rideStep)
         this.zones[0].r = this._zr[0] * (1 - 0.55 * gd);
       } else {
         sh.position.y = 0.29 + 0.2 * gd - 0.04 * sk_; sh.rotation.x = -0.08 - 0.22 * gd - 0.5 * sk_; sh.rotation.z = 0.06 + this._vAsk; sh.position.z = 0.2 + 0.03 * gd - 0.07 * sk_;
@@ -1888,15 +2379,17 @@ export class Jouster {
         this.lance.position.y = 0.13 + 0.25 * this.raise;      // lifted in the hand when he shows he is ready
         this.zones[1].o.position.y = 0.3 + 0.21 * gd; this.zones[0].r = 0.17 * (1 - 0.55 * gd);
       }
-    } else if (!this.replaying && !this.remote) this._updateFall(dt);      // (online, the friend's fallen rider is placed from his own stream: see online.js applyRider)
+    } else if (!this.replaying && this.rag) this._ragStep(dt);      // the ragdoll (both screens run it, from the same launch)
+    else if (!this.replaying && !this.remote) this._updateFall(dt);      // (online, the friend's fallen rider is placed from his own stream: see online.js applyRider)
     if (this.rig && !this.replaying) this.limp = damp(this.limp, off ? 1 : 0, off ? 5 : 20, dt);      // a man who has come off goes limp: the Stand pose, arms hanging
     this.plume.rotation.x = -0.15 - 0.5 * g * amp + Math.sin(t * 7) * 0.05 * (0.3 + amp);
     // raised lance, visor swing and helm on/off
     if (!this.replaying) this.raise = damp(this.raise, this.raiseT, 7, dt);
     if (this.rig && !this.visor) this.visorUp = false;      // (the rigged helm has no visor: nothing is ever 'up', so no blow is taken 'with the visor up')
-    if ((!this.helmOff) !== this._helmShown) this._showHelm(!this.helmOff);
+    const helmOn = !this.helmOff && !this.celHelmOff;      // (celHelmOff: a celebration waves the helm, celebrate.js)
+    if (helmOn !== this._helmShown) this._showHelm(helmOn);
     if (this.rig) {      // (first person hides the helm, and the head inside it, by the marker's flag)
-      const R = this.rig, hv = this.helm.visible; if (R.helmMesh) R.helmMesh.visible = hv && !this.helmOff; if (R.headMesh) R.headMesh.visible = hv;
+      const R = this.rig, hv = this.helm.visible; if (R.helmMesh) R.helmMesh.visible = hv && helmOn; if (R.headMesh) R.headMesh.visible = hv;
     }
     if (!this._vPlume) this.plume.visible = false;      // knocked off by a blow (it flew as a piece, see main.js strike)
     if (this.visor) { this._vk = damp(this._vk, this.visorUp && !this.helmOff ? 1 : 0, 14, dt); this.visor.rotation.x = -1.25 * this._vk; }   // up and back over the brow, about a quarter of a second
@@ -1907,13 +2400,86 @@ export class Jouster {
       this.ribbon.geometry.attributes.position.needsUpdate = true;
       this.ribbon.rotation.x = 0.15 + clamp(sp / 11, 0, 1) * 1.1 * this.lanceLower;
     }
+    this._horseApply();
     this.applyLance();
+  }
+
+  /**
+   * The ride (rider_rig.js rideStep): hand the saddle's motion to the rider's spring chain. The saddle is the horse's seat height and body pitch (from the clip) plus a sway and roll
+   * once per stride that the clip does not carry; none of it is simulated, it is all read from the animation, so nothing here reaches the strike code except `_aimWob`, which
+   * is analytic from the stride phase (PHYS.ride.aimTip, 0 = never).
+   */
+  _rideUpdate(dt, cyc, off) {
+    const D = PHYS.ride, R = this.rig, r = R.ride, sg = r.sig, I = this.amp * (D.walk + (1 - D.walk) * this.gait);
+    const live = !off && !this.replaying, f = this._rideFade = live ? Math.min(1, (this._rideFade ?? 0) + dt * 4) : 0;      // eases in after a mount, gone at once in a fall
+    r.syn[0] = D.sway * I * Math.sin(cyc + 1.1); r.syn[1] = D.roll * I * Math.sin(cyc + 2.2); r.syn[2] = D.yaw * I * Math.sin(cyc + 0.3);
+    if (this.replaying && !off && this._snapRide) {      // a replay: the recorded give (the chain cannot be stepped with dt 0); the horse's body motion itself is re-derived from the phase
+      rideLoad(r, this._snapRide); this._aimWob = this._aimFor(cyc);
+      return;
+    }
+    if (!live) { r.init = false; r.k = 0; r.sh.fill(0); r.rel.fill(0); r.surgeRel = r.legF = r.legSw = r.legSide = r.wobX = r.wobY = 0; this._aimWob = null; this._aimUndo = null; return; }
+    const hm = this._hm;      // the body's own motion this frame (_horseMotion): the saddle turns with it, the rider lags it
+    sg[0] = this.bob; sg[1] = clamp(this.body.rotation.x + this.rear * 0.62, -0.3, 0.3) + (hm ? hm.pitch : 0);      // (body.rotation is still the clip's own here: _horseApply comes last)
+    sg[2] = r.syn[0]; sg[3] = r.syn[1] + clamp(this.body.rotation.z, -0.2, 0.2) + (hm ? hm.roll : 0); sg[4] = r.syn[2];
+    rideStep(R, dt, this.speed, f);
+    this._aimWob = this._aimFor(cyc);
+  }
+  /** The lance's stride-synchronous bob in the hand (PHYS.ride.aimTip), analytic from the phase so both ends of a match agree; null when off. */
+  _aimFor(cyc) {
+    const D = PHYS.ride, I = this.amp * (D.walk + (1 - D.walk) * this.gait);
+    if (!(D.aimTip > 0 && I > 0.01 && !this.lanceBroken)) return null;
+    const k = D.aimTip * this.gait * this.amp / Math.max(1, this.reach), w = this._aimW || (this._aimW = [0, 0]);
+    w[0] = -k * Math.sin(cyc + 2.9); w[1] = 0.5 * k * Math.sin(cyc + 1.7); return w;
+  }
+
+  /**
+   * The horse's body under the rider (PHYS.ride.horsePitch / horseRoll): film shows the rider quiet on a horse that pitches 14 deg p-p and rolls 7 at the gallop. The pitch and roll are
+   * added to the body group (tack, caparison, rider) and to the model's pivot (the skin) as one rotation about a point near the girth, so the feet stay roughly where the clip puts them.
+   * Analytic from the stride phase and the gait, so a replay re-derives it. `undo` puts both back to what update() set before the clip is sampled (the seat sample must not see it).
+   */
+  /** Pitch (rad, + = nose down) of the horse's back line as the clip poses it: from the croup to the withers bones, in the root's frame. null if the file has no such bones. */
+  _lineAngle() {
+    if (this._lnA === undefined) { const m = this.model; this._lnA = m && m.getObjectByName('Torso3') || null; this._lnB = m && (m.getObjectByName('Back') || m.getObjectByName('Body')) || null; }
+    if (!this._lnA || !this._lnB) return null;
+    this._lnA.getWorldPosition(_hv); this._lnB.getWorldPosition(_hp); this.root.worldToLocal(_hv); this.root.worldToLocal(_hp);
+    return -Math.atan2(_hv.y - _hp.y, _hv.z - _hp.z);
+  }
+  /**
+   * What the body adds this frame: `follow` = the saddle takes the back line's own pitch from the clip (the skin already shows it; the tack, cloth and rider had only a small part of it),
+   * `pitch`/`roll` = the added synthetic motion on skin and tack alike. All from the phase and the clip, so a replay (update(0)) re-derives it.
+   */
+  _horseCalc() {
+    const D = PHYS.ride, hm = this._hm || (this._hm = { pitch: 0, roll: 0, follow: 0, mean: 0, syn: 0 });
+    if (!this.hasModel) { hm.pitch = hm.roll = hm.follow = hm.syn = 0; return; }
+    const cyc = this.phase * TAU, sc = this.amp * (D.horseWalk + (1 - D.horseWalk) * Math.pow(this.gait, 0.85)) * (1 - this.rear) * D.on, P = D.horsePhase;
+    hm.syn = D.horsePitch * sc * Math.sin(cyc + P[0]); hm.roll = D.horseRoll * sc * (0.75 * Math.sin(cyc + P[1]) + 0.25 * Math.sin(cyc * 0.5 + P[2]));
+    const la = D.horseFollow > 0 && D.on > 0 ? this._lineAngle() : null;
+    if (la === null) hm.follow = 0;
+    else { if (this._lnInit === undefined || this.amp < 0.02) { hm.mean = la; this._lnInit = true; } else hm.mean = damp(hm.mean, la, 3, this._lastDt || 0); hm.follow = clamp((la - hm.mean) * D.horseFollow * D.on, -0.2, 0.2); }
+    hm.pitch = hm.syn + hm.follow;      // (what the saddle turns by, over the clip's own small body pitch)
+  }
+  _horseApply() {
+    const hm = this._hm, D = PHYS.ride; if (!hm || (hm.pitch === 0 && hm.roll === 0)) return;
+    _hp.set(D.horsePivot[0], D.horsePivot[1] * (this.horseDef.withers ?? 1.6), D.horsePivot[2]);
+    if (hm.syn !== 0 || hm.roll !== 0) {      // the synthetic pitch and the roll, skin and tack together, about the girth
+      _he.set(hm.syn, 0, hm.roll, 'ZXY'); _hq.setFromEuler(_he);
+      for (const o of [this.body, this.modelPivot]) {
+        if (!o) continue;
+        _hv.copy(o.position).sub(_hp).applyQuaternion(_hq).add(_hp); o.position.copy(_hv); o.quaternion.premultiply(_hq);
+      }
+    }
+    if (hm.follow !== 0) {      // the saddle's own tilt with the back line, about the girth too (a pivot at the seat swung the cloth's hem and left the skin bare)
+      _hp.set(D.horsePivot[0], D.horsePivot[1] * (this.horseDef.withers ?? 1.6), D.horsePivot[2]);
+      _he.set(hm.follow, 0, 0); _hq.setFromEuler(_he); const o = this.body;
+      _hv.copy(o.position).sub(_hp).applyQuaternion(_hq).add(_hp); o.position.copy(_hv); o.quaternion.premultiply(_hq);
+    }
+    this.root.updateMatrixWorld(true);
   }
 
   /** Point the lance along aimLocal (blended with the upright carry). Safe to call again after re-aiming. */
   applyLance() {
     this.root.updateMatrixWorld(true);
-    if (this.rig) poseRig(this, this.rig);
+    if (this.rig) { poseRig(this, this.rig); if (this.cel) celBody(this); }
     if (!(this.replaying ? this.snapUnhorsed : this.unhorsed)) {
       _v.copy(this.aimLocal); this._clearHorse(_v);                          // the lance is carried across the neck, never through it
       _v.applyQuaternion(this.root.quaternion);                              // world
@@ -1921,11 +2487,23 @@ export class Jouster {
       _v.applyQuaternion(_q);                                                // torso-local
       _q2.setFromUnitVectors(Z, _v.normalize());
       this.lance.quaternion.copy(this.lanceRestQ).slerp(this.lanceUpQ, smoothstep(0, 1, this.raise)).slerp(_q2, smoothstep(0, 1, this.lanceLower));
+      this._aimUndo = null;
+      if (this.rig && this._aimWob) {
+        const sh = PHYS.ride.aimShare, w0 = this._aimWob[0], w1 = this._aimWob[1];
+        _uc.copy(this.lance.quaternion);      // (the lance before the bob: Qb)
+        _we.set(w0, w1, 0); this.lance.quaternion.multiply(_wq.setFromEuler(_we));
+        if (sh < 1) {      // the strike's tip = the drawn tip turned by Qb * Wshare * Wfull^-1 * Qb^-1 (exact, whatever the whip that follows)
+          _ua.setFromEuler(_we.set(w0 * sh, w1 * sh, 0)); _ub.setFromEuler(_we.set(w0, w1, 0)).invert();
+          this._aimUndo = (this._aimUndo || new THREE.Quaternion()).copy(_uc).multiply(_ua).multiply(_ub).multiply(_uc.invert());
+        }
+      }      // the lance's real bob in the hand (PHYS.ride.aimTip), from the stride phase
       if (this.wX || this.wY || this.jX || this.jY) { _we.set(clamp(this.wX + this.jY * 0.3, -0.5, 0.5), clamp(this.wY + this.jX * 0.3, -0.5, 0.5), 0); this.lance.quaternion.multiply(_wq.setFromEuler(_we)); }      // the whip of a lance that struck, the jolt of the arm that was struck
+      if (this.pin && !this.replaying) this._pinLance();      // the point stays on the man it struck (pinLance)
       if (this.replaying && this.snapLR) this._lanceFromRel(this.snapLR);      // a replay shows the recorded pose, not a recomputed one
+      if (this.cel) celLance(this);      // (a celebration points the lance where it wants: celebrate.js)
       this.lance.updateMatrixWorld(true);
     }
-    if (this.rig) { armsRig(this, this.rig, this.replaying); this._clipUpdate(); this._stirUpdate(); }
+    if (this.rig) { armsRig(this, this.rig, this.replaying); if (this.cel) celArms(this); this._fallPose(); if (this.rag && (this.replaying ? this.snapUnhorsed && this._ragSnap : this.unhorsed)) this._ragPose(); this._clipUpdate(); this._stirUpdate(); }
     // reins: bit -> bridle hand (or the saddle bow once the rider is gone)
     const tgt = (this.replaying ? this.snapUnhorsed : this.unhorsed) ? this.pommel : this.hand;
     tgt.getWorldPosition(_v2); this.root.worldToLocal(_v2);
@@ -1948,6 +2526,7 @@ export class Jouster {
    */
   _updateFall(dt) {
     const f = this.fall, r = this.rider, F = PHYS.fall;
+    if (f.clip) f.tt += dt;
     const pts = this.rig ? FALL_PTS_RIG : FALL_PTS, n = Math.max(1, Math.ceil(dt / 0.006)), h = dt / n;
     for (let s = 0; s < n && h > 0; s++) {
       f.v.y -= 9.81 * h;
@@ -1964,7 +2543,7 @@ export class Jouster {
         const rn = _v3.set(-_v.z, 0, _v.x);                                     // r x n, n = up
         if (_v2.y < 0) {
           const jn = -(1 + F.bounce) * _v2.y / (1 / F.kg + rn.lengthSq() / F.inertia);
-          if (!f.landed && _v2.y < -1.2) { f.landed = true; if (this.onLand) this.onLand(r.position, Math.abs(_v2.y)); }
+          if (!f.landed && _v2.y < -1.2) { f.landed = true; f.kick = Math.min(1.5, Math.abs(_v2.y) / 4); if (this.onLand) this.onLand(r.position, Math.abs(_v2.y)); }
           else if (f.landed && _v2.y < -1.6 && f.bounceT <= 0) { f.bounceT = 0.15; if (this.onBounce) this.onBounce(r.position, Math.abs(_v2.y)); }      // each later knock on the sand
           f.v.y += jn / F.kg; f.w.addScaledVector(rn, jn / F.inertia);
           // friction against the sliding of the point

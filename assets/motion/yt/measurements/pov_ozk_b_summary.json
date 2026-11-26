@@ -1,0 +1,16 @@
+{
+ "clip": "ozkjvtC_Yg0.mkv",
+ "fps": 29.97002997002997,
+ "window_s": [
+  160.02653333333333,
+  163.99716666666666
+ ],
+ "deg_per_px_assumed": 0.062,
+ "head_pitch_p2p_deg": 10.19,
+ "head_yaw_p2p_deg": 12.61,
+ "head_roll_p2p_deg": 6.68,
+ "head_pitch_dominant_Hz": 1.0,
+ "head_roll_dominant_Hz": 1.0,
+ "head_pitch_rms_deg": 2.91,
+ "head_roll_rms_deg": 2.04
+}

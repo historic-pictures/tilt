@@ -173,15 +173,15 @@ export const STAKES = {
   ],
   // the victory lap: Hugh calls the prize while the winner rides the lists (purse = the marks; prize = the tournament prize)
   lapPurse: [
-    'The purse is {marks} marks, to {you}.',
-    '{marks} marks to {you}, for the day. The lists thank him.',
+    'The purse is {marks} coins, to {you}.',
+    '{marks} coins to {you}, for the day. The lists thank him.',
   ],
   lapPrize: [
-    '{you} wins the tournament at {venue}. The prize is {marks} marks, and the honour is his.',
-    'Champion of {venue}: {you}. The prize is {marks} marks.',
+    '{you} wins the tournament at {venue}. The prize is {marks} coins, and the honour is his.',
+    'Champion of {venue}: {you}. The prize is {marks} coins.',
   ],
   lapOut: [
-    '{him} takes the day, and the purse of {marks} marks.',
+    '{him} takes the day, and the purse of {marks} coins.',
     'The day goes to {him}. {you} rides to his tent.',
   ],
   lapDraw: ['Honours are even. The knights salute the box, and the purse is shared.'],

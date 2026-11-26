@@ -515,6 +515,20 @@ export function buildCrowd(group, spots, opts = {}) {
     }
     return out.sort((a, b) => a.d - b.d).slice(0, max);
   }
+  /** A spectator to give a voice to (src/crowd_voices.js): a random one of class in `cls` (array) and `kd` kind (0 man, 1 woman, 2 child; -1 any), on stand side `sd`
+   *  (+1 / -1; 0 any), nearest `nearZ` when given. Returns { i, x, y, z } with y at head height (in the crowd group's space, which is the world's), or null. */
+  function voiceSpot(cls, kd = -1, sd = 0, nearZ = null, tries = 60) {
+    let best = -1, bd = 1e9;
+    for (let k = 0; k < tries; k++) {
+      const i = (Math.random() * n) | 0;
+      if (cls && !cls.includes(clsA[i])) continue;
+      if (kd >= 0 && kind[i] !== kd) continue;
+      if (sd && side[i] !== sd) continue;
+      const d = nearZ === null ? Math.random() : Math.abs(pz[i] - nearZ) + Math.random() * 6;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best < 0 ? null : { i: best, x: px[best], y: py[best] + 1.75 * hg[best], z: pz[best], side: side[best] };
+  }
   /** Start (or, with i < 0, end) the scene: her reaction, and her kinsman's if he is given. */
   function spotlight(i, kin, how) { spot = i < 0 ? null : { i, kin, kind: how, t0: null }; }
 
@@ -880,5 +894,5 @@ export function buildCrowd(group, spots, opts = {}) {
   // initial pose so the first rendered frame is valid
   update(0, 0, { excitement: 0.12, anticipation: 0, favour: 0, scorer: 0, waveStart: -1e9, focusZ: 0 });
 
-  return { update, setColors, count: n, ladies, spotlight };
+  return { update, setColors, count: n, ladies, spotlight, voiceSpot };
 }

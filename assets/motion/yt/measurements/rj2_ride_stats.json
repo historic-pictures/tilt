@@ -1,0 +1,24 @@
+{
+ "clip": "RjwQMf4-RXI.mkv",
+ "fps": 59.94006309148265,
+ "window_s": [
+  60.49376348613231,
+  61.87848007999579
+ ],
+ "px_per_m": 226.0,
+ "stride_Hz_from_poll": 1.2072888684197554,
+ "stride_Hz_from_helmet": 1.4048452287066244,
+ "helmet_bob_p2p_cm": 3.7,
+ "chest_bob_p2p_cm": 4.3,
+ "knee_bob_p2p_cm": 2.4,
+ "poll_bob_p2p_cm": 2.5,
+ "croup_bob_p2p_cm": 2.9,
+ "helmet_rel_poll_bob_p2p_cm": 4.9,
+ "helmet_minus_poll_phase_deg_at_stride": 137.0,
+ "helmet_minus_croup_phase_deg_at_stride": 16.0,
+ "torso_line_angle_deg": {
+  "mean": 18.7,
+  "p2p_after_detrend": 1.4
+ },
+ "lance_tip_vertical_wobble_p2p_cm_UNRELIABLE_tracker_drift": 1.7
+}

@@ -2,14 +2,15 @@
 // the intro camera (a short run of cuts), the lower-third knight cards and the "hold to skip" ring. Figures are a few cheap meshes, like crowd.js / retinue_field.js.
 // Layout: the royal box is on the +x side (x = 15.5); the dais stands between the lists fence (x = 9.5) and the stand wall, facing -x.
 import * as THREE from 'three';
+import { LISTS } from './lists.js';
 import { clamp, lerp, smoothstep, drawCrest, drawFace } from './util.js';
 import { ANNOUNCER } from './drama_lines.js';
 
 export const INTRO_END = 37.5;       // seconds of the full intro
 export const SKIP_HOLD = 0.8;        // seconds the key is held to skip
 // [from, to, shot]: wide lists, trumpets, royal box, warm-up (a canter along each side), line-up before the royal box (visors up, lance dips, the salute between the knights),
-// the announcer, the opponent's herald boasts, your man boasts, "to your marks" at the starting ends
-export const SHOTS = [[0, 2, 'wide'], [2, 5, 'trump'], [5, 8.5, 'royal'], [8.5, 10.25, 'warmP'], [10.25, 12, 'warmO'], [12, 19, 'lineup'], [19, 26, 'herald'], [26, 30.5, 'him'], [30.5, 35, 'you'], [35, INTRO_END, 'marks']];
+// the announcer, the judges' box (they put their heads together while he calls the names), the announcer again, the opponent's herald boasts, your man boasts, "to your marks" at the starting ends
+export const SHOTS = [[0, 2, 'wide'], [2, 5.6, 'trump'], [5.6, 8.5, 'royal'], [8.5, 10.25, 'warmP'], [10.25, 12, 'warmO'], [12, 19, 'lineup'], [19, 22.4, 'herald'], [22.4, 23.9, 'judges'], [23.9, 25.5, 'judges2'], [25.5, 26, 'herald'], [26, 30.5, 'him'], [30.5, 35, 'you'], [35, INTRO_END, 'marks']];
 export const MOVE = { t0: 8.5, tStop: 15.5, turnBox: [14.8, 16.2], dip1: [16.2, 17.4], turnEach: [17.4, 18.2], dip2: [18.2, 19.0], end: 35 };   // the riders' choreography
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
@@ -18,7 +19,7 @@ const GEO = {
   head: new THREE.SphereGeometry(0.115, 8, 6), arm: new THREE.CylinderGeometry(0.055, 0.045, 0.6, 6).translate(0, -0.3, 0), tab: new THREE.BoxGeometry(0.4, 0.62, 0.03),
   toque: new THREE.CylinderGeometry(0.12, 0.15, 0.17, 10), feather: new THREE.BoxGeometry(0.02, 0.2, 0.05),
   tube: new THREE.CylinderGeometry(0.014, 0.014, 1.15, 6).translate(0, -0.575, 0), bell: new THREE.ConeGeometry(0.1, 0.22, 8).translate(0, 0.11, 0),
-  staff: new THREE.CylinderGeometry(0.02, 0.02, 1.7, 5).translate(0, 0.45, 0), dais: new THREE.BoxGeometry(1.8, 0.3, 11.5), pennon: new THREE.PlaneGeometry(0.34, 0.34),
+  staff: new THREE.CylinderGeometry(0.02, 0.02, 1.7, 5).translate(0, 0.45, 0), roll: new THREE.CylinderGeometry(0.035, 0.035, 0.32, 8).rotateZ(Math.PI / 2), sheet: new THREE.PlaneGeometry(0.3, 0.4).translate(0, -0.2, 0), dais: new THREE.BoxGeometry(1.8, 0.3, 11.5), pennon: new THREE.PlaneGeometry(0.34, 0.34),
 };
 const mats = {};
 export const mat = (c, o) => mats[c + (o ? 'd' : '')] || (mats[c + (o ? 'd' : '')] = new THREE.MeshLambertMaterial({ color: c, side: o ? THREE.DoubleSide : THREE.FrontSide }));
@@ -54,14 +55,15 @@ export function blowTrumpeter(p, up, dt, t) {
 
 export function createCeremony(scene) {
   const root = new THREE.Group(); root.visible = false; scene.add(root);
-  const T = { root, active: false, trumpets: [], line: [], lineUp: false, lineT: 0, H: null, shot: -1, up: false, talkT: 0, x: 10.9 };
-  const X0 = 10.9, XF = 9.75;      // the announcer's place on the dais, and where he steps to when he speaks
+  const T = { root, active: false, judgesCam: null, trumpets: [], line: [], lineUp: false, lineT: 0, H: null, shot: -1, up: false, talkT: 0, x: 10.9 };
+  const X0 = 10.9, XF = 9.75, HZ = -2.7;      // the announcer's place on the dais (to the side of the judges' stand, in clear view from the lists), and where he steps to when he speaks
+        // the announcer's place on the dais, and where he steps to when he speaks
 
   /** Build for a venue V (VENUES entry): trumpeters in the colours of the lists, the announcer in the royal arms. */
   T.setup = function setup(V) {
     T.clear();
     const c1 = V.tilt[0], c2 = V.tilt[1];
-    const dais = new THREE.Mesh(GEO.dais, mat('#6b4f30')); dais.position.set(11.0, 0.15, 0); dais.receiveShadow = true; root.add(dais);
+    const dais = new THREE.Mesh(GEO.dais, mat('#6b4f30')); dais.position.set(11.0, 0.15, 0); dais.receiveShadow = true; dais.userData.cheapList = true; dais.visible = !LISTS.on; root.add(dais);      // (the modelled lists bring their own dais, src/lists.js)
     for (const z of [-4.6, -3.1, 3.1, 4.6]) {
       const p = trumpeter(root, c1, c2); p.g.position.set(11.0, 0.3, z); p.g.rotation.y = -Math.PI / 2; T.trumpets.push(p);
     }
@@ -69,8 +71,10 @@ export function createCeremony(scene) {
     for (const z of [-7.6, -5.6, -3.6, 3.6, 5.6, 7.6]) { const p = trumpeter(root, c1, c2, true); p.g.position.set(8.9, 0, z); p.g.rotation.y = -Math.PI / 2; p.ph += z; T.line.push(p); }
     T.lineUp = false; T.lineT = 0;
     const h = T.H = person(root, { hose: '#1d3f8a', coat: '#8a1d2b', tab: '#d9b23c', skin: '#e0b896', hat: '#8a1d2b' });
-    h.staff = grp(h.armL, 0, -0.6, 0); mesh(GEO.staff, '#e8e0c8', h.staff);
-    h.x = X0; h.yaw = -Math.PI / 2; h.walk = 0; h.g.position.set(X0, 0.3, 0);
+    h.staff = grp(h.armL, 0, -0.6, 0); mesh(GEO.staff, '#e8e0c8', h.staff);      // the herald's white baton
+    // his scroll (the roll of arms): a rolled parchment in the right hand that hangs open while he cries. Built from person() + two meshes, so a new body model (src/body_types.js) only has to supply the arm group.
+    h.scroll = grp(h.armR, 0, -0.6, 0); mesh(GEO.roll, '#e8dcc0', h.scroll); h.sheet = mesh(GEO.sheet, '#efe4c8', h.scroll, 0, 0, 0.0, true); h.sheet.castShadow = false; h.sheet.scale.y = 0.05; h.sheet.visible = false; h.sk = 0;
+    h.x = X0; h.yaw = -Math.PI / 2; h.walk = 0; h.g.position.set(X0, 0.3, HZ);
     T.talkT = 0; root.visible = true;
   };
   T.clear = function clear() {
@@ -84,6 +88,10 @@ export function createCeremony(scene) {
   T.speak = (secs = 3) => { T.talkT = Math.max(T.talkT, secs); };
   /** The announcer's head, for the speech label above him (null when not built). */
   T.hughHead = () => (T.H ? T.H.head : null);
+  /** Where the announcer stands (for the cut to him): writes his chest position, false when not built. */
+  T.hughAt = (out) => (T.H ? out.set(T.H.x, 1.75, HZ) : false);
+  /** Is he calling just now? */
+  T.speaking = () => T.talkT > 0;
 
   const limbs = (p, walk, t, dt, moving) => {
     const sw = moving ? Math.sin(p.ph) * 0.5 : 0; p.legL.rotation.x = damp(p.legL.rotation.x, -sw, 12, dt); p.legR.rotation.x = damp(p.legR.rotation.x, sw, 12, dt);
@@ -106,6 +114,7 @@ export function createCeremony(scene) {
     H.armL.rotation.x = damp(H.armL.rotation.x, moving ? Math.sin(H.ph) * 0.3 : -0.25, 8, dt); H.staff.rotation.x = -H.armL.rotation.x;
     H.head.rotation.x = damp(H.head.rotation.x, talk ? Math.sin(t * 3.1) * 0.07 : 0, 8, dt);
     H.torso.rotation.x = damp(H.torso.rotation.x, talk ? 0.06 : 0, 6, dt);
+    H.sk = damp(H.sk, talk ? 1 : 0, 5, dt); H.sheet.visible = H.sk > 0.06; H.sheet.scale.y = Math.max(0.05, H.sk); H.sheet.rotation.x = Math.sin(t * 2.2) * 0.06 * H.sk;      // the scroll unrolls as he begins and rolls up after
   };
 
   /** Intro camera. t = seconds into the intro. Writes the wanted position and look point; returns { fov, snap (a cut) }. */
@@ -115,10 +124,11 @@ export function createCeremony(scene) {
     if (id === 'wide') { want.set(0.5, lerp(5.6, 3.8, u), lerp(-50, -45, u)); look.set(2, 2.2, 0); fov = 56; }
     else if (id === 'trump') { want.set(lerp(1.5, 3.2, u), 1.9, lerp(-0.6, 0.6, u)); look.set(10.8, 2.2, 0); fov = 44; }
     else if (id === 'royal') { want.set(lerp(7.0, 8.4, u), lerp(3.4, 3.9, u), lerp(4.2, 2.6, u)); look.set(15.5, 3.6, 0); fov = 34; }
-    else if (id === 'herald') { want.set(lerp(4.6, 6.2, u), 1.75, lerp(-3.4, -2.2, u)); look.set(T.H ? T.H.x : X0, 1.7, 0); fov = 38; }
+    else if (id === 'herald') { want.set(lerp(4.6, 5.6, u), 1.5, HZ - 0.1); look.set(T.H ? T.H.x : X0, 1.5, HZ); fov = 27; }      // head on from the lists, waist up, scroll in view
+    else if (id === 'judges' || id === 'judges2') { fov = T.judgesCam ? T.judgesCam(id === 'judges' ? 'box' : 'mid', u, want, look) : 36; }
     else if (id === 'warmP') { const c = player.root.position; want.set(-5.8, 1.6, c.z - 1.5); look.set(c.x, player.seatY + 0.07, c.z + 3); fov = 40; }
     else if (id === 'warmO') { const c = opp.root.position; want.set(5.8, 1.6, c.z + 1.5); look.set(c.x, opp.seatY + 0.07, c.z - 3); fov = 40; }
-    else if (id === 'lineup') { want.set(lerp(8.6, 7.4, u), 2.5, 0); look.set(0, 1.9, 0); fov = 50; }      // the host's view: both knights ride in from the ends and face the box
+    else if (id === 'lineup') { want.set(lerp(7.6, 6.7, u), 2.4, 0); look.set(0, 1.9, 0); fov = 54; }      // the host's view: both knights ride in from the ends and face the box
     else if (id === 'him' || id === 'you') {      // a slow push-in on the knight, from in front of his horse
       const on = id === 'him' ? opp : player, c = on.root.position, yaw = on.root.rotation.y, fx = Math.sin(yaw), fz = Math.cos(yaw), an = -0.95 + u * 0.25, R = lerp(7.0, 4.9, smoothstep(0, 1, u));
       want.set(c.x + fx * Math.cos(an) * R + fz * Math.sin(an) * R, 1.55 + u * 0.3, c.z + fz * Math.cos(an) * R - fx * Math.sin(an) * R); look.set(c.x, 1.85, c.z); fov = 38;

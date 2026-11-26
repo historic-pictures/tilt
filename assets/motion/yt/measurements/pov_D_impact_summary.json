@@ -1,0 +1,16 @@
+{
+ "clip": "D_BtUr7zesA.mkv",
+ "fps": 59.94006309148265,
+ "window_s": [
+  14.51449923688227,
+  16.599915793905584
+ ],
+ "deg_per_px_assumed": 0.062,
+ "head_pitch_p2p_deg": 49.83,
+ "head_yaw_p2p_deg": 142.31,
+ "head_roll_p2p_deg": 192.26,
+ "head_pitch_dominant_Hz": 1.0,
+ "head_roll_dominant_Hz": 1.0,
+ "head_pitch_rms_deg": 16.13,
+ "head_roll_rms_deg": 83.87
+}

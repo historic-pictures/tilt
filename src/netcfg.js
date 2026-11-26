@@ -11,7 +11,7 @@ export const TURN_CREDENTIALS_URL = 'https://tilt-turn.tilt-joust.workers.dev/';
 
 export async function iceServers() {
   const list = ICE_SERVERS.slice();
-  if (!TURN_CREDENTIALS_URL) return list;
+  if (!TURN_CREDENTIALS_URL || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && !/[?&]ranks=live/.test(location.search) || /[?&]ranks=off/.test(location.search)) return list;   // test pages never call the live TURN worker
   try {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 4000);
     const r = await fetch(TURN_CREDENTIALS_URL, { signal: ctl.signal }); clearTimeout(t);

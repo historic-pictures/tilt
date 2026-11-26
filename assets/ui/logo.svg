@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>Joust Revival: knight in a gold roundel, lance breaking out of the rim</title>
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0b0"/><stop offset=".5" stop-color="#e2bf5e"/><stop offset="1" stop-color="#b8862b"/></linearGradient></defs>
+<g stroke="#2a1a10" stroke-linejoin="round" stroke-linecap="round">
+<circle cx="236" cy="268" r="224" fill="url(#g)" stroke-width="10"/>
+<circle cx="236" cy="268" r="196" fill="#c0341f" stroke-width="7"/>
+<circle cx="236" cy="268" r="178" fill="#1f3f8a" stroke-width="7"/>
+<!-- horse -->
+<path d="M96 300 C 66 292 60 334 82 366" fill="none" stroke-width="18"/><path d="M96 300 C 66 292 60 334 82 366" fill="none" stroke="#7a3a1a" stroke-width="9"/>
+<path d="M176 340 L 150 408 M 214 346 L 214 414 M 300 344 L 330 396 L 352 372 M 332 322 L 380 350" fill="none" stroke-width="26"/><path d="M176 340 L 150 408 M 214 346 L 214 414 M 300 344 L 330 396 L 352 372 M 332 322 L 380 350" fill="none" stroke="#a8431f" stroke-width="13"/>
+<path d="M118 312 C 112 270 160 252 230 254 L 318 258 C 340 232 352 206 372 178 L 404 150 L 436 176 L 420 206 L 396 214 C 392 256 372 300 340 336 L 120 340 Z" fill="#c4552a" stroke-width="9"/>
+<path d="M396 214 L 436 176 L 446 198 L 420 222 Z" fill="#a8431f" stroke-width="8"/><circle cx="414" cy="184" r="5" fill="#2a1a10" stroke="none"/>
+<path d="M120 296 C 190 276 290 276 350 296 L 340 346 C 300 332 170 332 124 346 Z" fill="#e2bf5e" stroke-width="8"/>
+<path d="M132 322 H 336" stroke="#c0341f" stroke-width="9" fill="none"/>
+<!-- knight -->
+<path d="M214 256 L 222 170 L 270 170 L 280 256 Z" fill="#d9dee4" stroke-width="9"/>
+<path d="M270 182 L 326 160" fill="none" stroke-width="22"/><path d="M270 182 L 326 160" fill="none" stroke="#d9dee4" stroke-width="10"/>
+<circle cx="246" cy="138" r="30" fill="#d9dee4" stroke-width="9"/>
+<path d="M232 134 H 276" stroke-width="8" fill="none"/>
+<path d="M226 118 C 196 80 150 100 150 120 C 180 108 206 118 222 134 Z" fill="#c0341f" stroke-width="8"/>
+<!-- lance, out through the rim -->
+<path d="M120 336 L 484 106" fill="none" stroke-width="24"/><path d="M120 336 L 484 106" fill="none" stroke="url(#g)" stroke-width="11"/>
+<path d="M440 134 L 500 96 L 478 138 Z" fill="#d9dee4" stroke-width="8"/>
+<path d="M452 60 L 460 84 L 484 90 L 462 100 L 458 124 L 446 102 L 420 98 L 442 86 Z" fill="url(#g)" stroke-width="6"/>
+</g>
+</svg>

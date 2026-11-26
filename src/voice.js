@@ -129,6 +129,15 @@ export function createVoice(host) {
     pump();
   };
 
+  /** For the commentary booth (src/booth.js): seconds until the next line this channel has scheduled on a timer, Infinity when none;
+   *  and seconds since the last line ended (0 while one is up). */
+  V.quietFor = function quietFor(withTimers = true) {      // withTimers false: only the waiting line (a timer is not always a line: some only try)
+    let at = Infinity; if (withTimers) for (const tm of timers) if (tm.course === V.course) at = Math.min(at, tm.at);
+    const w = V.wait, P = host.phase();      // the waiting line counts only when it can show in this phase (one waiting for a phase that never comes would block the booth for good)
+    if (w && (!w.phases || w.phases.includes(P)) && canShow(w, P)) at = Math.min(at, Math.max(w.at, V.lastEnd + V.gap));
+    return at - V.t;
+  };
+  V.idleFor = () => (V.cur ? 0 : V.t - V.lastEnd);
   /** A new course: its own budget, its own impact clock. A waiting line from the old course is stale. */
   V.newCourse = function newCourse(n) {
     V.course = n; V.strikeT = null; V.spokenN = 0; V.replayDone = false; V.resultShown = false;

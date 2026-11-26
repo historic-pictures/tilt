@@ -649,6 +649,8 @@ export function buildProps(group, opts = {}) {
   /* ---- static wooden / stone set dressing (one merged mesh) ---- */
   const S = new Acc();
 
+  const cheapLists = !opts.modelled;      // the modelled lists (src/lists.js) bring their own dais, marshal's stage, mounting blocks and rack frames
+  if (cheapLists) {
   // royal dais
   S.box(1.8, 0.3, 15, 10.6, 0.15, 0, W.plank);
   S.box(1.86, 0.035, 15.06, 10.6, 0.3175, 0, W.dark);
@@ -657,6 +659,7 @@ export function buildProps(group, opts = {}) {
   S.box(1.3, 0.5, 1.3, -7.6, 0.25, 0, W.plank);
   S.box(1.38, 0.05, 1.38, -7.6, 0.525, 0, W.dark);
   S.box(0.5, 0.25, 0.9, -8.5, 0.125, 0, W.plank);
+  }
 
   // benches
   const bench = (x, z) => {
@@ -688,12 +691,12 @@ export function buildProps(group, opts = {}) {
     S.box(0.84, 0.04, 0.84, x, 0.44, z, W.stoneTop);
     S.box(0.4, 0.2, 0.7, x - Math.sign(x) * 0.6, 0.1, z, W.stone);
   };
-  block(-7.0, -36);
-  block(7.0, 36);
+  if (cheapLists) { block(-7.0, -36); block(7.0, 36); }
 
   // lance racks + perron frames
   const rackLances = [new Acc(), new Acc()];
   const rack = (x, z, s, la) => {
+    if (cheapLists) {
     S.push(x, 0, z);
     for (let i = -1; i <= 1; i += 2) {
       S.box(0.08, 1.6, 0.08, s * 0.32, 0.8, i * 0.85, W.wood);
@@ -702,6 +705,7 @@ export function buildProps(group, opts = {}) {
     S.box(0.08, 0.08, 1.8, s * 0.3, 1.25, 0, W.rail);
     S.box(0.08, 0.08, 1.8, s * 0.16, 0.45, 0, W.rail);
     S.pop();
+    }
     const lean = s < 0 ? 0.19 : -0.19;
     for (let i = 0; i < 5; i++) {
       const lz = -0.64 + i * 0.32;

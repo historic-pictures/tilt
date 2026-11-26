@@ -1,0 +1,21 @@
+{
+ "clip": "D_BtUr7zesA.mkv",
+ "fps": 59.94006309148265,
+ "window_s": [
+  13.31329930003684,
+  14.89821588337456
+ ],
+ "deg_per_px_assumed": 0.062,
+ "head_pitch_p2p_deg": 14.18,
+ "head_yaw_p2p_deg": 3.68,
+ "head_roll_p2p_deg": 7.42,
+ "head_pitch_dominant_Hz": 2.46,
+ "head_roll_dominant_Hz": 1.13,
+ "head_pitch_rms_deg": 4.28,
+ "head_roll_rms_deg": 2.14,
+ "lance_angle_in_cam_p2p_deg": 50.5,
+ "lance_angle_in_cam_rms_deg": 20.1,
+ "lance_valid_frames": 42,
+ "horse_ears_y_p2p_px": 173.1,
+ "horse_ears_dominant_Hz": 2.28
+}

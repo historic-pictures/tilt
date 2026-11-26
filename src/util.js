@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GFX } from './gfx.js';
+import { drawArms, fabricOver, heraldryReady, needsAtlas, whenHeraldry, loadHeraldry } from './heraldry.js';
+if (typeof document !== 'undefined') loadHeraldry(GFX.tier === 'low');      // the charge drawings (about 0.3 MB; 0.1 MB on low): fetched at once, painted in when they land
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -192,80 +194,33 @@ export function softDot() {
 }
 
 // ---------- heraldry ----------
-function charge(g, kind, cx, cy, s, col) {
-  g.fillStyle = col; g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = s * 0.04;
-  g.beginPath();
-  if (kind === 'cross') {
-    const a = s * 0.16; g.rect(cx - a, cy - s * 0.5, a * 2, s); g.rect(cx - s * 0.5, cy - a, s, a * 2);
-  } else if (kind === 'diamond') {
-    g.moveTo(cx, cy - s * 0.5); g.lineTo(cx + s * 0.32, cy); g.lineTo(cx, cy + s * 0.5); g.lineTo(cx - s * 0.32, cy); g.closePath();
-  } else if (kind === 'star') {
-    for (let i = 0; i < 10; i++) { const r = i % 2 ? s * 0.22 : s * 0.5, a = -Math.PI / 2 + i * Math.PI / 5; g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); } g.closePath();
-  } else if (kind === 'tower') {
-    g.rect(cx - s * 0.28, cy - s * 0.25, s * 0.56, s * 0.75);
-    for (let i = 0; i < 3; i++) g.rect(cx - s * 0.34 + i * s * 0.26, cy - s * 0.5, s * 0.16, s * 0.27);
-  } else if (kind === 'crescent') {
-    g.arc(cx, cy, s * 0.45, 0, TAU); g.fill(); g.stroke();
-    g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(cx, cy - s * 0.18, s * 0.38, 0, TAU); g.fill();
-    g.globalCompositeOperation = 'source-over'; return;
-  } else if (kind === 'fleur') {
-    g.ellipse(cx, cy - s * 0.1, s * 0.12, s * 0.4, 0, 0, TAU);
-    g.ellipse(cx - s * 0.25, cy, s * 0.1, s * 0.28, -0.6, 0, TAU);
-    g.ellipse(cx + s * 0.25, cy, s * 0.1, s * 0.28, 0.6, 0, TAU);
-    g.rect(cx - s * 0.3, cy + s * 0.18, s * 0.6, s * 0.09);
-  } else if (kind === 'feathers') {
-    // three ostrich feathers side by side, quills down, the middle one a little higher
-    const plume = (x, y, a) => {
-      g.save(); g.translate(x, y); g.rotate(a);
-      g.beginPath(); g.moveTo(0, s * 0.3); g.bezierCurveTo(-s * 0.2, s * 0.05, -s * 0.17, -s * 0.3, 0, -s * 0.5);
-      g.bezierCurveTo(s * 0.17, -s * 0.3, s * 0.2, s * 0.05, 0, s * 0.3); g.closePath(); g.fill(); g.stroke();
-      g.beginPath(); g.moveTo(0, s * 0.5); g.lineTo(0, -s * 0.38); g.lineWidth = s * 0.03; g.stroke(); g.lineWidth = s * 0.04;
-      g.restore();
-    };
-    plume(cx - s * 0.36, cy + s * 0.08, -0.22); plume(cx + s * 0.36, cy + s * 0.08, 0.22); plume(cx, cy - s * 0.04, 0);
-    return;
-  } else { g.arc(cx, cy, s * 0.4, 0, TAU); }
-  g.fill(); g.stroke();
+// The arms themselves (blazon, layout, the charge drawings) are heraldry.js; here they become textures.
+export { drawArms, drawCrest } from './heraldry.js';
+/** Redraw a canvas texture when the charge drawings arrive, if these arms need them and they are not here yet. */
+function lateArms(tex, arms, paint) { if (!heraldryReady() && needsAtlas(arms)) whenHeraldry(() => { if (!tex.image) return; paint(tex.image.getContext('2d')); tex.needsUpdate = true; }); return tex; }
+/**
+ * A coat of arms as a texture. o: { shape: 'rect' | 'shield', style: null | 'cloth' | 'paint' }.
+ * 'cloth' is sewn work on woven stuff (appliqué edges, uneven dye); 'paint' is a painted board or banner (thin, a little worn).
+ */
+export function armsTexture(arms, w = 256, h = 256, repeat, o = {}) {
+  const paint = (g) => { g.clearRect(0, 0, w, h); drawArms(g, w, h, arms, o); if (o.style) fabricOver(g, w, h, o.style === 'cloth' ? 1 : 0.55); };
+  return lateArms(canvasTex(w, h, paint, repeat ? { repeat } : {}), arms, paint);
 }
-
-// ordinary shapes, shared by the field pattern and the `over` list
-function ordinary(g, kind, w, h) {
-  if (kind === 'fess') g.fillRect(0, h * 0.36, w, h * 0.28);
-  else if (kind === 'chief') g.fillRect(0, 0, w, h * 0.3);
-  else if (kind === 'bend') { g.beginPath(); g.moveTo(0, 0); g.lineTo(w * 0.3, 0); g.lineTo(w, h * 0.7); g.lineTo(w, h); g.lineTo(w * 0.7, h); g.lineTo(0, h * 0.3); g.fill(); }
-  else if (kind === 'chevron') { g.beginPath(); g.moveTo(0, h * 0.75); g.lineTo(w / 2, h * 0.3); g.lineTo(w, h * 0.75); g.lineTo(w, h * 0.98); g.lineTo(w / 2, h * 0.53); g.lineTo(0, h * 0.98); g.fill(); }
-}
-
-/** Draw a coat of arms filling the rect (0,0,w,h). */
-export function drawArms(g, w, h, arms, chargeScale = 0.42) {
-  const { c1, c2, c3, pattern } = arms;
-  g.fillStyle = c1; g.fillRect(0, 0, w, h);
-  g.fillStyle = c2;
-  if (pattern === 'pale') g.fillRect(w / 2, 0, w / 2, h);
-  else if (pattern === 'fess') g.fillRect(0, h * 0.36, w, h * 0.28);
-  else if (pattern === 'quarterly') { g.fillRect(w / 2, 0, w / 2, h / 2); g.fillRect(0, h / 2, w / 2, h / 2); }
-  else if (pattern === 'bend') { g.beginPath(); g.moveTo(0, 0); g.lineTo(w * 0.3, 0); g.lineTo(w, h * 0.7); g.lineTo(w, h); g.lineTo(w * 0.7, h); g.lineTo(0, h * 0.3); g.fill(); }
-  else if (pattern === 'chevron') { g.beginPath(); g.moveTo(0, h * 0.75); g.lineTo(w / 2, h * 0.3); g.lineTo(w, h * 0.75); g.lineTo(w, h * 0.98); g.lineTo(w / 2, h * 0.53); g.lineTo(0, h * 0.98); g.fill(); }
-  else if (pattern === 'chief') g.fillRect(0, 0, w, h * 0.3);
-  else if (pattern === 'paly') { for (let i = 0; i < 6; i += 2) g.fillRect((w / 6) * (i + 1), 0, w / 6, h); }
-  else if (pattern === 'chequy') { for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) if ((x + y) % 2) g.fillRect(w / 6 * x, h / 6 * y, w / 6 + 1, h / 6 + 1); }
-  if (arms.over) for (const o of arms.over) { g.fillStyle = o.c; ordinary(g, o.kind, w, h); }
-  if (arms.charge && arms.charge !== 'none') charge(g, arms.charge, w / 2, h * (pattern === 'chief' ? 0.62 : 0.48), Math.min(w, h) * chargeScale, c3 || c2);
-}
-
-export function armsTexture(arms, w = 256, h = 256, repeat) {
-  return canvasTex(w, h, (g) => drawArms(g, w, h, arms), repeat ? { repeat } : {});
-}
-
-/** Draw arms clipped to a heater shield on a 2D canvas. */
-export function drawCrest(cv, arms) {
-  const g = cv.getContext('2d'), w = cv.width, h = cv.height;
-  g.clearRect(0, 0, w, h); g.save();
-  g.beginPath(); g.moveTo(1, 1); g.lineTo(w - 1, 1); g.lineTo(w - 1, h * 0.45);
-  g.bezierCurveTo(w - 1, h * 0.72, w * 0.72, h * 0.9, w / 2, h - 1);
-  g.bezierCurveTo(w * 0.28, h * 0.9, 1, h * 0.72, 1, h * 0.45); g.closePath();
-  g.clip(); drawArms(g, w, h * 0.92, arms); g.restore();
-  g.lineWidth = Math.max(1.5, w / 40); g.strokeStyle = 'rgba(20,14,8,0.9)'; g.stroke();
+/**
+ * One flank panel of a caparison: the arms laid on cloth from the spine (top) to below the hem, to be repeated along the horse (fore and hind panel on each side).
+ * span: the cloth's v range in panel widths; the arms take `armsSpan` of it, starting `top` below the spine (over the back the rider and saddle hide them). Above and below, the field runs on.
+ */
+export function trapperTexture(arms, w = 1024, span = 1.64, armsSpan = 1.4, top = 0) {
+  const h = Math.round(w * span), y0 = Math.round(w * top), ha = Math.round(w * armsSpan);
+  const paint = (g) => {
+    g.clearRect(0, 0, w, h); g.save(); g.translate(0, y0); drawArms(g, w, ha, arms, { style: 'cloth', noBordure: true }); g.restore();
+    if (y0 > 0) g.drawImage(g.canvas, 0, y0 + 1, w, 2, 0, 0, w, y0 + 1);                                      // the field (or a chief, or the pales) runs up over the spine
+    if (y0 + ha < h) g.drawImage(g.canvas, 0, y0 + ha - 3, w, 2, 0, y0 + ha - 1, w, h - y0 - ha + 1);      // and on down to the hem
+    fabricOver(g, w, h, 1);
+  };
+  const t = lateArms(canvasTex(w, h, paint), arms, paint);
+  t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; t.userData.span = span;
+  return t;
 }
 
 // ---------- scanned (photographed) textures from assets/tex ----------

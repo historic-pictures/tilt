@@ -1,10 +1,17 @@
 import { HORSES, ARMOURS, KNIGHTS, VENUES, PATTERNS, CHARGES, TINCTURES, ovr, bondLevel, BOND_NAMES, LANCES, DIFFICULTY, HISTORIC_ARMS, ARTS, LESSONS,
   ECON, entryFee, purse, RANKS, rankOf, skillPoints, SKILLS, ACHIEVEMENTS, ACH_GROUPS, ACH_RENOWN, HELMS, MODES, RETINUE, CAPARISONS, TRAITS, RETINUE_UP, newMan, fixRetinue, wageOf, trainCost, menFx } from './data.js';
 import { drawCrest, drawFace } from './util.js';
+import { getAimMode, setAimMode, getAimSpeed, setAimSpeed } from './touch.js';
+import { FIELDS, ORDINARIES, CHARGES as CHARGE_ROLL, ERMINE, VAIR, armsParts, setArmsParts, blazonText, tinctureFaults, drawArms, drawCharge, fabricOver, whenHeraldry, heraldryReady } from './heraldry.js';
 import { GFX, setPref, PREFS } from './gfx.js';
+import { renderGfxSettings } from './settings_gfx.js';
+import { mountAccountPanel } from './account_panel.js';
+import { ensurePanelCss } from './panel_css.js';
 import { featCount } from './achievements.js';
 import { ANNOUNCER } from './drama_lines.js';
 import * as career from './career.js';
+import { CELEBS, WIN_IDS, LOSE_IDS, favourites, toggleFav, MAX_FAVS, celIcon, initCelUi } from './celebrate.js';
+import { tourneyHTML, tourneyAct, stopTourneyWatch } from './tourney_screen.js';
 import { BEGIN, VENUES_STORY, OUT_LINES, SEASON_END, fillStory, storyName } from './career_story.js';
 import { sfxPack, setSfxPack, SFX_HAS_OLD } from './audio.js';
 import * as ranks from './ranks.js';
@@ -12,13 +19,21 @@ import { mymusic } from './mymusic.js';
 import { ytmusic } from './ytmusic.js';
 import { safeName } from './online.js';
 import { confirmBuy, buyAsk } from './confirm.js';
+import { initTooltips, tip, tipAttr } from './tooltips.js';
+import { gi, icon, coin, coinsTxt, GAME_NAME, WORDMARK_IMAGE } from './icons.js';
+import * as store from './store.js';      // what has been bought (the server's word), the store screen, the gates
+import { mountDonate } from './donate.js';
+import { PAY } from './config.js';
+import { PACKS, allowedArms, skuOfCharge, ROLL_CHARGES } from './cosmetics.js';
+const ownedSkus = () => ['herald', 'rolls', 'patron', 'finishes', 'charter'].filter((k) => store.has(k));      // the packs this account holds (heraldry gating)
+import { openUpsell, maybeAuto, exhibitionAllowed } from './upsell.js';      // the "unlock the full game" popup
 let buyOk = false;   // set for the one re-dispatched click after a purchase is confirmed
 
 const el = (id) => document.getElementById(id);
 const stat = (name, v) => `<div class="stat"><span>${name}</span><div class="bar"><div style="width:${Math.round(Math.max(0.05, Math.min(1, v)) * 100)}%"></div></div></div>`;
-const marks = (n) => `${n} mark${Math.abs(n) === 1 ? '' : 's'}`;
+const marks = (n) => coin(n);      // money is shown as a gold coin and a number (the data still counts marks)
 /** The purse in words: what you hold, or what you owe. */
-export const purseText = (g) => (g || 0) < 0 ? `<span class="debt">In debt ${marks(-g)}</span>` : `Purse: ${marks(g || 0)}`;
+export const purseText = (g) => (g || 0) < 0 ? `<span class="debt">In debt ${marks(-g)}</span>` : `<span class="purse" data-tip="Your purse">${marks(g || 0)}</span>`;
 
 /** Your rank and the road to the next: "Rank: Bachelor Knight — 120/240 renown" over a bar. */
 export function rankBar(renown) {
@@ -26,11 +41,11 @@ export function rankBar(renown) {
   return `<div class="rankline"><span>Rank: ${here.name} — ${next ? `${renown}/${next.at}` : renown} renown</span><div class="bar"><div style="width:${Math.round(Math.max(0.03, Math.min(1, f)) * 100)}%"></div></div></div>`;
 }
 
-let gfxTimer = 0; const gfxStart = GFX.pref;      // the choice this page was loaded with
-const gfxChip = () => { const pend = GFX.pref !== gfxStart, nm = (t) => t[0].toUpperCase() + t.slice(1);
-  return `Graphics: ${GFX.pref === 'auto' ? 'Auto' + (pend ? '' : ' (' + GFX.tier + ')') : nm(GFX.pref)}${pend ? ' · reloading to apply…' : ''}`; };
 export function initMenus(api) {
   const root = el('screen');
+  initTooltips();
+  ['joust-miniature', 'gallery-manesse', 'icons/emblem-128', ...['armoury', 'stable', 'renown', 'settings'].map((n) => `icons/${n}-128`), ...['career', 'joust', 'learn', 'coins'].map((n) => `icons/${n}-64`)].forEach((n) => { new Image().src = `assets/ui/${n}.webp`; });      // warm the cache so the title-page picture is there when the menu is drawn
+  document.body.classList.toggle('lowui', GFX.tier === 'low' || GFX.pref === 'low');      // the painted frame is a picture; low tier gets the same frame drawn in CSS
   let exVenue = 0, exOpp = KNIGHTS[0].id, exMode = 'planken', exCourses = 5, dismissArm = null;
   const EX_COURSES = [3, 5, 7, 10, 15, 20], CIRC_COURSES = [3, 5, 7, 10, 15];
   /** The number of courses a rule set fixes (0 = you choose): Castile four by its statutes, Judged Tilt six, the Bridge three a bout. */
@@ -87,70 +102,106 @@ export function initMenus(api) {
     else if (t.dataset.mm === 'rm') { await mymusic.remove(t.dataset.id); if (api.musicMine) api.musicMine(); }
   });
 
+  /** The title: the painted wordmark, with the name as lettering behind it (shown on the low tier, or if the picture fails). */
+  /** The title: the painted wordmark when there is one (WORDMARK_IMAGE in icons.js), otherwise the name as lettering in mixed case. */
+  const title = () => WORDMARK_IMAGE
+    ? `<h1 class="wmark" aria-label="${GAME_NAME}"><img class="wordmark" src="${WORDMARK_IMAGE}" alt="${GAME_NAME}" draggable="false" onerror="this.style.display='none';this.nextSibling.style.display='block'"><span class="wm-text" style="display:none">${GAME_NAME}</span></h1>`
+    : `<h1 class="wmark txt" aria-label="${GAME_NAME}"><img class="emblem" src="assets/ui/icons/emblem-128.webp" srcset="assets/ui/icons/emblem-128.webp 1x, assets/ui/icons/emblem-256.webp 2x" alt="" draggable="false" onerror="this.style.display='none'"><span class="wm-text">${GAME_NAME}</span></h1>`;
   function main() {
     const p = api.profile, CS = career.ensureCareer(p), pts = skillPoints(p), rank = RANKS[rankOf(p.renown)], started = CS.v > 0 || (CS.t && (CS.t.cur > 0 || CS.t.done)) || CS.log.length > 0, nh = (p.honours || []).length;
-    root.innerHTML = scroll('menu', `
-      <h1>Tilt</h1><h2>The Jousting Circuit</h2>
-      <button class="mplay" data-go="online">Play online<small>Quick match, rooms or a friend</small></button>
-      <div class="mgrid">
-        <button data-go="circuit">${CS.done ? 'The Season Is Run' : started ? 'Continue the Career' : 'Begin the Career'}</button>
-        <button data-go="exhibition">Joust</button>
-        <button data-act="practice">${(p.lesson || 0) >= LESSONS.length ? 'Tiltyard Practice' : (p.lesson || 0) > 0 ? 'Continue your Training' : 'Learn to Joust'}</button>
-        <button data-go="armoury">Armoury &amp; Retinue</button>
-        <button data-go="stable">The Stable</button>
-        <button data-go="settings">Settings</button>
+    const learn = (p.lesson || 0) >= LESSONS.length ? 'Practise' : (p.lesson || 0) > 0 ? 'Training' : 'Learn';
+    // the small menu: four shields. Feats, "How to joust" and the account live one step in (Renown, Learn, Settings).
+    const shield = (go, label, glyph, badge, t) => `<button class="shieldbtn" data-go="${go}" ${t}><span class="shield pic-shield">${glyph}${badge ? `<em>${badge}</em>` : ''}</span><b>${label}</b></button>`;
+    root.innerHTML = scroll('menu main', `
+      <div class="mini"><img src="assets/ui/joust-miniature.webp" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>
+      ${title()}
+      <div class="mbtns">
+        <button class="plaque big" data-go="online" ${tipAttr('Play online', 'Quick match, ranked ladder, public rooms|or a private room for a friend.')}>Play online${tip('Play online', 'Quick match, ranked ladder, public rooms|or a private room for a friend.', 'tonly')}</button>
+        <div class="trio">
+          <button class="plaque blue" data-go="circuit" ${tipAttr('The Career', 'A season of knockout tournaments across Europe.|Win purses and honours.')}>${icon('career', 64, 'pl')}${CS.done ? 'Season run' : started ? 'Career' : 'Begin career'}</button>
+          <button class="plaque blue" data-go="exhibition" ${tipAttr('A single joust', 'Choose the rules, the lists and your opponent.')}>${icon('joust', 64, 'pl')}Joust</button>
+          <button class="plaque blue" data-act="practice" ${tipAttr('The tiltyard', 'Learn to ride, couch the lance and strike.|Nothing is at stake.')}>${icon('learn', 64, 'pl')}${learn}</button>
+        </div>
+        <div class="shields">
+          ${shield('armoury', 'Armoury', icon('armoury', 128), '', tipAttr('Armoury', 'Horse, helm, harness, lance, retinue and your arms.'))}
+          ${shield('stable', 'Stable', icon('stable', 128), '', tipAttr('The Stable', 'Choose or buy a horse and its caparison.'))}
+          ${shield('skills', 'Renown', icon('renown', 128), pts > 0 ? pts : '', tipAttr('Renown, skills and feats', pts > 0 ? `You have ${pts} skill${pts > 1 ? 's' : ''} to learn.` : 'Every joust adds to your name.|Ranks teach skills.'))}
+          ${shield('settings', 'Settings', icon('settings', 128), '', tipAttr('Settings', 'Difficulty, view, sound, graphics and your account.'))}
+        </div>
       </div>
-      <div class="mmore"><span class="chip" data-go="skills">${pts > 0 ? `<em>${pts}</em> ` : ''}Renown &amp; Skills</span><span class="chip" data-go="feats">Feats (${featCount(p).have}/${featCount(p).total})</span><span class="chip" data-go="how">How to joust</span><span class="chip" data-go="account" title="Sign in to keep your purse and belongings on the server and to play ranked">${api.account && api.account.signedIn() ? 'Account: ' + esc(api.account.info().name) : 'Guest: sign in'}</span>${api.touch ? '<span class="chip" data-act="fullscreen">Full screen</span>' : ''}</div>
-      <div class="standing"><span>${rank.name}${nh ? ` · ${nh} honour${nh > 1 ? 's' : ''}` : ''}</span><span>${purseText(p.gold)}</span></div>`);
+      <div class="standing"><span class="rankb" ${tipAttr('Your rank', `${rank.name}${nh ? `|${nh} honour${nh > 1 ? 's' : ''}` : ''}`)}><i class="shield mini"><b>${rankOf(p.renown) + 1}</b></i>${rank.name}${store.badges().includes('patron') ? ' · Grand Patron' : store.badges().includes('donor') ? ' · Patron of the Lists' : ''}</span>${PAY.live ? `<span class="chip" data-go="store" ${tipAttr('The Store', "The Knight's Charter and the cosmetic packs.")}>Store</span>` : ''}<span>${purseText(p.gold)}</span></div>`);
+    mountDonate(root.querySelector('.menu .page'), { ui: api.ui });      // the little Support coin button, top right (src/donate.js)
   }
 
   /** Settings: everything that used to be chips on the main screen, in one place. */
   function settings() {
-    const p = api.profile, vol = api.musicVol ? api.musicVol() : 60, voices = !(api.voicesOn && !api.voicesOn());
-    const opt = (on, act, label, extra = '', title = '') => `<span class="chip ${on ? 'sel' : ''}" data-act="${act}" ${extra} ${title ? `title="${title}"` : ''}>${label}</span>`;
-    const row = (name, ctl) => `<div class="srow"><span class="slabel">${name}</span><span class="sctl">${ctl}</span></div>`;
+    const p = api.profile, vol = api.musicVol ? api.musicVol() : 60, mOff = !!(api.musicOff && api.musicOff()), voices = !(api.voicesOn && !api.voicesOn());
+    const comm = !(api.commentaryOn && !api.commentaryOn()), chat = !(api.chatterOn && !api.chatterOn());
+    const opt = (on, act, label, extra = '', title = '') => `<span class="chip ${on ? 'sel' : ''}" data-act="${act}" ${extra} ${title ? `data-tip="${title}"` : ''}>${label}</span>`;
+    const row = (name, ctl, t) => `<div class="srow"><span class="slabel">${name}${t ? tip(name, t) : ''}</span><span class="sctl">${ctl}</span></div>`;
+    const signed = api.account && api.account.signedIn();
+    // Each .sect below is a section of the page. Sections marked data-slot are filled by their own modules (src/settings_gfx.js for graphics,
+    // src/account_panel.js for the account); they take their look from .sect (headings, .srow rows, .chip options, .btn buttons, inputs).
     root.innerHTML = scroll('menu settings', `
       <div class="stop"><h3>Settings</h3><button class="btn primary" data-go="main">Done</button></div>
       <div class="sgrid">
-        <div class="scol"><h5>Play</h5>
-          ${row('Difficulty', DIFFICULTY.map((d, i) => opt((p.difficulty ?? 1) === i, 'diff', d.name, `data-v="${i}"`)).join(''))}
-          ${row('View', opt(!p.firstPerson, 'view', 'Third person', 'data-v="0"') + opt(!!p.firstPerson, 'view', 'First person', 'data-v="1"'))}
-          ${row('After a pass', opt(p.autoRide !== false, 'autoride', 'Ride back for me', 'data-v="1"', 'The horse takes you back to your mark') + opt(p.autoRide === false, 'autoride', 'By hand', 'data-v="0"', 'W/S gait, A/D steer'))}
-        </div>
-        <div class="scol"><h5>Sound</h5>
-          ${row('Herald', opt(p.herald !== false, 'herald', 'Speaks', 'data-v="1"') + opt(p.herald === false, 'herald', 'Silent', 'data-v="0"'))}
-          ${row('Voices', opt(voices, 'voices', 'On', 'data-v="1"', 'Robot voices for the king, your men and the sellers') + opt(!voices, 'voices', 'Off', 'data-v="0"'))}
-          ${row('Music', `<label class="vol"><input type="range" id="musicVol" min="0" max="100" step="5" value="${vol}"> <span id="musicPct">${vol}%</span></label>`)}
-          ${SFX_HAS_OLD ? row('Sound pack', opt(sfxPack() === 'new', 'sfxpack', 'New', 'data-v="new"') + opt(sfxPack() !== 'new', 'sfxpack', 'Old', 'data-v="old"') + '<small>reloads</small>') : ''}
-        </div>
+        <section class="sect"><h5>Play</h5>
+          ${row('Difficulty', DIFFICULTY.map((d, i) => opt((p.difficulty ?? 1) === i, 'diff', d.name, `data-v="${i}"`)).join(''), 'Squire is gentle: wide hit zones, a slow opponent.|Champion is a hard ride.')}
+          ${row('View', opt(!p.firstPerson, 'view', 'Third person', 'data-v="0"') + opt(!!p.firstPerson, 'view', 'First person', 'data-v="1"'), 'Third person watches over your shoulder.|First person looks through the helm.')}
+          ${row('After a pass', opt(p.autoRide !== false, 'autoride', 'Ride back for me', 'data-v="1"') + opt(p.autoRide === false, 'autoride', 'By hand', 'data-v="0"'), 'The horse can take you back to your mark.|By hand: W/S set the gait, A/D steer.')}
+        </section>
+        <section class="sect"><h5>Sound</h5>
+          ${row('Herald', opt(p.herald !== false, 'herald', 'Speaks', 'data-v="1"') + opt(p.herald === false, 'herald', 'Silent', 'data-v="0"'), 'The speaker button, or M, mutes everything.')}
+          ${row('Voices', opt(voices, 'voices', 'On', 'data-v="1"') + opt(!voices, 'voices', 'Off', 'data-v="0"'), 'Robot voices for the king, your men and the sellers.')}
+          ${row('Commentary', opt(comm, 'commentary', 'On', 'data-v="1"') + opt(!comm, 'commentary', 'Off', 'data-v="0"'), 'Master Pell and Sir Walter in the booth: small subtitles, spoken only when the herald is quiet.')}
+          ${row('Crowd chatter', opt(chat, 'chatter', 'On', 'data-v="1"') + opt(!chat, 'chatter', 'Off', 'data-v="0"'), 'Shouts, chants and the sellers, from where they stand in the stands; the judges and the marshal.')}
+          ${row('Music', opt(!mOff, 'musicon', 'On', 'data-v="1"') + opt(mOff, 'musicon', 'Off', 'data-v="0"'), 'The note button in the corner does the same.|It silences the music only: the herald, voices, crowd and effects stay.')}
+          ${row('Volume', `<label class="vol"><input type="range" id="musicVol" min="0" max="100" step="5" value="${vol}"> <span id="musicPct">${vol}%</span></label>`)}
+          ${SFX_HAS_OLD ? row('Sound pack', opt(sfxPack() === 'new', 'sfxpack', 'New', 'data-v="new"') + opt(sfxPack() !== 'new', 'sfxpack', 'Old', 'data-v="old"'), 'Changing the pack reloads the game.') : ''}
+        </section>
       </div>
-      <h5>Graphics</h5>
-      <div class="srow"><span class="slabel">Quality</span><span class="sctl"><span class="chip" data-act="gfx" title="Auto picks for your device; Low suits old phones. Changing it reloads the page.">${gfxChip().replace('Graphics: ', '')}</span><small>tap to change</small></span></div>
-      <h5>Music source</h5>
-      ${myMusicBlock()}
-      <div class="foot">The speaker button, or M, mutes everything.</div>`);
+      <div class="sgrid">
+      <section class="sect" data-slot="graphics"><div id="gfxHost"></div></section>
+      <section class="sect" data-slot="account"><h5>Account</h5>
+        <div class="srow"><span class="slabel">${signed ? esc(api.account.info().name) : 'Guest'}${tip('Account', 'A guest plays everything offline.|An account keeps your purse on the server and lets you play ranked.')}</span><span class="sctl"><span class="chip" data-go="account">${signed ? 'Your account' : 'Sign in'}</span></span></div>
+      </section>
+      </div>
+      <div class="sgrid">
+      <section class="sect"><h5>Music source</h5>${myMusicBlock()}</section>
+      ${api.touch ? `<section class="sect"><h5>Controls</h5>
+        ${row('Aim with', opt(getAimMode() === 'joy', 'aimmode', 'Joystick', 'data-v="joy"') + opt(getAimMode() === 'drag', 'aimmode', 'Drag', 'data-v="drag"'), 'Joystick: hold the lower left of the screen and slide; the stick steers the lance so your thumb stays off the target.|Drag: slide a finger anywhere to move the aim; tap to jump it toward that spot.')}
+        ${row('Aim speed', ['slow', 'normal', 'fast'].map((v) => opt(getAimSpeed() === v, 'aimspeed', v[0].toUpperCase() + v.slice(1), `data-v="${v}"`)).join(''), 'How fast the stick turns the lance.')}
+      </section>` : ''}
+      <section class="sect"><h5>Help</h5>
+        <div class="srow"><span class="slabel">The art of the joust</span><span class="sctl"><span class="chip" data-go="how">How to joust</span>${api.touch ? '<span class="chip" data-act="fullscreen">Full screen</span>' : ''}</span></div>
+      </section>
+      </div>`);
+    ensurePanelCss(); renderGfxSettings(el('gfxHost'), { profile: p, saveProfile: api.saveProfile });      // src/settings_gfx.js fills the Graphics slot
   }
 
   /** A name typed by a player: no markup, at most 22 characters, never empty. */
   const cleanName = (v) => (v || '').replace(/[<>&"`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 22) || 'Sir Nameless';
   /** First visit: take your name and your colours before anything else. */
   let wDraft = null;
+  const NOFILL = 'autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-form-type="other"';
   function welcome() {
     const p = api.profile, a = p.arms; if (wDraft === null) wDraft = '';
     const sw = (key) => `<div class="swatches"><span class="lbl">${{ c1: 'Field', c2: 'Division' }[key]}</span>${TINCTURES.map(t => `<div class="sw ${a[key] === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}</div>`;
     root.innerHTML = scroll('menu welcome', `
-      <h1>Tilt</h1><h2>The Jousting Circuit</h2>
-      <p class="wlead">The herald needs a name to cry when you ride in, and the colours you ride under.</p>
-      <h5>Your Name</h5><input class="name" id="wName" maxlength="22" placeholder="Sir Roland of Tyre" value="${wDraft.replace(/"/g, '')}" autocomplete="off" spellcheck="false">
+      <div class="mini"><img src="assets/ui/gallery-manesse.webp" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>
+      ${title()}
+      <h5>Your Name ${tip('Your name and colours', 'The herald cries your name when you ride in.|You can change all of this later in the Armoury.')}</h5><input class="name" id="wName" name="knight-title" maxlength="22" placeholder="Sir Roland of Tyre" value="${wDraft.replace(/"/g, '')}" ${NOFILL}>
       <div class="arms-row"><canvas id="wCrest" width="150" height="178"></canvas><div>
         ${sw('c1')}${sw('c2')}
         <div class="swatches"><span class="lbl">Ordinary</span>${PATTERNS.map(x => `<div class="chip ${a.pattern === x ? 'sel' : ''}" data-pat="${x}">${x}</div>`).join('')}</div>
-        <p class="dimtxt">You can change all of this later in the Armoury.</p></div></div>
-      <button data-act="welcome">Enter the Lists<small>Take your name to the tiltyard</small></button>`);
+        </div></div>
+      <!-- slot: Body (build and height options are added here by the character-creation module; it is also offered in the Armoury under Knight) -->
+      <section class="sect" data-slot="body"></section>
+      <button class="plaque big" data-act="welcome">Enter the Lists${tip('Your name and colours', 'The herald cries your name when you ride in.|You can change all of this later in the Armoury.', 'tonly')}</button>`);
     drawCrest(el('wCrest'), a);
     const inp = el('wName'); inp.addEventListener('input', () => { wDraft = inp.value; });
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); root.querySelector('[data-act="welcome"]').click(); } });
-    setTimeout(() => { try { inp.focus(); } catch (e) { /* ignore */ } }, 50);
+    if (!api.touch) setTimeout(() => { try { inp.focus(); } catch (e) { /* ignore */ } }, 50);      // (a phone's keyboard would cover the colours at once: it opens when the field is tapped)
   }
 
   // ---- the career: a season of knockout tournaments (src/career.js; the story text is in src/career_story.js)
@@ -163,28 +214,28 @@ export function initMenus(api) {
   const honoursBlock = (p) => (p.honours || []).length ? `<h5>Honours</h5><div class="honours">${p.honours.map(h => `<span class="honour"><b>${h.name}</b> <i>${h.year}</i></span>`).join('')}</div>` : '';
   const roadBlock = (p, S) => `<h5>The Season <small>${S.no > 1 ? `season ${S.no}` : 'the road across Europe'}</small></h5><div class="venues">${VENUES.map((v, i) => {
     const r = S.log.find(x => x.v === i), now = !S.done && i === S.v;
-    const res = r ? (r.champion ? 'Champion' : `Out in the ${career.roundName(r.rounds, r.reached).toLowerCase()}`) : now ? 'the lists await' : 'ahead';
-    return `<div class="venue ${now ? 'now' : r ? 'done' : ''}"><b>${v.name}</b><i>${v.city} · ${v.year}</i><div class="r">${res}</div>${r ? '' : `<div class="fee">${career.SIZES[i]} knights · purse ${purse(i, 'win', true)}</div>`}</div>`;
+    const res = r ? (r.res || (r.champion ? 'Champion' : `Out in the ${career.roundName(r.rounds, r.reached).toLowerCase()}`)) : store.locked.event(i) ? "Knight's Charter" : now ? 'the lists await' : 'ahead';
+    const lk = !r && store.locked.event(i);
+    return `<div class="venue ${now ? 'now' : r ? 'done' : ''} ${lk ? 'locked' : ''}" ${lk ? 'data-lock="charter" data-why="event:${i}" data-tip="Open with the Knight&#39;s Charter"' : ''}><b>${v.name}</b><i>${v.city} · ${v.year}</i><div class="r">${res}</div>${r ? '' : `<div class="fee">${career.SIZES[i]} knights · purse ${coin(purse(i, 'win', true))}</div>`}</div>`;
   }).join('')}</div>`;
-  const rulesBlock = (p) => `<h5>Rules and courses <small>${MODES[circMode(p)].sub}${fixedCourses(circMode(p)) ? ' · courses fixed by the rules' : MODES[circMode(p)].firstBreak ? ' · void if no lance breaks' : ' · level scores run up to two extra courses'}</small></h5><div class="swatches circrules"><span class="lbl">Rules</span>${Object.values(MODES).filter(m => !m.bridge).map(m => `<div class="chip ${m.id === circMode(p) ? 'sel' : ''}" data-cm="${m.id}" title="${m.blurb.replace(/"/g, '&quot;')}">${m.name}</div>`).join('')}<i class="brk"></i><span class="lbl">Courses</span>${fixedCourses(circMode(p)) ? `<div class="chip sel">${fixedCourses(circMode(p))}</div>` : CIRC_COURSES.map(n => `<div class="chip ${n === (p.courses || 5) ? 'sel' : ''}" data-cc="${n}">${n}</div>`).join('')}</div>`;
-  const bracketBlock = (p, t) => {
-    const cols = [];
-    for (let r = 0; r < t.rounds; r++) {
-      const ms = t.rnds[r], n = t.size >> (r + 1), box = [];
-      for (let i = 0; i < n; i++) {
-        const m = ms && ms[i], mine = m && (m.a === 'you' || m.b === 'you'), nxt = mine && !t.done && r === t.cur && m.w == null;
-        const row = (id, k) => { const win = m && m.w && m.w === id, sc = m && m.sc ? m.sc[k] : ''; return `<div class="bk ${win ? 'win' : m && m.w ? 'lose' : ''} ${id === 'you' ? 'you' : ''}"><span>${id ? shortName(id, p) : '—'}</span><em>${sc}</em></div>`; };
-        box.push(`<div class="bm ${mine ? 'me' : ''} ${nxt ? 'next' : ''}">${row(m ? m.a : null, 0)}${row(m ? m.b : null, 1)}</div>`);
-      }
-      cols.push(`<div class="rnd ${r === t.cur && !t.done ? 'cur' : ''}"><h6>${career.roundName(t.rounds, r)}</h6><div class="bms">${box.join('')}</div></div>`);
-    }
-    const champ = t.winner ? `<div class="rnd champ"><h6>Winner</h6><div class="bms"><div class="bm ${t.winner === 'you' ? 'me' : ''}"><div class="bk win"><span>${shortName(t.winner, p)}</span></div></div></div></div>` : '';
-    return `<div class="bracket r${t.rounds}">${cols.join('')}${champ}</div>`;
-  };
+  // a short tip from a long rule text: the place and date, then the first sentence or two
+  const sentences = (t, n = 1) => (String(t || '').match(/[^.!?]+[.!?]+(\s|$)/g) || [String(t || '')]).slice(0, n).join('').trim();
+  const modeTip = (m) => `data-tip-title="${m.name}" data-tip="${[m.sub, sentences(m.blurb, 2)].filter(Boolean).join('|').replace(/"/g, '&quot;')}"`;
+  const openMore = {};      // which "more" drawers are open, kept across redraws of the screen
+  root.addEventListener('toggle', (e) => { const d = e.target; if (d && d.dataset && d.dataset.more) openMore[d.dataset.more] = d.open; }, true);
+  const more = (key, summary, body) => `<details class="more" data-more="${key}" ${openMore[key] ? 'open' : ''}><summary>${summary}</summary><div class="morebody">${body}</div></details>`;
+  const rulesBlock = (p) => more('circrules', `Rules: <b>${MODES[circMode(p)].name}</b>, ${fixedCourses(circMode(p)) || p.courses || 5} courses ${tip('Rules and courses', `${MODES[circMode(p)].sub}.|${fixedCourses(circMode(p)) ? 'The rules fix the number of courses.' : MODES[circMode(p)].firstBreak ? 'The tilt is void if no lance breaks.' : 'Level scores run up to two extra courses.'}`)}`,
+    `<div class="swatches circrules"><span class="lbl">Rules</span>${Object.values(MODES).filter(m => !m.bridge).map(m => `<div class="chip ${m.id === circMode(p) ? 'sel' : ''}" data-cm="${m.id}" ${modeTip(m)}>${m.name}</div>`).join('')}<i class="brk"></i><span class="lbl">Courses</span>${fixedCourses(circMode(p)) ? `<div class="chip sel">${fixedCourses(circMode(p))}</div>` : CIRC_COURSES.map(n => `<div class="chip ${n === (p.courses || 5) ? 'sel' : ''}" data-cc="${n}">${n}</div>`).join('')}</div>`);
   function circuit() {
     const p = api.profile, S = career.ensureCareer(p);
     if (S.done) return seasonEnd(p, S);
     const t = career.ensureTournament(p), V = VENUES[t.v], host = KNIGHTS.find(k => k.id === V.host), name = storyName(p);
+    if (store.locked.event(t.v)) {      // the first event is free; the rest of the calendar comes with the Knight's Charter (src/store.js)
+      api.setVenue(0);
+      root.innerHTML = scroll('sheet', hughBox(`On to ${V.name}`, `The road goes on to ${V.name}, ${V.city}, and on across Europe. The rest of the season's calendar is open to holders of the <b>Knight's Charter</b>: every tournament event, every venue, and the heraldry editor. One payment, and it is yours on every browser you sign in to.`,
+        `<button class="btn" data-go="main">Back</button><button class="btn primary btn-primary" data-lock="charter" data-why="event:${t.v}">Unlock the full game</button>`) + honoursBlock(p) + roadBlock(p, S));
+      faces(); maybeAuto(t, { show }); return;
+    }
     const vars = { name, venue: V.name, city: V.city, host: host.name, hostShort: host.short, next: (VENUES[t.v + 1] || {}).name || '', nextCity: (VENUES[t.v + 1] || {}).city || '' };
     const ST = VENUES_STORY[V.id] || VENUES_STORY.smithfield;
     api.setVenue(t.v);
@@ -197,37 +248,30 @@ export function initMenus(api) {
         <div class="story"><h5>${card[0]} <small>${ci + 1} of ${cards.length}</small></h5>${fillStory(card[1], vars).map(l => `<p>${l}</p>`).join('')}</div>${honoursBlock(p)}`);
       return;
     }
-    if (t.phase === 'over') {
-      const won = t.champion, kind = t.reached === 0 ? 'first' : t.reached >= t.rounds - 1 ? 'final' : 'mid', lastV = t.v >= VENUES.length - 1;
-      const out = fillStory(OUT_LINES[kind], Object.assign(vars, { round: career.roundName(t.rounds, t.reached).toLowerCase(), winner: fullName(t.winner, p) }));
-      const road = fillStory(ST.road[won ? 'won' : 'lost'], vars);
-      const lines = (won ? [`${name} wins the final, and the tournament at ${V.name}.`, `The honour is his: <b>Champion of ${V.name}</b>.`] : out).concat(road);
-      root.innerHTML = scroll('sheet', hughBox(won ? 'Champion' : 'The Tournament Ends', won ? 'Well ridden. I will cry it myself.' : 'It ends here. The purse for the round you reached is paid.',
-        `<button class="btn" data-go="main">Back</button><button class="btn primary" data-act="rideon">${lastV ? 'End the Season' : `Ride on to ${vars.next}`}</button>`)
-        + `<div class="story"><h5>${won ? 'The Honour' : 'The Road Onward'}</h5>${lines.map(l => `<p>${l}</p>`).join('')}</div>${bracketBlock(p, t)}${honoursBlock(p)}${roadBlock(p, S)}`);
-      faces(); return;
-    }
-    const opp = career.myOpponent(t), ko = career.knightById(opp), pf = career.purseFactor(t.rounds, t.cur), rn = career.roundName(t.rounds, t.cur), left = t.size >> t.cur;
-    root.innerHTML = scroll('sheet', hughBox(`${V.name}: ${rn}`,
-      `${left} knights remain. You meet <b>${ko.name}</b>, of ${ko.land}${p.lostTo && p.lostTo[opp] ? ', who has beaten you before' : ''}.<br>${t.cur === 0 ? `Entry costs ${marks(entryFee(t.v))}. ` : ''}Win this round for ${marks(Math.round(purse(t.v, 'win', true) * pf))}${t.cur === t.rounds - 1 ? ' and the honour' : ''}. ${purseText(p.gold)}.`,
-      `<button class="btn" data-go="main">Back</button><button class="btn primary" data-act="ride">Ride to the Lists</button>`)
-      + bracketBlock(p, t) + rulesBlock(p) + honoursBlock(p) + roadBlock(p, S));
+    // the tournament event (src/tournament.js): the herald's roll, days, prizes (src/tourney_screen.js)
+    root.innerHTML = scroll('sheet', tourneyHTML({ p, S, t, V, name, nm: (id) => esc(shortName(id, p)), full: (id) => esc(fullName(id, p)), hugh: hughBox, rules: `${rulesBlock(p)}`, honours: honoursBlock(p), road: roadBlock(p, S), purseText,
+      vars, fill: fillStory, ST }));
     faces();
+    if (t.done) maybeAuto(t, { show });      // the free tournament is over: the celebration and the offer, once per session (src/upsell.js)
   }
   function seasonEnd(p, S) {
     const won = (p.honours || []).filter(h => h.season === S.no), n = won.length, lines = fillStory(n === VENUES.length ? SEASON_END.all : n ? SEASON_END.some : SEASON_END.none, { n, s: n === 1 ? '' : 's' });
     root.innerHTML = scroll('sheet', hughBox('The Season Is Run', lines.join(' '), `<button class="btn" data-go="main">Back</button><button class="btn primary" data-act="newseason">Begin a New Season</button>`)
-      + `<div class="story"><h5>The Season</h5>${S.log.map(r => `<p><b>${VENUES[r.v].name}</b>: ${r.champion ? 'Champion.' : `out in the ${career.roundName(r.rounds, r.reached).toLowerCase()}; won by ${fullName(r.winner, p)}.`}</p>`).join('')}</div>${honoursBlock(p)}${roadBlock(p, S)}`);
+      + `<div class="story"><h5>The Season</h5>${S.log.map(r => `<p><b>${VENUES[r.v].name}</b>: ${r.champion ? 'Champion.' : `${r.res || 'out'}; the Prize went to ${fullName(r.winner, p)}.`}</p>`).join('')}</div>${honoursBlock(p)}${roadBlock(p, S)}`);
     faces();
   }
 
   function exhibition() {
-    root.innerHTML = scroll('sheet', `<div class="top"><div><h3>Joust</h3><p>Choose the lists and the knight you will run against. No entry fee and no ransom; the purse is ${marks(purse(0, 'win', false))}.</p></div>
+    if (store.locked.venue(exVenue)) exVenue = 0;
+    const M = MODES[exMode], oneOpp = (k) => `${k.name}|${HORSES[k.horse].name}, ${HELMS[ARMOURS[k.armour].helm].name}, ${ARMOURS[k.armour].name}|Aim ${Math.round(k.skill * 100)}  Seat ${Math.round(k.seat * 100)}  Drive ${Math.round(k.drive * 100)}`;
+    const cw = fixedCourses(exMode) ? (M.bridge ? 'Three against each challenger' : M.fixedCourses ? 'Fixed by the rules of the joust' : 'Fixed at four by the statutes') : M.firstBreak ? 'The joust is void if no lance breaks in this many.' : 'Level scores run up to two extra courses.';
+    root.innerHTML = scroll('sheet exh', `<div class="top"><div><h3>Joust</h3></div>
       <div class="actions"><button class="btn" data-go="main">Back</button><button class="btn primary" data-act="exride">Ride</button></div></div>
-      <h5>The Joust</h5><div class="grid">${Object.values(MODES).map(m => `<div class="pick ${m.id === exMode ? 'sel' : ''}" data-exm="${m.id}"><b>${m.name}</b><em>${m.sub}</em><p>${m.blurb}${m.kitNote ? ' ' + m.kitNote : ''}</p></div>`).join('')}</div>
-      <h5>Courses <small>${fixedCourses(exMode) ? (MODES[exMode].bridge ? 'Three against each challenger' : MODES[exMode].fixedCourses ? 'Fixed by the rules of the joust' : 'Fixed at four by the statutes') : MODES[exMode].firstBreak ? 'the joust is void if no lance breaks in this many' : 'level scores run up to two extra courses'}</small></h5><div class="swatches">${fixedCourses(exMode) ? `<div class="chip sel">${fixedCourses(exMode)}</div>` : EX_COURSES.map(n => `<div class="chip ${n === exCourses ? 'sel' : ''}" data-exc="${n}">${n}</div>`).join('')}</div>
-      <h5>The Lists</h5><div class="grid">${VENUES.map((v, i) => `<div class="pick ${i === exVenue ? 'sel' : ''}" data-exv="${i}"><b>${v.name}</b><em>${v.year}</em><p>${v.city}. ${v.blurb}</p></div>`).join('')}</div>
-      <h5>Your Opponent${MODES[exMode].bridge ? ' <small>one of the three challengers, in order of skill; the rest are drawn</small>' : ''}</h5><div class="grid">${KNIGHTS.map(k => `<div class="pick ${k.id === exOpp ? 'sel' : ''}" data-exo="${k.id}">${crest(k.arms, 30, 36)} <span class="ovr">${ovr(k)}</span><b>${k.short}</b><em>${k.land}</em><p>${k.name} — ${HORSES[k.horse].name}, ${HELMS[ARMOURS[k.armour].helm].name}, ${ARMOURS[k.armour].name}</p>${stat('Aim', k.skill)}${stat('Seat', k.seat)}${stat('Drive', k.drive)}</div>`).join('')}</div>`);
+      <h5>The Joust ${tip('A single joust', `No entry fee and no ransom.|The purse is ${coinsTxt(purse(0, 'win', false))}.`)}</h5>
+      <div class="picks">${Object.values(MODES).map(m => `<div class="pick ${m.id === exMode ? 'sel' : ''}" data-exm="${m.id}" ${modeTip(m)}><b>${m.name}</b></div>`).join('')}</div>
+      <h5>Courses ${tip('Courses', cw)}</h5><div class="swatches">${fixedCourses(exMode) ? `<div class="chip sel">${fixedCourses(exMode)}</div>` : EX_COURSES.map(n => `<div class="chip ${n === exCourses ? 'sel' : ''}" data-exc="${n}">${n}</div>`).join('')}</div>
+      <h5>The Lists</h5><div class="picks">${VENUES.map((v, i) => store.locked.venue(i) ? `<div class="pick locked" data-lock="charter" data-why="venue:${i}" data-tip="Every venue comes with the Knight's Charter"><b>${v.name}</b><em>${v.year}</em></div>` : `<div class="pick ${i === exVenue ? 'sel' : ''}" data-exv="${i}" data-tip-title="${v.name}, ${v.year}" data-tip="${(v.city + '|' + sentences(v.blurb, 2)).replace(/"/g, '&quot;')}"><b>${v.name}</b><em>${v.year}</em></div>`).join('')}</div>
+      <h5>Your Opponent ${MODES[exMode].bridge ? tip('Keep the bridge', 'One of the three challengers, in order of skill.|The rest are drawn.') : ''}</h5><div class="picks knights">${KNIGHTS.map(k => `<div class="pick ${k.id === exOpp ? 'sel' : ''}" data-exo="${k.id}" data-tip-title="${k.name}" data-tip="${oneOpp(k).split('|').slice(1).join('|').replace(/"/g, '&quot;')}">${crest(k.arms, 30, 36)}<span class="ovr">${ovr(k)}</span><b>${k.short}</b><em>${k.land}</em></div>`).join('')}</div>`);
     crests(); api.setVenue(exVenue);
   }
 
@@ -241,7 +285,7 @@ export function initMenus(api) {
       <h5>Courses${fixed ? ' <small>fixed by the rules</small>' : ''}</h5><div class="swatches">${fixed ? `<span class="chip sel">${fixed}</span>` : EX_COURSES.map(n => `<span class="chip ${n === room.c ? 'sel' : ''}" data-onc="${n}">${n}</span>`).join('')}</div>`;
     const summary = () => `<p class="dimtxt">${V.name}, ${V.city} · ${MODES[room.m].name} · ${fixed || room.c} courses &nbsp;(the host chooses)</p>`;
     const friendRow = () => fr ? `<div class="friend">${crest(fr.arms, 30, 36)}<span><b>${fr.name}</b> <i>${fr.rank ? '· ' + fr.rank.text + ' · ' + fr.rank.h2h : fr.land ? '· ' + fr.land : ''}</i></span></div>` : '';
-    let head = 'Ride against a real opponent. No account needed.', actions = '<button class="btn" data-on="back">Back</button>' + (ph === 'choose' ? '<button class="btn" data-on="ranks">Rankings</button>' : ''), body = '';
+    let head = '', actions = '<button class="btn" data-on="back">Back</button>' + (ph === 'choose' ? '<button class="btn" data-on="ranks">Rankings</button>' : ''), body = '';
     const rows = () => {
       const rs = L.rooms.slice(0, 5), rl = L.relays || {};
       if (!rs.length) return `<p class="wait">${rl.failed ? 'Could not reach the lobby. Check your connection, or use Joust a friend.' : rl.open ? 'No open rooms yet: create one or try Quick match.' : 'Connecting to the lobby…'}</p>`;
@@ -259,13 +303,14 @@ export function initMenus(api) {
         <p class="wait">${ph === 'found' ? 'Getting ready…' : fr ? 'Connected: the joust begins…' : 'Connecting to your opponent…'}</p>
         <p class="dimtxt">${mv.name}, ${mv.city} · ${(MODES[m.mode] || MODES.planken).name} · ${m.courses} courses · ${m.ranked ? 'ranked' : 'unranked'}</p>`;
     } else if (ph === 'choose') {
-      head = 'Ride against a real opponent. No account needed for friend rooms.';
-      body = `${L.err ? `<p class="err">${esc(L.err)}</p>` : ''}<div class="onrow"><button class="btn primary big" data-on="find" data-ranked="0">Find match<small>Unranked: paired by rating, friendly</small></button><button class="btn big" data-on="find" data-ranked="1">Ranked match<small>${api.account && api.account.signedIn() ? 'Rated, and it pays a purse' : 'Sign in to play ranked'}</small></button></div>
-        <div class="onrow three"><button class="btn primary big" data-on="quick">Quick match<small>Join the next open room, or wait for a challenger</small></button><button class="btn big" data-on="list">Public rooms<small>See who is waiting, and pick a room</small></button><button class="btn big" data-on="friend">Joust a friend<small>A private room: share the code</small></button></div>
-        <p class="dimtxt">You ride with your own arms, horse and harness; nothing is paid, and no renown is won. Only your chosen name is shown to others.</p>`;
+      head = '';
+      const pl = (cls, attrs, label, t, tb) => `<button class="plaque ${cls}" ${attrs} ${tipAttr(t, tb)}>${label}${tip(t, tb, 'tonly')}</button>`;
+      body = `${L.err ? `<p class="err">${esc(L.err)}</p>` : ''}<div class="onrow main">${pl('big', 'data-on="find" data-ranked="0"', 'Find match', 'Find match', 'Unranked: paired by rating, friendly.|Your rating does not change.')}${pl('blue', 'data-on="find" data-ranked="1"', 'Ranked match', 'Ranked match', api.account && api.account.signedIn() ? 'Rated, and it pays a purse.' : 'Sign in to play ranked.')}</div>
+        <div class="onrow three">${pl('blue', 'data-on="quick"', 'Quick match', 'Quick match', 'Join the next open room,|or wait for a challenger.')}${pl('blue', 'data-on="list"', 'Public rooms', 'Public rooms', 'See who is waiting, and pick a room.')}${pl('blue', 'data-on="friend"', 'Joust a friend', 'A private room', 'Share the code with a friend.|No account needed.')}</div>
+        <p class="fineprint">${tip('Playing online', 'You ride with your own arms, horse and harness.|Nothing is paid and no renown is won.|Only your chosen name is shown to others.')} Friend rooms need no account.</p>`;
     } else if (ph === 'friend') {
-      head = 'Make a private room and share its code, or type your friend\'s code.';
-      body = `<div class="onrow"><button class="btn primary big" data-on="create">Create a room<small>You get a code to share</small></button><button class="btn big" data-on="joinmode">Join a room<small>Type your friend's code</small></button></div>`;
+      head = '';
+      body = `<div class="onrow main"><button class="plaque big" data-on="create">Create a room${tip('Create a room', 'You get a code to share with your friend.', 'tonly')}</button><button class="plaque blue" data-on="joinmode">Join a room${tip('Join a room', "Type your friend's code.", 'tonly')}</button></div><p class="fineprint">Make a private room and share its code, or type your friend's.</p>`;
     } else if (ph === 'list') {
       head = 'Open public rooms. Pick one to join.';
       actions = '<button class="btn" data-on="back">Back</button><button class="btn" data-on="createpub">Create a room</button>';
@@ -295,7 +340,7 @@ export function initMenus(api) {
       head = 'The room could not be opened.';
       body = `<p class="err">${L.err}</p><div class="onrow"><button class="btn primary" data-on="retry">Try again</button></div>`;
     }
-    root.innerHTML = scroll('sheet online', `<div class="top"><div><h3>Play Online</h3><p>${head}</p></div><div class="actions">${actions}</div></div>${body}`);
+    root.innerHTML = scroll('sheet online slim', `<div class="top"><div><h3>Play Online</h3>${head ? `<p>${head}</p>` : ''}</div><div class="actions">${actions}</div></div>${body}`);
     crests();
     if (host || ph === 'joined') api.setVenue(room.v);
     const inp = el('joinCode');
@@ -319,46 +364,108 @@ export function initMenus(api) {
   }
   const faces = () => root.querySelectorAll('canvas[data-face]').forEach(c => { const [n, col, cap] = c.dataset.face.split('|'); drawFace(c, n, col, cap); });
 
+  /** The editor's live pictures: the banner and one flank of the trapper as they will be sewn, and every charge in the roll in the player's own tinctures. */
+  function armsPreviews(a, P) {
+    const paint = () => {
+      for (const [id, o] of [['pvBanner', { style: 'cloth' }], ['pvTrapper', { style: 'cloth' }]]) { const cv = el(id); if (!cv) return; const g = cv.getContext('2d'); drawArms(g, cv.width, cv.height, a, o); fabricOver(g, cv.width, cv.height, 0.8); }
+      const fur = (h) => (h === ERMINE ? '#ece8dc' : h === VAIR ? '#1f4690' : h), bg = fur(a.c1), fg = fur(a.c3) === bg ? '#2b1d12' : a.c3;
+      root.querySelectorAll('canvas[data-chgpv]').forEach(cv => { const g = cv.getContext('2d'), n = cv.width; g.clearRect(0, 0, n, n); g.fillStyle = bg; g.beginPath(); g.arc(n / 2, n / 2, n / 2 - 1, 0, 7); g.fill(); drawCharge(g, cv.dataset.chgpv, n / 2, n / 2, n * 0.74, fg); });
+    };
+    paint(); if (!heraldryReady()) whenHeraldry(() => { if (root.dataset.name === 'armoury') paint(); });
+  }
+
+  let armTab = 'horse';
+  const ARM_TABS = [['horse', 'Horse'], ['helm', 'Helm'], ['armour', 'Harness'], ['lance', 'Lance'], ['men', 'Retinue'], ['knight', 'Knight']];
+  /** The Knight tab's celebrations: your favourites (up to four) are what the prompt offers after a win, and the default if you do not choose. */
+  function celebrationsHtml(p) {
+    initCelUi(); const fav = favourites(p), chosen = p.celebs && p.celebs.length ? p.celebs : [];
+    return `<div class="swatches cels">${WIN_IDS.map(id => `<div class="chip ${chosen.includes(id) ? 'sel' : ''}" data-cel="${id}" data-tip-title="${CELEBS[id].name}" data-tip="${CELEBS[id].blurb.replace(/"/g, '&quot;')}">${celIcon(id)} ${CELEBS[id].name}</div>`).join('')}</div>
+      <p class="aside">${chosen.length ? `Chosen: ${fav.map(id => CELEBS[id].name).join(', ')}.` : `None chosen: the herald's favourites are used (${fav.map(id => CELEBS[id].name).join(', ')}).`} A beaten knight nods or slaps his helm.</p>`;
+  }
   function armoury() {
     const p = api.profile, a = p.arms, broke = (p.gold || 0) < 0;
-    const sw = (key) => `<div class="swatches"><span class="lbl">${{ c1: 'Field', c2: 'Division', c3: 'Charge' }[key]}</span>${TINCTURES.map(t => `<div class="sw ${a[key] === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}</div>`;
+    const hb = store.has('herald'), PACKNAME = { herald: "the Herald's Book", rolls: 'the Rolls of Arms', finishes: "the Armourer's Finishes", patron: 'Grand Patrons only' };
+    const lockTip = (sku) => `data-lock="${sku}" data-tip="${sku === 'patron' ? PACKNAME.patron : 'In ' + PACKNAME[sku]}"`;
+    const fins = PACKS.finishes.finishes, fb = store.has('finishes');
+    const finishRow = `<div class="swatches"><span class="lbl">Finish</span><div class="chip ${!p.finish || !fb ? 'sel' : ''}" data-fin="plain">Bright steel</div>${Object.entries(fins).map(([id, f]) => fb ? `<div class="chip ${p.finish === id ? 'sel' : ''}" data-fin="${id}" title="${f.blurb}">${f.name}</div>` : `<div class="chip locked" ${lockTip('finishes')} title="${f.blurb}">${f.name}</div>`).join('')}</div>`;
+    // THE BLAZON EDITOR (heraldry.js). Free: every field, division and ordinary, the starter charges (cosmetics.js FREE_CHARGES), the nine tinctures. The Herald's Book: the other
+    // charges, the furs and three stain tinctures; the Rolls of Arms: its roll of real arms (and the two charges and the furs those bear); the patron's crown. cosmetics.js allowedArms is the rule.
+    const P = armsParts(a), faults = tinctureFaults(a), party = { pale: 1, perfess: 1, perbend: 1, perbendsin: 1, perchevron: 1, persaltire: 1, quarterly: 1 }[P.field];
+    const FUR_SW = [['Ermine', ERMINE, 'repeating-radial-gradient(circle at 50% 40%, #191919 0 1.5px, #ece8dc 2px 6px)'], ['Vair', VAIR, 'repeating-linear-gradient(90deg, #1f4690 0 5px, #ece8dc 5px 10px)']];
+    const furOk = hb || store.has('rolls');
+    const sw = (key, lbl, cur, furs) => `<div class="swatches"><span class="lbl">${lbl}</span>${TINCTURES.map(t => `<div class="sw ${cur === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}${PACKS.herald.tinctures.map(t => hb ? `<div class="sw ${cur === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>` : `<div class="sw locked" title="${t[0]} (the Herald's Book)" style="background:${t[1]}" ${lockTip('herald')}></div>`).join('')}${furs ? FUR_SW.map(t => furOk ? `<div class="sw fur ${cur === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[2]}" data-col="${key}|${t[1]}"></div>` : `<div class="sw fur locked" title="${t[0]} (the Herald's Book)" style="background:${t[2]}" ${lockTip('herald')}></div>`).join('') : ''}</div>`;
+    const lays = [['one', 'one'], ['three', 'three'], ['semy', 'semé (strewn)'], ...(P.ord !== 'none' ? [['onone', 'one on the ordinary'], ['onthree', 'three on it']] : []), ...(party && P.ord === 'none' ? [['counter', 'counterchanged']] : []), ...(P.lay === 'ten' ? [['ten', 'ten (3, 3, 3, 1)']] : [])];
+    const chgOf = (k) => { const sku = skuOfCharge(k), ok = !sku || store.has(sku) || (sku === 'herald' && store.has('rolls') && ROLL_CHARGES.includes(k)), t = CHARGE_ROLL[k][0].replace(/^an? /, '');
+      return ok ? `<canvas class="chg ${P.charge === k ? 'sel' : ''}" width="72" height="72" data-chg="${k}" data-chgpv="${k}" title="${t}"></canvas>` : `<canvas class="chg locked" width="72" height="72" data-chgpv="${k}" ${lockTip(sku)} title="${t} (${PACKNAME[sku]})"></canvas>`; };
+    const chgKeys = Object.keys(CHARGE_ROLL).sort((x, y) => (skuOfCharge(x) ? 1 : 0) - (skuOfCharge(y) ? 1 : 0));
+    const histOk = (h) => JSON.stringify(allowedArms(h.arms, ownedSkus())) === JSON.stringify(h.arms);
+    const blazon = `<div class="arms-row herald"><div class="armspv"><canvas id="crestBig" width="300" height="356"></canvas>
+        <div class="armsmini"><canvas id="pvBanner" width="120" height="240" title="Banner"></canvas><canvas id="pvTrapper" width="250" height="240" title="Trapper (one flank)"></canvas></div>
+        <p class="blazon">${blazonText(a)}</p>${faults.length ? `<p class="dimtxt rule">Against the rule of tincture (no metal on metal, no colour on colour): ${faults.join('; ')}. Heralds will mutter, but it is your shield.</p>` : ''}</div><div>
+        <div class="swatches"><span class="lbl">Field</span>${Object.entries(FIELDS).map(([k, n]) => `<div class="chip ${P.field === k ? 'sel' : ''}" data-fld="${k}">${n}</div>`).join('')}</div>
+        ${sw('c1', P.field === 'plain' ? 'Tincture' : 'First', a.c1, true)}${P.field === 'plain' ? '' : sw('c2', 'Second', a.c2, true)}
+        <div class="swatches"><span class="lbl">Ordinary</span><div class="chip ${P.ord === 'none' ? 'sel' : ''}" data-ord="none">none</div>${Object.entries(ORDINARIES).map(([k, n]) => `<div class="chip ${P.ord === k ? 'sel' : ''}" data-ord="${k}">${n.replace(/^an? /, '')}</div>`).join('')}
+          <div class="chip ${P.bord ? 'sel' : ''}" data-bord="${P.bord ? 0 : 1}">${P.bord ? '✓ ' : '+ '}bordure</div></div>
+        ${P.ord === 'none' ? '' : sw('ordT', 'Its tincture', P.ordT, true)}${P.bord ? sw('bordT', 'Bordure', P.bordT, true) : ''}
+        <div class="swatches chgrow"><span class="lbl">Charge</span><div class="chip ${P.charge === 'none' ? 'sel' : ''}" data-chg="none">none</div>${chgKeys.map(chgOf).join('')}</div>
+        ${P.charge === 'none' ? '' : `<div class="swatches"><span class="lbl">Set out</span>${lays.map(([k, n]) => `<div class="chip ${P.lay === k ? 'sel' : ''}" data-lay="${k}">${n}</div>`).join('')}</div>${P.lay === 'counter' ? '' : sw('c3', 'Its tincture', a.c3, false)}`}
+        <div class="swatches"><span class="lbl">Historic</span>${HISTORIC_ARMS.map((h, i) => histOk(h) ? `<div class="chip" title="${h.note}" data-hist="${i}">${h.name}</div>` : `<div class="chip locked" title="${h.note} (${PACKNAME.herald} or ${PACKNAME.rolls})" ${lockTip('rolls')}>${h.name}</div>`).join('')}${PACKS.rolls.arms.map((h, i) => store.has('rolls') ? `<div class="chip" title="${h.note}" data-roll="${i}">${h.name}</div>` : `<div class="chip locked" title="${h.note} (Rolls of Arms)" ${lockTip('rolls')}>${h.name}</div>`).join('')}</div></div></div>`;
     const pv = (kind, id) => `<canvas class="pv" data-pv="${kind}:${id}"></canvas>`;
-    root.innerHTML = scroll('sheet', `<div class="top"><div><h3>Armoury &amp; Retinue</h3><p><b>${purseText(p.gold)}</b>${(p.honours || []).length ? ` · Honours: ${career.honoursLine(p)}` : ''}${broke ? ' — you can buy nothing until the debt is cleared.' : ''}</p></div>
+    const q = (t) => String(t).replace(/"/g, '&quot;');
+    const badge = (owned, cur, curWord, price) => `<em class="${owned ? 'own' : (p.gold || 0) < price ? 'cost cant' : 'cost'}">${owned ? curWord : marks(price)}</em>`;
+    let body = '', hint = '';
+    if (armTab === 'horse') {
+      hint = tip('Your horse', `Stabling is charged at each circuit tourney.|Caparison: ${(CAPARISONS[p.caparison] || CAPARISONS.livery).name}.`);
+      body = `<div class="grid">${Object.values(HORSES).map(h => `<div class="pick ${p.horse === h.id ? 'sel' : ''}" data-horse="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb + '|Keep: ' + marks(ECON.keep[h.id] ?? 2) + ' a tourney.')}">${pv('horse', h.id)}<b>${h.name}</b>${badge(p.owned.horses.includes(h.id), p.horse, (p.horse === h.id ? 'Riding' : 'Owned') + ' · bond ' + BOND_NAMES[bondLevel((p.bond || {})[h.id])], h.price)}${stat('Speed', (h.top - 7.2) / 2)}${stat('Accel', h.accel / 3.7)}${stat('Shock', (h.mass - 0.7) / 0.6)}${stat('Smooth', h.steady)}${stat('Temper', h.nerve)}${stat('Wind', h.stamina)}</div>`).join('')}</div>
+        <p class="aside"><span class="chip" data-go="stable">Visit the stable</span></p>`;
+    } else if (armTab === 'helm') {
+      hint = tip('Your helm', 'Bought and worn on its own.|It decides what you see.');
+      body = `<div class="grid">${Object.values(HELMS).map(h => `<div class="pick ${p.helm === h.id ? 'sel' : ''}" data-helm="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb)}">${pv('helm', h.id)}<b>${h.name}</b>${badge(p.owned.helms.includes(h.id), p.helm, p.helm === h.id ? 'Worn' : 'Owned', h.price)}${stat('Protect', h.protection)}${stat('Vision', h.vision)}${stat('Light', 1.15 - h.kg / 10)}</div>`).join('')}</div>`;
+    } else if (armTab === 'armour') {
+      hint = tip('Your harness', 'Body armour.|The armourer mends it after every joust.');
+      body = `${finishRow}<div class="grid">${Object.values(ARMOURS).map(r => `<div class="pick ${p.armour === r.id ? 'sel' : ''}" data-armour="${r.id}" data-tip-title="${r.name}" data-tip="${q(r.blurb)}">${pv('armour', r.id)}<b>${r.name}</b>${badge(p.owned.armours.includes(r.id), p.armour, p.armour === r.id ? 'Worn' : 'Owned', r.price)}${stat('Protect', r.protection)}${stat('Light', 1.9 - r.weight * 1.2)}</div>`).join('')}</div>`;
+    } else if (armTab === 'lance') {
+      hint = tip('Your lance', 'You pay for every lance you break.');
+      body = `<div class="grid">${Object.values(LANCES).map(l => `<div class="pick lance ${(p.lance || 'standard') === l.id ? 'sel' : ''}" data-lance="${l.id}" data-tip-title="${l.name}" data-tip="${q(l.blurb)}">${pv('lance', l.id)}<b>${l.name}</b><em>${marks(ECON.lance[l.id])} each</em>${stat('Shock', (l.power - 0.7) / 0.5)}${stat('Steady', 1.55 - l.sway)}${stat('Arm', 1.2 - l.fatigue * 0.55)}</div>`).join('')}</div>`;
+    } else if (armTab === 'men') {
+      hint = tip('Your retinue', 'Hired once.|Each draws his wage at every circuit tourney.');
+      body = `<div class="grid">${Object.keys(RETINUE).map(id => manCard(p, id)).join('')}</div>`;
+    } else {
+      hint = tip('Your knight', 'The herald cries your name when you ride in.|Your arms are painted on shield, horse and banner.');
+      body = `<h5>Your Name</h5><input class="name" id="nameIn" name="knight-title" maxlength="22" value="${p.name.replace(/"/g, '')}" ${NOFILL}>
+      <h5>Celebrations <small>pick up to ${MAX_FAVS}: one of these plays when you win (you may choose another on the day)</small></h5>${celebrationsHtml(p)}
+      <h5>Blazon <small>your arms go on your shield, surcoat, trapper, banner and the roll</small></h5>${blazon}
+      <!-- slot: Body (build and height options are added here by the character-creation module) -->
+      <section class="sect" data-slot="body"></section>`;
+    }
+    root.innerHTML = scroll('sheet armscr', `<div class="top"><div><h3>Armoury</h3><p class="purseline"><b>${purseText(p.gold)}</b>${(p.honours || []).length ? ` · ${career.honoursLine(p)}` : ''}${broke ? ' <span class="debt">· no buying while in debt</span>' : ''}</p></div>
       <div class="actions"><button class="btn primary" data-go="main">Done</button></div></div>
-      <h5>Your Horse <small>stabling is charged at each circuit tourney</small> <span class="chip" data-go="stable">Visit the stable</span></h5><p>Caparison: ${(CAPARISONS[p.caparison] || CAPARISONS.livery).name} — change it in the Stable.</p><div class="grid">${Object.values(HORSES).map(h => `<div class="pick ${p.horse === h.id ? 'sel' : ''}" data-horse="${h.id}">${pv('horse', h.id)}<b>${h.name}</b><em class="${p.owned.horses.includes(h.id) ? 'own' : (p.gold || 0) < h.price ? 'cost cant' : 'cost'}">${p.owned.horses.includes(h.id) ? (p.horse === h.id ? 'Riding' : 'Owned') + ' · bond ' + BOND_NAMES[bondLevel((p.bond || {})[h.id])] : marks(h.price)}</em><p>${h.blurb} Keep: ${marks(ECON.keep[h.id] ?? 2)}.</p>${stat('Speed', (h.top - 7.2) / 2)}${stat('Accel', h.accel / 3.7)}${stat('Shock', (h.mass - 0.7) / 0.6)}${stat('Smooth', h.steady)}${stat('Temper', h.nerve)}${stat('Wind', h.stamina)}</div>`).join('')}</div>
-      <h5>Your Helm <small>bought and worn on its own; it decides what you see</small></h5><div class="grid">${Object.values(HELMS).map(h => `<div class="pick ${p.helm === h.id ? 'sel' : ''}" data-helm="${h.id}">${pv('helm', h.id)}<b>${h.name}</b><em class="${p.owned.helms.includes(h.id) ? 'own' : (p.gold || 0) < h.price ? 'cost cant' : 'cost'}">${p.owned.helms.includes(h.id) ? (p.helm === h.id ? 'Worn' : 'Owned') : marks(h.price)}</em><p>${h.blurb}</p>${stat('Protect', h.protection)}${stat('Vision', h.vision)}${stat('Light', 1.15 - h.kg / 10)}</div>`).join('')}</div>
-      <h5>Your Harness <small>body armour; the armourer mends it after every joust</small></h5><div class="grid">${Object.values(ARMOURS).map(r => `<div class="pick ${p.armour === r.id ? 'sel' : ''}" data-armour="${r.id}">${pv('armour', r.id)}<b>${r.name}</b><em class="${p.owned.armours.includes(r.id) ? 'own' : (p.gold || 0) < r.price ? 'cost cant' : 'cost'}">${p.owned.armours.includes(r.id) ? (p.armour === r.id ? 'Worn' : 'Owned') : marks(r.price)}</em><p>${r.blurb}</p>${stat('Protect', r.protection)}${stat('Light', 1.9 - r.weight * 1.2)}</div>`).join('')}</div>
-      <h5>Your Lance <small>you pay for every lance you break</small></h5><div class="grid">${Object.values(LANCES).map(l => `<div class="pick lance ${(p.lance || 'standard') === l.id ? 'sel' : ''}" data-lance="${l.id}">${pv('lance', l.id)}<b>${l.name}</b><em>${marks(ECON.lance[l.id])} each (less in long matches)</em><p>${l.blurb}</p>${stat('Shock', (l.power - 0.7) / 0.5)}${stat('Steady', 1.55 - l.sway)}${stat('Arm', 1.2 - l.fatigue * 0.55)}</div>`).join('')}</div>
-      <h5>Your Retinue <small>hired once; each draws his wage at every circuit tourney</small></h5><div class="grid">${Object.keys(RETINUE).map(id => manCard(p, id)).join('')}</div>
-      <h5>Your Name</h5><input class="name" id="nameIn" maxlength="22" value="${p.name.replace(/"/g, '')}">
-      <h5>Blazon</h5><div class="arms-row"><canvas id="crestBig" width="300" height="356"></canvas><div>
-        ${sw('c1')}${sw('c2')}${sw('c3')}
-        <div class="swatches"><span class="lbl">Ordinary</span>${PATTERNS.map(x => `<div class="chip ${a.pattern === x ? 'sel' : ''}" data-pat="${x}">${x}</div>`).join('')}</div>
-        <div class="swatches"><span class="lbl">Charge</span>${CHARGES.map(x => `<div class="chip ${(a.charge || 'none') === x ? 'sel' : ''}" data-chg="${x}">${x}</div>`).join('')}</div>
-        <div class="swatches"><span class="lbl">Historic</span>${HISTORIC_ARMS.map((h, i) => `<div class="chip" title="${h.note}" data-hist="${i}">${h.name}</div>`).join('')}</div></div></div>`);
-    drawCrest(el('crestBig'), a); faces();
-    el('nameIn').addEventListener('change', (e) => { p.name = cleanName(e.target.value); e.target.value = p.name; api.saveProfile(); });
+      <div class="tabs" role="tablist">${ARM_TABS.map(([id, n]) => `<button class="tab ${armTab === id ? 'sel' : ''}" role="tab" data-artab="${id}">${n}</button>`).join('')}<span class="tabhint">${hint}</span></div>
+      <div class="tabbody">${body}</div>`);
+    if (el('crestBig')) { drawCrest(el('crestBig'), a); armsPreviews(a, P); }
+    faces();
+    const ni = el('nameIn'); if (ni) ni.addEventListener('change', (e) => { p.name = cleanName(e.target.value); e.target.value = p.name; api.saveProfile(); });
   }
 
   function skills() {
     const p = api.profile, r = rankOf(p.renown), pts = skillPoints(p), next = RANKS[r + 1], here = RANKS[r];
     const frac = next ? ((p.renown || 0) - here.at) / (next.at - here.at) : 1;
-    root.innerHTML = scroll('sheet', `<div class="top"><div><h3>Renown &amp; Skills</h3>
-      <p>Every joust adds to your name: more for a win, for each lance broken, for a stroke on the helm, for an unhorsing and for the gallery's favour. Each new rank lets you learn one skill. ${pts > 0 ? `<b>You have ${pts} skill${pts > 1 ? 's' : ''} to learn — choose below.</b>` : next ? `The next comes at ${next.at} renown.` : 'You have reached the highest rank.'}</p></div>
-      <div class="actions"><button class="btn primary" data-go="main">Back</button></div></div>
+    root.innerHTML = scroll('sheet skillscr', `<div class="top"><div><h3>Renown &amp; Skills ${tip('Renown', "Every joust adds to your name: more for a win, each lance broken, a stroke on the helm, an unhorsing and the gallery's favour.|Each new rank lets you learn one skill.")}</h3>
+      <p>${pts > 0 ? `<b>You have ${pts} skill${pts > 1 ? 's' : ''} to learn: choose below.</b>` : next ? `The next skill comes at ${next.at} renown.` : 'You have reached the highest rank.'}</p></div>
+      <div class="actions"><button class="btn" data-go="feats">Feats ${featCount(p).have}/${featCount(p).total}</button><button class="btn primary" data-go="main">Back</button></div></div>
       <div class="renown"><span>${here.name}</span><div class="bar"><div style="width:${Math.round(Math.max(0.02, Math.min(1, frac)) * 100)}%"></div></div><span>${next ? `${p.renown || 0} / ${next.at} · ${next.name}` : `${p.renown || 0} renown`}</span></div>
       <h5>Skills</h5><div class="skills">${Object.entries(SKILLS).map(([id, s]) => { const known = (p.skills || {})[id], open = !known && pts > 0;
-        return `<div class="skill ${known ? 'known' : open ? 'open' : 'locked'}" ${open ? `data-skill="${id}"` : ''}><em>${known ? 'Learned' : open ? 'Learn' : 'Next rank'}</em><b>${s.name}</b><span>${s.text}</span></div>`; }).join('')}</div>
-      <h5>The Ranks</h5><table class="tbl"><tr><th>Rank</th><th>Renown</th><th></th></tr>${RANKS.map((k, i) => `<tr class="${i === r ? 'me' : ''}"><td>${k.name}</td><td>${k.at}</td><td>${i === 0 ? '' : i <= r ? 'one skill earned' : 'one skill'}</td></tr>`).join('')}</table>
-      <h5>The Hidden Arts</h5><p>These are not learned but found. Arts you discover in the lists are listed here.</p>
-      <div class="arts">${Object.entries(ARTS).map(([id, a]) => (p.arts || {})[id] ? `<div class="art known"><b>${a.name}</b><span>${a.text}</span></div>` : `<div class="art unknown"><b>? ? ?</b><span>Not yet discovered.</span></div>`).join('')}</div>`);
+        return `<div class="skill ${known ? 'known' : open ? 'open' : 'locked'}" ${open ? `data-skill="${id}"` : ''} data-tip-title="${s.name}" data-tip="${String(s.text).replace(/"/g, '&quot;')}"><em>${known ? 'Learned' : open ? 'Learn' : 'Next rank'}</em><b>${s.name}</b></div>`; }).join('')}</div>
+      ${more('skRanks', 'The ranks', `<table class="tbl"><tr><th>Rank</th><th>Renown</th><th></th></tr>${RANKS.map((k, i) => `<tr class="${i === r ? 'me' : ''}"><td>${k.name}</td><td>${k.at}</td><td>${i === 0 ? '' : i <= r ? 'one skill earned' : 'one skill'}</td></tr>`).join('')}</table>`)}
+      ${more('skArts', `The hidden arts ${tip('Hidden arts', 'These are not learned but found.|Arts you discover in the lists appear here.')}`, `<div class="arts">${Object.entries(ARTS).map(([id, a]) => (p.arts || {})[id] ? `<div class="art known"><b>${a.name}</b><span>${a.text}</span></div>` : `<div class="art unknown"><b>? ? ?</b><span>Not yet discovered.</span></div>`).join('')}</div>`)}`);
   }
 
   function how() {
-    root.innerHTML = scroll('sheet', `<div class="top"><div><h3>The Art of the Joust</h3>
-      <p><i>King Duarte of Portugal wrote that jousters fail for four reasons: lack of <b>sight</b>, lack of control of the <b>lance</b>, lack of control of the <b>horse</b>, and lack of <b>will</b>. Every course you run is judged on those four.</i></p></div>
+    if (openMore.hControls === undefined) openMore.hControls = true;
+    root.innerHTML = scroll('sheet', `<div class="top"><div><h3>The Art of the Joust</h3></div>
       <div class="actions"><button class="btn primary" data-go="main">Back</button></div></div>
-      <div class="two"><div><h5>Controls</h5><div class="keys">
+      <p class="dropcap"><i>King Duarte of Portugal wrote that jousters fail for four reasons: lack of <b>sight</b>, lack of control of the <b>lance</b>, lack of control of the <b>horse</b>, and lack of <b>will</b>. Every course you run is judged on those four.</i></p>
+      ${more('hControls', 'Controls', `<div class="keys">
         <kbd>W</kbd><span>Before the course: raise your lance to show you are ready, then wait for the marshal's call and tap again to ride. While riding, each tap climbs a gait: walk, trot, canter, gallop. At the gallop, tap in time with the stride (the pulsing ring) to keep him collected.</span>
         <kbd>H</kbd><span>Take your helm off or put it on, between courses. (On the low-detail rider a bascinet or armet has a visor to raise instead: a raised visor gives a clear view, but a blow to the helm hurts twice as much.)</span>
         <kbd>S</kbd><span>Rein in — hold to drop a gait.</span>
@@ -374,27 +481,22 @@ export function initMenus(api) {
         <kbd>1 2 3 4</kbd><span>Between courses: salute the gallery, rouse the commons, taunt your opponent, or steady your horse.</span>
         <kbd>X</kbd><span>Salute a knight you have unhorsed.</span>
         <kbd>V</kbd><span>First person or third person.</span>
-        <kbd>M</kbd><span>Sound on or off. Esc pauses; Backspace while paused leaves the lists.</span></div>
-        <h5>The Cheque</h5>
-        <p>Attaint (a touch) 1 · Lance broken 2 · Broken on the helm 3 · Unhorsing wins the match.<br>Hit the tilt −2 · Hit a horse −3, and twice loses you the prize.<br>
-        Ride on with your lance still low −1. Five courses by default (you choose three to fifteen on the circuit screen, three to twenty in a joust); level cheques run extra courses.</p>
-        <h5>The Jousts</h5>
-        ${Object.values(MODES).map(m => `<p><b>${m.name}</b> (${m.sub}). ${m.blurb}${m.kitNote ? ' ' + m.kitNote : ''}</p>`).join('')}</div>
-      <div><h5>Technique</h5>
-        <p><b>Lower it late and gently.</b> "Like a clock weight," wrote Quijada de Reayo. Couch too early and your arm tires and the point wanders; too late and it is still settling in the rest when you meet.</p>
+        <kbd>M</kbd><span>Sound on or off. Esc pauses; Backspace while paused leaves the lists.</span></div>`)}
+      ${more('hCheque', 'The cheque (scoring)', `<p>Attaint (a touch) 1 · Lance broken 2 · Broken on the helm 3 · Unhorsing wins the match.<br>Hit the tilt −2 · Hit a horse −3, and twice loses you the prize.<br>
+        Ride on with your lance still low −1. Five courses by default (you choose three to fifteen on the circuit screen, three to twenty in a joust); level cheques run extra courses.</p>`)}
+      ${more('hJousts', 'The jousts', `${Object.values(MODES).map(m => `<p><b>${m.name}</b> (${m.sub}). ${m.blurb}${m.kitNote ? ' ' + m.kitNote : ''}</p>`).join('')}`)}
+      ${more('hTech', 'Technique', `<p><b>Lower it late and gently.</b> "Like a clock weight," wrote Quijada de Reayo. Couch too early and your arm tires and the point wanders; too late and it is still settling in the rest when you meet.</p>
         <p><b>Speed is the shock.</b> A lance only breaks if you bring weight and pace to it. But the faster the gallop, the more the point bounces — a smooth horse and a collected stride steady it.</p>
         <p><b>Ride the tilt.</b> Stay straight and close. A nervous horse will shy from the barrier and the roar of the stands.</p>
         <p><b>Raise it after.</b> The moment your stroke is given, let go and the lance goes upright. Do it at once and the gallery marks a rider in command of his lance; ride on with the point low and the marshal marks it against you.</p>
         <p><b>Hit it square.</b> A point that meets armour at a flat angle skids off: it may slide on to the next thing along, or away into the air. The middle of the shield is the surest; the helm sheds most strokes that are not dead on.</p>
-        <p><b>Don't flinch.</b> Thrust (SPACE) at the instant of the shock and you hit harder and sit firmer. In the frog-mouth helm, sitting up to take the blow hides your sight.</p>
-        <h5>The Purse</h5>
-        <p>Money is counted in marks. A circuit tourney pays a <b>prize purse</b> that grows from venue to venue, and the gallery adds a gift if you have won its favour. Against that you pay the <b>entry fee</b>, your squires and stabling, every <b>lance you break</b>, and the armourer and horse-leech for the hurts of the day.</p>
+        <p><b>Don't flinch.</b> Thrust (SPACE) at the instant of the shock and you hit harder and sit firmer. In the frog-mouth helm, sitting up to take the blow hides your sight.</p>`)}
+      ${more('hPurse', 'The purse', `<p>Money is counted in coins. A circuit tourney pays a <b>prize purse</b> that grows from venue to venue, and the gallery adds a gift if you have won its favour. Against that you pay the <b>entry fee</b>, your squires and stabling, every <b>lance you break</b>, and the armourer and horse-leech for the hurts of the day.</p>
         <p><b>Ransom.</b> By the old custom of the tourney, a knight put out of the saddle forfeits horse and harness and must buy them back. Unhorse your man on the circuit and he pays you a fifth of their worth; be unhorsed and you pay it. A rich harness is a rich ransom.</p>
-        <p>If the purse runs dry the moneylenders carry you, up to ${marks(ECON.debtCap)}. In debt you may still ride, but you can buy nothing. A joust has no fee and no ransom.</p>
-        <h5>The Crowd</h5>
-        <p><b>The commons</b> at the rails love a hard shock: break lances and unhorse your man and they will chant your name, and their roar rattles your opponent's aim. They jeer a miss.<br>
-        <b>The gallery</b> — the court, the ladies, the clergy — prizes skill and courtesy: salute them, strike the helm, keep your strokes fair. Win them and a lady may drop her sleeve, and the court adds a gift to your purse. Strike a horse and they turn their backs.</p>
-        <div id="musicCredits"></div></div></div>`);
+        <p>If the purse runs dry the moneylenders carry you, up to ${marks(ECON.debtCap)}. In debt you may still ride, but you can buy nothing. A joust has no fee and no ransom.</p>`)}
+      ${more('hCrowd', 'The crowd', `<p><b>The commons</b> at the rails love a hard shock: break lances and unhorse your man and they will chant your name, and their roar rattles your opponent's aim. They jeer a miss.<br>
+        <b>The gallery</b> — the court, the ladies, the clergy — prizes skill and courtesy: salute them, strike the helm, keep your strokes fair. Win them and a lady may drop her sleeve, and the court adds a gift to your purse. Strike a horse and they turn their backs.</p>`)}
+      <div id="musicCredits"></div>`);
     // music credits come from the manifest at runtime (silent if there is none)
     const box = el('musicCredits'), esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     fetch('assets/music/manifest.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)).then(j => {
@@ -418,13 +520,13 @@ export function initMenus(api) {
     const act = riding ? `<button class="btn" disabled>In your saddle</button>` : mine ? `<button class="btn primary" data-stbuy="${h.id}">Ride this horse</button>`
       : `<button class="btn primary" data-stbuy="${h.id}" ${afford ? '' : 'disabled'}>Buy for ${marks(h.price)}</button>`;
     const why = !mine && !afford ? `<span class="why">${broke ? 'You are in debt and can buy nothing.' : `You need ${marks(h.price - (p.gold || 0))} more.`}</span>` : '';
-    const rows = Object.values(HORSES).map(x => `<div class="pick ${x.id === h.id ? 'sel' : ''}" data-stable="${x.id}"><b>${x.name}</b><em class="${owned(x.id) ? 'own' : (p.gold || 0) < x.price ? 'cost cant' : 'cost'}">${p.horse === x.id ? 'Riding' : owned(x.id) ? 'Owned' : marks(x.price)}</em><p>${x.blurb}</p></div>`).join('');
-    root.innerHTML = scroll('sheet stablescr', `<div class="top"><div><h3>The Stable</h3><p><b>${purseText(p.gold)}</b> · drag to turn the horse</p></div>
+    const rows = Object.values(HORSES).map(x => `<div class="pick ${x.id === h.id ? 'sel' : ''}" data-stable="${x.id}" data-tip-title="${x.name}" data-tip="${String(x.blurb).replace(/"/g, '&quot;')}"><b>${x.name}</b><em class="${owned(x.id) ? 'own' : (p.gold || 0) < x.price ? 'cost cant' : 'cost'}">${p.horse === x.id ? 'Riding' : owned(x.id) ? 'Owned' : marks(x.price)}</em></div>`).join('');
+    root.innerHTML = scroll('sheet stablescr', `<div class="top"><div><h3>The Stable</h3><p class="purseline"><b>${purseText(p.gold)}</b> ${tip('The Stable', 'Drag the horse to turn it.|Stabling is charged at each circuit tourney.')}</p></div>
       <div class="actions"><button class="btn primary" data-go="main">Done</button></div></div>
       <div class="stbody"><div class="stlist">${rows}</div>
       <div class="stview"><canvas id="stableView"></canvas>
-        <div class="stcap"><h5>Caparison</h5><div class="swatches">${capBtns}</div><p>${cap.blurb} ${capAct}</p></div>
-        <div class="stinfo"><div class="sthead"><div><h4>${h.name}</h4><p>${h.blurb}</p>${mine ? `<p class="bondline">Bond with you: <b>${BOND_NAMES[lvl]}</b> of IV</p>` : ''}<p class="bondline">Keep: ${marks(ECON.keep[h.id] ?? 2)} at each circuit tourney.</p></div><div class="stact">${act}${why}</div></div>
+        <div class="stcap"><h5>Caparison</h5><div class="swatches">${capBtns}</div><p>${capAct} ${tip(cap.name, cap.blurb)}</p></div>
+        <div class="stinfo"><div class="sthead"><div><h4>${h.name} ${tip(h.name, h.blurb)}</h4>${mine ? `<p class="bondline">Bond with you: <b>${BOND_NAMES[lvl]}</b> of IV</p>` : ''}<p class="bondline">Keep: ${marks(ECON.keep[h.id] ?? 2)} at each circuit tourney.</p></div><div class="stact">${act}${why}</div></div>
           <div class="stbars">${stat('Top speed', (h.top - 7.2) / 2)}${stat('Acceleration', h.accel / 3.7)}${stat('Shock weight', (h.mass - 0.7) / 0.6)}${stat('Smoothness', h.steady)}${stat('Nerve', h.nerve)}${stat('Stamina', h.stamina)}</div></div></div></div>`);
   }
 
@@ -435,9 +537,9 @@ export function initMenus(api) {
       const d = got[a.id], hid = a.hidden && !d;
       return `<div class="feat ${d ? 'got' : 'no'}"><i class="seal">${d ? '✦' : hid ? '?' : ''}</i><b>${hid ? '? ? ?' : a.name}</b><span>${hid ? 'A hidden feat. It is found, not sought.' : a.text}</span><em>${d ? `${d} · +${a.renown ?? ACH_RENOWN} renown` : ''}</em></div>`;
     };
-    root.innerHTML = scroll('sheet', `<div class="top"><div><h3>Feats &amp; Honours</h3>
-      <p>${fc.have} of ${fc.total} earned. Feats are honours only: they give no strength in the lists, just a little renown to remember them by. Some are not written down until you earn them.</p></div>
-      <div class="actions"><button class="btn primary" data-go="main">Back</button></div></div>
+    root.innerHTML = scroll('sheet', `<div class="top"><div><h3>Feats &amp; Honours ${tip('Feats', 'Honours only: they give no strength in the lists,|just a little renown to remember them by.|Some are not written down until you earn them.')}</h3>
+      <p>${fc.have} of ${fc.total} earned.</p></div>
+      <div class="actions"><button class="btn" data-go="skills">Renown</button><button class="btn primary" data-go="main">Back</button></div></div>
       ${ACH_GROUPS.map(g => { const list = ACHIEVEMENTS.filter(a => a.group === g); return list.length ? `<h5>${g} <small>${list.filter(a => got[a.id]).length}/${list.length}</small></h5><div class="feats">${list.map(seal).join('')}</div>` : ''; }).join('')}`);
   }
 
@@ -463,29 +565,33 @@ export function initMenus(api) {
       body = `<div class="rkrec"><p>Keep this to move your rank to another device. Anyone who has it can ride as you.</p><div class="rkcode">${R.code ? R.code : R.status === 'fail' ? 'Not available while the rankings are unreachable.' : '…'}</div>
         <p>Use a recovery code on this device (it replaces the rank this browser has):</p><div class="joinrow"><input class="name" id="rkIn" maxlength="64" placeholder="Recovery code" value="${esc(R.draft)}" autocomplete="off" spellcheck="false"><button class="btn primary" data-on="rkuse">Use code</button></div>${R.msg ? `<p class="err">${R.msg}</p>` : ''}</div>`;
     } else body = `<div class="rkhead"><span class="n">#</span><b>Knight</b><span class="dv">Division</span><span class="rt">Rating</span><span class="wl">W–L</span></div><div class="rklist">${R.rows.length ? R.rows.map((p, i) => line(p, i + 1)).join('') : `<p class="wait">${R.status === 'loading' ? 'Loading…' : R.status === 'fail' ? 'Could not reach the rankings.' : 'No ranked knights yet. Be the first.'}</p>`}</div>`;
-    root.innerHTML = scroll('sheet ranksscr', `<div class="top"><div><h3>Rankings</h3><p>Online matches only. A “?” marks a rating still settling (under 10 matches).</p></div><div class="actions"><button class="btn" data-on="rkback">Back</button><button class="btn" data-on="rkview">${R.view === 'recover' ? 'Top 100' : 'Recovery code'}</button></div></div>${mine}${body}`);
+    root.innerHTML = scroll('sheet ranksscr', `<div class="top"><div><h3>Rankings</h3><p>${tip('Rankings', 'Online matches only.|A "?" marks a rating still settling (under 10 matches).')}</p></div><div class="actions"><button class="btn" data-on="rkback">Back</button><button class="btn" data-on="rkview">${R.view === 'recover' ? 'Top 100' : 'Recovery code'}</button></div></div>${mine}${body}`);
     const inp = el('rkIn'); if (inp) inp.addEventListener('input', () => { R.draft = inp.value; });
   }
-  // ---- the account: sign in with Google or Discord (a guest plays everything offline; ranked play and the shared purse need an account)
-  let PV = null;      // which sign-ins the server has switched on
+  // ---- the account: sign in, name, rating, cloud save, sign out, delete (src/account_panel.js); Back returns to Settings if that is where you came from
+  let acctFrom = 'main';
   function accountScreen() {
-    const A = api.account, me = A.info(), msg = A.message();
-    if (!PV) A.providers().then((v) => { PV = v || { google: false, discord: false, dev: false, off: true }; if (root.dataset.name === 'account') show('account'); });
-    const pb = (id, label) => `<button class="btn big ${PV && PV[id] ? 'primary' : ''}" data-ac="${id}">${label}<small>${!PV ? 'Checking…' : PV[id] ? 'Opens ' + label.replace('Sign in with ', '') + "'s own sign-in page" : 'Sign-in coming soon'}</small></button>`;
-    const body = me ? `<p>Signed in as <b>${esc(me.name)}</b> (${esc(me.provider)}). Your purse, renown and belongings are kept on the server, so they follow you to any browser.</p>
-        <p class="dimtxt">Ranked play: ${me.rid ? 'ready' : 'not yet tied to a rank key on this browser (use the recovery code under Rankings)'}.</p><div class="onrow"><button class="btn" data-ac="out">Sign out</button></div>`
-      : `<p>You are playing as a guest: everything works offline, and friend rooms and unranked matches are open to you. An account keeps your purse and belongings safe on the server, so nobody can edit them, and lets you play <b>ranked</b> matches.</p>
-        <p class="dimtxt">Your guest belongings are offered to the account once, at your first sign-in (up to 500 marks and a fair share of your gear).</p>
-        <div class="onrow">${pb('google', 'Sign in with Google')}${pb('discord', 'Sign in with Discord')}</div>
-        ${PV && PV.dev ? `<h5>Development sign-in <small>local server only</small></h5><div class="joinrow"><input class="name" id="devUser" maxlength="22" value="Dev Knight" autocomplete="off"><button class="btn primary" data-ac="dev">Dev sign-in</button></div>` : ''}`;
-    root.innerHTML = scroll('sheet online', `<div class="top"><div><h3>Account</h3><p>${me ? 'Your account' : 'Sign in'}</p></div><div class="actions"><button class="btn" data-ac="back">Back</button></div></div>${msg ? `<p class="${/fail|cancel|could not|belongs/i.test(msg) ? 'err' : 'wait'}">${esc(msg)}</p>` : ''}${body}`);
+    if (root.dataset.name !== 'account') acctFrom = root.dataset.name === 'settings' ? 'settings' : 'main';
+    const me = api.account.info();
+    root.innerHTML = scroll('sheet online slim', `<div class="top"><div><h3>Account</h3><p>${me ? 'Your account' : 'Sign in'}</p></div><div class="actions"><button class="btn" data-go="${acctFrom}">Back</button></div></div><div id="acctPanel"></div>`);
+    mountAccountPanel(el('acctPanel'), { profile: api.profile });
   }
-  const screens = { main, settings, circuit, exhibition, online, armoury, skills, how, stable, feats, welcome, rankings, account: accountScreen };
+  // ---- the store: the Knight's Charter, the packs, the Grand Patron tier, Restore purchases (src/store.js draws it); Back returns where you came from
+  let storeFrom = 'main';
+  function storeScreen() {
+    if (!PAY.live) return show('main');      // (no store while the game is free, src/config.js)
+    if (root.dataset.name !== 'store') storeFrom = ['circuit', 'exhibition', 'armoury', 'account'].includes(root.dataset.name) ? root.dataset.name : 'main';
+    const c = store.catalogueNow();
+    root.innerHTML = scroll('sheet online store', `<div class="top"><div><h3>The Store${c && c.test ? ' <span class="test">Test mode</span>' : ''}</h3><p>The Knight's Charter opens the whole career. The packs change looks only.</p></div><div class="actions"><button class="btn" data-go="${storeFrom}">Back</button></div></div><div id="storeHost"></div>`);
+    store.mountStore(el('storeHost'), { show });
+  }
+  const screens = { main, settings, circuit, exhibition, online, armoury, skills, how, stable, feats, welcome, rankings, account: accountScreen, store: storeScreen };
   function show(name) {
     if (name === 'main' && api.profile.named === false) name = 'welcome';      // first visit: your name before anything else
     // re-drawing the screen you are on keeps your place on the page
     const keep = root.dataset.name === name && root.classList.contains('on') ? (root.querySelector('.page') || {}).scrollTop || 0 : 0;
     if (api.checkFeats) api.checkFeats();      // purchases and training are checked for feats whenever a screen is drawn
+    if (name !== 'circuit') stopTourneyWatch();
     root.classList.add('on'); screens[name](); root.dataset.name = name;
     const pg = root.querySelector('.page'); if (pg) pg.scrollTop = keep;
     if (api.onShow) api.onShow(name);
@@ -508,7 +614,7 @@ export function initMenus(api) {
   };
   let serverOk = false;      // set for the one re-run of a click whose purchase the server has made
   const onClick = (e) => {
-    const t = e.target.closest('[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-on],[data-onv],[data-onm],[data-onc],[data-stcap],[data-stcapset],[data-skill],[data-ac]');
+    const t = e.target.closest('[data-cel],[data-artab],[data-tt],[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-fld],[data-ord],[data-bord],[data-lay],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-on],[data-onv],[data-onm],[data-onc],[data-stcap],[data-stcapset],[data-skill],[data-ac],[data-lock],[data-fin],[data-roll]');
     if (!t) return;
     const p = api.profile, d = t.dataset;
     if (buyOk) buyOk = false;
@@ -517,15 +623,15 @@ export function initMenus(api) {
       if (serverOk) { serverOk = false; if (d.hire || d.train) return show('armoury'); }
       else { const item = shopItem(p, d); if (item) { api.account.buy(item).then((r) => { if (!r.ok) { api.ui('error'); return show(root.dataset.name); } api.ui('select'); serverOk = true; onClick({ target: t }); serverOk = false; }); return; } }
     }
-    if (d.ac) {
-      const A = api.account; A.clearMessage();
-      if (d.ac === 'back') return show('main');
-      if (d.ac === 'out') { A.signOut(); return; }
-      if (d.ac === 'dev') { const u = el('devUser'); A.signIn('dev', u ? u.value : '').then((err) => { if (err) { A.fail(err); show('account'); } }); return; }
-      A.providers().then((v) => { if (!v || !v[d.ac]) return show('account'); A.signIn(d.ac).then((err) => { if (err) { A.fail(err); show('account'); } }); });
-      return;
-    }
-    api.ui(d.go || d.act ? 'select' : 'click');
+    api.ui(d.go || d.act || d.tt ? 'select' : 'click');
+    if (d.tt) return tourneyAct(d.tt, { p, api, show, here: () => root.dataset.name === 'circuit' });
+    if (d.act === 'aimmode') { setAimMode(d.v); return show('settings'); }
+    if (d.act === 'aimspeed') { setAimSpeed(d.v); return show('settings'); }
+    if (d.lock === 'charter') { const [why, v] = String(d.why || 'store').split(':'); openUpsell({ reason: why, venue: +v || 0, show }); return; }      // free content ends here: the popup
+    if (d.lock) { store.focus(d.lock); return show('store'); }      // a pack's piece: the store, at that pack
+    if (d.cel) { toggleFav(p, d.cel); api.saveProfile(); return show('armoury'); }
+    if (d.fin) { p.finish = d.fin !== 'plain' && store.has('finishes') && PACKS.finishes.finishes[d.fin] ? d.fin : undefined; api.saveProfile(); api.rebuildPlayer(); return show('armoury'); }
+    if (d.roll !== undefined) { if (store.has('rolls') && PACKS.rolls.arms[+d.roll]) { p.arms = JSON.parse(JSON.stringify(PACKS.rolls.arms[+d.roll].arms)); api.saveProfile(); api.rebuildPlayer(); } return show('armoury'); }
     if (d.act === 'fullscreen') { if (api.fullscreen) api.fullscreen(); return; }
     if (d.go) { dismissArm = null; if (d.go === 'online') api.online.open(); return show(d.go); }
     if (d.on) {
@@ -560,21 +666,22 @@ export function initMenus(api) {
     if (d.act === 'stskip') { const t = p.season.t; t.phase = 'bracket'; t.card = 0; api.saveProfile(); return show('circuit'); }
     if (d.act === 'rideon') { career.rideOn(p); api.saveProfile(); return show('circuit'); }
     if (d.act === 'newseason' || d.act === 'reset') { api.resetCircuit(); return show('circuit'); }
+    if (d.act === 'exride' && store.locked.venue(exVenue)) { openUpsell({ reason: 'venue', venue: exVenue, show }); return; }
+    if (d.act === 'exride' && !exhibitionAllowed({ show })) return;      // the optional daily cap (off by default, src/upsell.js UPSELL)
     if (d.act === 'exride') return api.startMatch(exVenue, exOpp, false, false, exMode, fixedCourses(exMode) || exCourses);
     if (d.act === 'practice') return api.startPractice((p.lesson || 0) >= LESSONS.length);
     if (d.act === 'herald') { p.herald = d.v !== undefined ? d.v === '1' : p.herald === false; api.saveProfile(); return show('settings'); }
+    if (d.act === 'musicon') { if (api.setMusicOff) api.setMusicOff(d.v === '0'); return show('settings'); }
+    if (d.act === 'commentary') { api.setCommentary(d.v !== undefined ? d.v === '1' : !(api.commentaryOn ? api.commentaryOn() : true)); return show('settings'); }
+    if (d.act === 'chatter') { api.setChatter(d.v !== undefined ? d.v === '1' : !(api.chatterOn ? api.chatterOn() : true)); return show('settings'); }
     if (d.act === 'voices') { api.setVoices(d.v !== undefined ? d.v === '1' : !(api.voicesOn ? api.voicesOn() : true)); return show('settings'); }
     if (d.act === 'diff') { p.difficulty = d.v !== undefined ? +d.v : ((p.difficulty ?? 1) + 1) % DIFFICULTY.length; api.saveProfile(); return show('settings'); }
-    if (d.act === 'gfx') {      // Graphics: Auto -> Low -> Medium -> High; saved in the profile, the page reloads a moment after the last tap
-      const nx = PREFS[(PREFS.indexOf(GFX.pref) + 1) % PREFS.length]; setPref(nx); p.gfx = nx; api.saveProfile();
-      clearTimeout(gfxTimer); if (GFX.pref !== gfxStart) gfxTimer = setTimeout(() => { const u = new URL(location.href); u.searchParams.delete('gfx'); location.href = u.href; }, 1500);
-      return show('settings');
-    }
     if (d.act === 'sfxpack') { const nx = d.v || (sfxPack() === 'new' ? 'old' : 'new'); if (nx === sfxPack()) return; setSfxPack(nx); return location.reload(); }
     if (d.act === 'autoride') { if (d.v !== undefined ? d.v === '1' : p.autoRide === false) delete p.autoRide; else p.autoRide = false; api.saveProfile(); return show('settings'); }
     if (d.act === 'view') { p.firstPerson = d.v !== undefined ? d.v === '1' : !p.firstPerson; api.S.fp = p.firstPerson; api.saveProfile(); return show('settings'); }
     if (d.act) return;
     if (d.skill) { if (skillPoints(p) > 0 && SKILLS[d.skill] && !(p.skills || (p.skills = {}))[d.skill]) { p.skills[d.skill] = 1; api.ui('select'); api.saveProfile(); } return show('skills'); }
+    if (d.artab) { armTab = d.artab; return show('armoury'); }
     if (d.exv !== undefined) { exVenue = +d.exv; return show('exhibition'); }
     if (d.exo) { exOpp = d.exo; return show('exhibition'); }
     if (d.exm) { exMode = d.exm; return show('exhibition'); }
@@ -588,9 +695,14 @@ export function initMenus(api) {
       if (!p.owned.caparisons.includes(c.id)) { if ((p.gold || 0) >= c.price && (p.gold || 0) >= 0) { p.gold -= c.price; p.owned.caparisons.push(c.id); api.ui('select'); } else { api.ui('error'); return show('stable'); } }
       p.caparison = c.id; stableCap = c.id; api.saveProfile(); api.rebuildPlayer(); return show('stable');
     }
-    if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; }
+    // the blazon editor: every choice is written back in the saved shape (heraldry.js setArmsParts), so old saves, the cloud and online peers read it as before
+    if (d.col) { const [k, c] = d.col.split('|'); if (k === 'ordT' || k === 'bordT') setArmsParts(p.arms, { [k]: c }); else { p.arms[k] = c; setArmsParts(p.arms, {}); } }
     if (d.pat) p.arms.pattern = d.pat;
-    if (d.chg) p.arms.charge = d.chg;
+    if (d.fld) setArmsParts(p.arms, { field: d.fld, ...(armsParts(p.arms).lay === 'counter' ? { lay: 'one' } : {}) });
+    if (d.ord) { const q = armsParts(p.arms); setArmsParts(p.arms, { ord: d.ord, ordT: q.ord === 'none' ? (p.arms.c2 !== p.arms.c1 ? p.arms.c2 : p.arms.c3) : q.ordT, lay: d.ord === 'none' ? q.lay.replace(/^on/, '') : q.lay === 'counter' ? 'one' : q.lay }); }
+    if (d.bord) setArmsParts(p.arms, { bord: d.bord === '1' });
+    if (d.lay) setArmsParts(p.arms, { lay: d.lay });
+    if (d.chg) setArmsParts(p.arms, { charge: d.chg });
     const buy = (list, id, price) => { if (list.includes(id)) return true; if ((p.gold || 0) >= price) { p.gold -= price; list.push(id); api.ui('select'); return true; } api.ui('error'); return false; };
     if (d.stable) { stableSel = d.stable; return show('stable'); }
     if (d.stbuy) { if (HORSES[d.stbuy] && buy(p.owned.horses, d.stbuy, HORSES[d.stbuy].price)) { p.horse = d.stbuy; api.saveProfile(); api.rebuildPlayer(); } return show('stable'); }
@@ -602,10 +714,11 @@ export function initMenus(api) {
     if (d.train && p.retinue && p.retinue[d.train]) { const rec = p.retinue[d.train], cost = trainCost(d.train, rec); if (cost && (p.gold || 0) >= cost) { p.gold -= cost; rec.level++; api.ui('select'); } else api.ui('error'); }
     if (d.dismiss && d.dismiss !== 'squire' && p.retinue && p.retinue[d.dismiss]) { if (dismissArm === d.dismiss) { delete p.retinue[d.dismiss]; dismissArm = null; } else { dismissArm = d.dismiss; return show('armoury'); } }
     dismissArm = null;
-    if (d.hist !== undefined) p.arms = Object.assign({}, HISTORIC_ARMS[+d.hist].arms);
+    if (d.hist !== undefined && HISTORIC_ARMS[+d.hist]) p.arms = allowedArms(JSON.parse(JSON.stringify(HISTORIC_ARMS[+d.hist].arms)), ownedSkus());
+    if (d.col || d.fld || d.ord || d.bord || d.lay || d.chg || d.pat) p.arms = allowedArms(p.arms, ownedSkus());      // a click that slipped past a locked chip still cannot wear a paid piece
     api.saveProfile(); api.rebuildPlayer(); show('armoury');
   };
   root.addEventListener('click', onClick);
 
-  return { show, root, stableHorse: () => stableSel, stableCap: () => stableCap || 'livery' };
+  return { show, root, refreshAudio: () => { if (root.dataset.name === 'settings' && root.classList.contains('on')) show('settings'); }, stableHorse: () => stableSel, stableCap: () => stableCap || 'livery' };
 }

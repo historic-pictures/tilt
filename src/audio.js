@@ -1,4 +1,4 @@
-// TILT sound engine — sample-based, mixed on the same rules as the Scene Viewer's sfx.mjs:
+// Joust Revival sound engine — sample-based, mixed on the same rules as the Scene Viewer's sfx.mjs:
 //   * every voice gets its level from a per-category attenuation curve (dB against metres) with a hard cut-off,
 //   * far sounds are duller (low-pass by distance) and wetter (reverb send rises with distance),
 //   * stereo spread narrows with distance,
@@ -54,7 +54,7 @@ const HOOF_ATT = { max: 45, vol: [[0, 0], [1.5, 0], [4, -4], [8, -10], [14, -17]
 const MUSIC_DB = -14, MUSIC_DEFAULT = 0.6, MUSIC_DUCK_DB = -8, MUSIC_FADE = 2;
 class MusicBus {
   constructor(ga) {
-    this.ga = ga; this.vol = MUSIC_DEFAULT; this.ducked = false; this.gain = null; this.tracks = null; this._man = null;
+    this.ga = ga; this.vol = MUSIC_DEFAULT; this.off = false; this.ducked = false; this.gain = null; this.tracks = null; this._man = null;
     this.want = null; this.mood = null; this.cur = null; this.last = null;
     this.yt = null; this._where = 'menu'; this._ytLoad = null;
     this.queue = []; this._tok = 0;      // "your own music": shuffled playlist of the player's tracks (src/mymusic.js)
@@ -67,8 +67,8 @@ class MusicBus {
       this._ytLoad = this._ytLoad || import('./ytmusic.js').then(m => { this.yt = m.ytmusic; this.yt.on((k) => { if (k === 'stop') { mymusic.setSource('game'); this.refreshMine(); } }); });
       try { await this._ytLoad; } catch (e) { return; }
     }
-    const y = this.yt; y.setVolume(this.vol); y.duck(this.ducked); y.muted = !!this.ga.muted; y.place(this._where);
-    if (go && mymusic.source === 'yt') y.start();
+    const y = this.yt; y.setVolume(this.vol); y.duck(this.ducked); y.muted = !!(this.ga.muted || this.off); y.place(this._where);
+    if (go && mymusic.source === 'yt' && !this.off) y.start();
   }
   /** Which corner the YouTube box sits in: 'menu' or 'match'. */
   place(w) { this._where = w; if (this.yt) this.yt.place(w); }
@@ -95,7 +95,7 @@ class MusicBus {
   /** Play a random track of this mood (never the one just played); a track already playing for that mood is left alone. */
   async play(mood) {
     this.want = mood;
-    const ga = this.ga; if (!ga.ctx || !this.gain || ga.muted || this.vol <= 0) return;
+    const ga = this.ga; if (!ga.ctx || !this.gain || ga.muted || this.off || this.vol <= 0) return;
     if (mymusic.source === 'yt') { this._yt(true); return; }
     if (mymusic.source === 'files') { await mymusic.list(); if (this.want !== mood) return; }
     if (this.mine) { if (!this.cur || !this.cur.mine) this._startMine(); return; }
@@ -150,7 +150,7 @@ class MusicBus {
     } catch (e) { /* music is optional */ }
   }
   /** Skip to the next of the player's songs. */
-  next() { if (mymusic.source === 'yt') { if (this.yt) this.yt.next(); return; } if (this.mine && this.ga.ctx && this.vol > 0 && !this.ga.muted) this._startMine(); }
+  next() { if (mymusic.source === 'yt') { if (this.yt) this.yt.next(); return; } if (this.mine && this.ga.ctx && this.vol > 0 && !this.ga.muted && !this.off) this._startMine(); }
   _dropMine() { this._fadeOut(MUSIC_FADE); this.cur = null; this.mood = null; mymusic.setNow(null); }
   /** The on/off switch or the list changed: swap between the player's songs and the game's own music. */
   async refreshMine() {
@@ -172,6 +172,8 @@ class MusicBus {
     setTimeout(() => { try { rec.el.pause(); rec.src.disconnect(); rec.g.disconnect(); } catch (e) { /* gone */ } }, sec * 1000 + 100);
   }
   stop(fadeSec = 1.5) { this.want = null; this._tok++; this._fadeOut(fadeSec); this.cur = null; this.mood = null; mymusic.setNow(null); }
+  /** The music-only switch (the Music button): silences the game's music, the player's own songs and the YouTube player, and leaves every other sound alone. */
+  setOff(off) { this.off = !!off; this.setMuted(!!(this.off || this.ga.muted)); }
   /** Mute pauses the stream, unmute carries on (or starts what was wanted). */
   setMuted(m) {
     if (this.yt) this.yt.setMuted(m);
@@ -313,7 +315,7 @@ export class GameAudio {
   // ---------------------------------------------------------------- state
   setMuted(m) {
     this.muted = !!m; if (!this.ctx) return;
-    this._run(() => this.music.setMuted(this.muted));
+    this._run(() => this.music.setMuted(this.muted || this.music.off));
     this._run(() => {
       if (this.muted) { this.master.gain.cancelScheduledValues(this.ctx.currentTime); this.master.gain.value = 0; this.ctx.suspend(); }
       else { this.ctx.resume(); this.master.gain.setTargetAtTime(lin(MASTER_DB), this.ctx.currentTime, 0.15); }

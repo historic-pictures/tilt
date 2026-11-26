@@ -1,0 +1,150 @@
+[
+ {
+  "file": "cheer_a_fist_laugh.json",
+  "kind": "crowd_cheer",
+  "frames": 75,
+  "duration_s": 2.502,
+  "loop": false,
+  "bones": "Mixamo-named local quaternions"
+ },
+ {
+  "file": "cheer_b_wave.json",
+  "kind": "crowd_cheer",
+  "frames": 75,
+  "duration_s": 2.502,
+  "loop": false,
+  "bones": "Mixamo-named local quaternions"
+ },
+ {
+  "file": "cheer_c_shout.json",
+  "kind": "crowd_cheer",
+  "frames": 75,
+  "duration_s": 2.502,
+  "loop": false,
+  "bones": "Mixamo-named local quaternions"
+ },
+ {
+  "file": "flag_sweep_down.json",
+  "kind": "start_signal",
+  "frames": 24,
+  "duration_s": 0.96,
+  "loop": false,
+  "bones": "Mixamo-named local quaternions"
+ },
+ {
+  "file": "flag_wave_one_hand.json",
+  "kind": "flag_wave",
+  "frames": 35,
+  "duration_s": 1.4,
+  "loop": false,
+  "bones": "Mixamo-named local quaternions"
+ },
+ {
+  "file": "flag_wave_two_hand.json",
+  "kind": "flag_wave",
+  "frames": 52,
+  "duration_s": 2.08,
+  "loop": false,
+  "bones": "Mixamo-named local quaternions"
+ },
+ {
+  "file": "rider_fall_over_cantle.json",
+  "kind": "fall",
+  "frames": null,
+  "duration_s": 1.5,
+  "loop": false,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "rider_fall_sideways_tumble.json",
+  "kind": "fall",
+  "frames": null,
+  "duration_s": 1.7,
+  "loop": false,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "rider_hit_body_heavy.json",
+  "kind": "impact",
+  "frames": null,
+  "duration_s": 2.4,
+  "loop": false,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "rider_hit_glance_helm.json",
+  "kind": "impact",
+  "frames": null,
+  "duration_s": 1.8,
+  "loop": false,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "rider_hit_glance_shield.json",
+  "kind": "impact",
+  "frames": null,
+  "duration_s": 1.8,
+  "loop": false,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "rider_hit_helm_square.json",
+  "kind": "impact",
+  "frames": null,
+  "duration_s": 2.6,
+  "loop": false,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "rider_hit_shield_clean.json",
+  "kind": "impact",
+  "frames": null,
+  "duration_s": 2.4,
+  "loop": false,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "rider_ride_cycle.json",
+  "kind": "ride",
+  "frames": null,
+  "duration_s": null,
+  "loop": true,
+  "bones": "additive euler curves"
+ },
+ {
+  "file": "run_cycle.json",
+  "kind": "run",
+  "frames": 16,
+  "duration_s": 0.667,
+  "loop": true,
+  "bones": "Mixamo-named local quaternions"
+ },
+ {
+  "file": "simple/cheer_a_fist_laugh_simple.json",
+  "kind": "simple limb angles"
+ },
+ {
+  "file": "simple/cheer_b_wave_simple.json",
+  "kind": "simple limb angles"
+ },
+ {
+  "file": "simple/cheer_c_shout_simple.json",
+  "kind": "simple limb angles"
+ },
+ {
+  "file": "simple/flag_sweep_down_simple.json",
+  "kind": "simple limb angles"
+ },
+ {
+  "file": "simple/flag_wave_one_hand_simple.json",
+  "kind": "simple limb angles"
+ },
+ {
+  "file": "simple/flag_wave_two_hand_simple.json",
+  "kind": "simple limb angles"
+ },
+ {
+  "file": "simple/run_cycle_simple.json",
+  "kind": "simple limb angles"
+ }
+]

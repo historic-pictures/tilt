@@ -6,6 +6,10 @@ import { buildCrowd } from './crowd.js';
 import { makePBR } from './texgen.js';
 import { buildProps } from './props.js';
 import { buildBackdrop } from './backdrop.js';
+import { groundShader } from './ground.js';
+import { LISTS, preloadLists, buildLists } from './lists.js';
+import { KNIGHTS } from './data.js';
+import { whenHeraldry, heraldryReady } from './heraldry.js';
 import { buildTraining } from './training.js';
 import { skyNow, loadSky, skyFromPhoto } from './scans.js';
 import { rng, TAU, box, limb, grassTexture, sandTexture, woodTexture, stoneTexture, stripeTexture, armsTexture, canvasTex, photoSet, photoTex, worldUV, detailWorld } from './util.js';
@@ -32,6 +36,8 @@ export function buildWorld(scene, renderer, venue = {}) {
   const T = !!V.training;      // the training ground: no stands, crowd, royal box, props, tents or backdrop town; see src/training.js
   const tint = (hex, base) => { const a = new THREE.Color(hex), b = new THREE.Color(base); return new THREE.Color(Math.min(1.6, a.r / b.r), Math.min(1.6, a.g / b.g), Math.min(1.6, a.b / b.b)); };
   const r = rng(1234);
+  // the code-built tilt, fence, stands and royal box: what is on screen until the modelled lists arrive (src/lists.js), and for good if they do not
+  const cheap = new THREE.Group(), cheapFlags = []; grp.add(cheap); let tiltOn = true;
 
   // ---------- sky, sun, fog ----------
   const sunDir = new THREE.Vector3(...V.sun).normalize();
@@ -84,7 +90,7 @@ export function buildWorld(scene, renderer, venue = {}) {
   grp.add(hemi);
   const low = 1 - Math.min(1, Math.max(0, (sunDir.y - 0.25) / 0.5));
   const sun = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).lerp(new THREE.Color(0xffb070), low * 0.8), 3.1 - low * 0.5);
-  sun.castShadow = true;
+  sun.castShadow = GFX.shadowOn !== false;      // (Settings > Graphics > Shadows: off)
   sun.shadow.mapSize.set(GFX.shadow, GFX.shadow);      // 4096 (2048 on phones) at high, 2048 medium, 1024 low
   const sc = sun.shadow.camera;
   sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 220;
@@ -94,6 +100,7 @@ export function buildWorld(scene, renderer, venue = {}) {
   const lastFocus = new THREE.Vector3();
   /** Live change of the shadow map size (the frame-time safety net dropped a tier). */
   world.setShadowSize = (n) => { sun.shadow.mapSize.set(n, n); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } };
+  world.setShadows = (on) => { sun.castShadow = !!on; };
   world.focusShadow = (p) => {
     lastFocus.copy(p);
     sun.target.position.set(p.x, 0, p.z);
@@ -125,18 +132,14 @@ export function buildWorld(scene, renderer, venue = {}) {
   const grass = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), (() => { const ps = photoSet('leafy_grass', [520, 520]), g = new THREE.Color(V.grass);
     // the scan is of dry, leafy turf: divide its own colour out so the field takes the venue's green, and drift the tone so the tiling does not show
     const m = new THREE.MeshStandardMaterial({ normalMap: ps.normalMap, roughnessMap: ps.roughnessMap, color: new THREE.Color(g.r * 1.75 + 0.02, g.g * 1.22, g.b * 1.8 + 0.01), roughness: 1, envMapIntensity: 0.25 });
-    return detailWorld(m, photoTex('leafy_grass', 'diff'), { scale: 0.33, mean: [0.32, 0.236, 0.106], strength: 0.9, macro: 0.45 }); })());
+    const d = new THREE.Color(V.sand).multiplyScalar(0.55);
+    return groundShader(m, { kind: 'grass', diff: photoTex('leafy_grass', 'diff'), mean: [0.32, 0.236, 0.106], dirt: [d.r, d.g, d.b], half: [9.5, 51] }); })());
   grass.rotation.x = -Math.PI / 2; grass.receiveShadow = true; grp.add(grass);
 
-  const sandMat = new THREE.MeshStandardMaterial(Object.assign(photoSet('sand_01', [7, 37]), { normalScale: new THREE.Vector2(1.5, 1.5), color: tint(V.sand, '#b89a6a').multiplyScalar(1.05), roughness: 1, envMapIntensity: 0.2 }));
+  const sandMat = groundShader(new THREE.MeshStandardMaterial(Object.assign(photoSet('sand_01', [7, 37]), { normalScale: new THREE.Vector2(1.5, 1.5), color: tint(V.sand, '#b89a6a').multiplyScalar(1.05), roughness: 1, envMapIntensity: 0.2 })), { kind: 'sand', lane: LANE_X, half: [9.5, 51] });
   const sand = new THREE.Mesh(new THREE.PlaneGeometry(19, 102), sandMat);
   sand.rotation.x = -Math.PI / 2; sand.position.y = 0.012; sand.receiveShadow = true; grp.add(sand);
-  // churned running lanes
-  const laneMat = new THREE.MeshStandardMaterial({ color: 0x6e5636, roughness: 1, transparent: true, opacity: 0.38, depthWrite: false, envMapIntensity: 0.1 });
-  for (const sx of [-1, 1]) {
-    const lane = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 92), laneMat);
-    lane.rotation.x = -Math.PI / 2; lane.position.set(sx * LANE_X, 0.02, 0); lane.receiveShadow = true; grp.add(lane);
-  }
+  // (the churned running lanes are painted into the sand shader, src/ground.js: they used to be two hard-edged dark decal strips)
 
   // ---------- tilt barrier ----------
   const woodMat = worldUV(new THREE.MeshStandardMaterial(Object.assign(photoSet('weathered_brown_planks'), { color: 0xd9c4a6, roughness: 1, envMapIntensity: 0.3 })), 0.55);
@@ -154,8 +157,8 @@ export function buildWorld(scene, renderer, venue = {}) {
     const m = new THREE.Matrix4();
     for (let i = 0; i < 17; i++) { m.makeTranslation(0, 0.68, -LIST_HALF + i * 4); posts.setMatrixAt(i, m); }
     posts.castShadow = true; tilt.add(posts);
-    grp.add(tilt);
-    world.setTilt = (on) => { tilt.visible = !!on; };
+    cheap.add(tilt);
+    world.setTilt = (on) => { tiltOn = !!on; tilt.visible = tiltOn; if (world.lists) world.lists.setTilt(tiltOn); };
   }
 
   // ---------- outer lists fence ----------
@@ -165,18 +168,18 @@ export function buildWorld(scene, renderer, venue = {}) {
     const add = (x1, z1, x2, z2) => {
       const len = Math.hypot(x2 - x1, z2 - z1), n = Math.round(len / 3);
       for (let i = 0; i <= n; i++) pts.push([x1 + (x2 - x1) * i / n, z1 + (z2 - z1) * i / n]);
-      for (const y of [0.55, 1.05]) grp.add(limb([x1, y, z1], [x2, y, z2], 0.045, 0.045, woodMat, 6));
+      for (const y of [0.55, 1.05]) cheap.add(limb([x1, y, z1], [x2, y, z2], 0.045, 0.045, woodMat, 6));
     };
     add(-9.5, -51, -9.5, 51); add(9.5, -51, 9.5, 51);
     add(-9.5, -51, -3, -51); add(3, -51, 9.5, -51); add(-9.5, 51, -3, 51); add(3, 51, 9.5, 51);
     const posts = new THREE.InstancedMesh(postG, woodMat, pts.length);
     const m = new THREE.Matrix4();
     pts.forEach((p, i) => { m.makeTranslation(p[0], 0.62, p[1]); posts.setMatrixAt(i, m); });
-    posts.castShadow = true; grp.add(posts);
+    posts.castShadow = true; cheap.add(posts);
   }
 
   // ---------- flags / banners ----------
-  const bannerMats = BANNER_ARMS.map(a => new THREE.MeshStandardMaterial({ map: armsTexture(a, 128, 256), side: THREE.DoubleSide, roughness: 0.9, envMapIntensity: 0.2 }));
+  const bannerMats = BANNER_ARMS.map(a => new THREE.MeshStandardMaterial({ map: armsTexture(a, 256, 512, undefined, { style: 'cloth' }), side: THREE.DoubleSide, roughness: 0.9, envMapIntensity: 0.2 }));
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a3823, roughness: 0.8 });
   function addBanner(x, z, h, bw, bh, matIdx, rotY = 0) {
     const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY;
@@ -200,7 +203,7 @@ export function buildWorld(scene, renderer, venue = {}) {
   const crowdSpots = [];
   const awningTexA = stripeTexture(V.awn[0], V.awn[1], 8, [5, 1]);
   const awningTexB = stripeTexture(V.awn2[0], V.awn2[1], 8, [5, 1]);
-  const drapeMats = BANNER_ARMS.map(a => new THREE.MeshStandardMaterial({ map: armsTexture(a, 128, 128), roughness: 0.95, envMapIntensity: 0.2 }));
+  const drapeMats = BANNER_ARMS.map(a => new THREE.MeshStandardMaterial({ map: armsTexture(a, 256, 256, undefined, { style: 'cloth' }), roughness: 0.95, envMapIntensity: 0.2 }));
   function stand(side) {
     const g = new THREE.Group();
     const x0 = 12.5, tiers = 7, td = 1.35, th = 0.62, len = 70, baseH = 1.5;
@@ -232,28 +235,28 @@ export function buildWorld(scene, renderer, venue = {}) {
       g.add(limb([backX, 0, z], [backX, topY + 3.9, z], 0.09, 0.08, woodDark, 6));
     }
     g.scale.x = side;
-    grp.add(g);
+    cheap.add(g);
     // pennants along the roof line
-    for (let i = 0; i < 6; i++) addBanner(side * (x0 - 0.3), -35 + i * 14, topY + 4.4, 1.5, 0.7, i + (side > 0 ? 1 : 5), side > 0 ? 0 : Math.PI);
+    for (let i = 0; i < 6; i++) cheapFlags.push(addBanner(side * (x0 - 0.3), -35 + i * 14, topY + 4.4, 1.5, 0.7, i + (side > 0 ? 1 : 5), side > 0 ? 0 : Math.PI));
   }
   if (!T) { stand(1); stand(-1); }
 
   // royal box
   if (T) { world.royals = []; world.royal = { kind: 'idle', t0: -99 }; world.setRoyalMood = () => {}; }
   else {
-    const g = new THREE.Group();
+    const g = new THREE.Group(), cg = new THREE.Group(); cheap.add(cg);      // cg: the box itself (replaced by the modelled one); g: the king and queen
     const purple = new THREE.MeshStandardMaterial({ color: 0x5c1f6e, roughness: 0.85, side: THREE.DoubleSide });
     const gold = new THREE.MeshStandardMaterial({ color: 0xd9b23c, metalness: 1, roughness: 0.35 });
-    g.add(box([15.6, 2.25, 0], [4.2, 0.25, 9.4], woodDark));
-    g.add(box([13.45, 2.9, 0], [0.12, 1.1, 9.4], purple));
+    cg.add(box([15.6, 2.25, 0], [4.2, 0.25, 9.4], woodDark));
+    cg.add(box([13.45, 2.9, 0], [0.12, 1.1, 9.4], purple));
     const roof = new THREE.Mesh(new THREE.ConeGeometry(6.6, 2.6, 4, 1), purple);
-    roof.rotation.y = Math.PI / 4; roof.scale.set(0.62, 1, 1); roof.position.set(15.6, 7.9, 0); roof.castShadow = true; g.add(roof);
-    for (const [x, z] of [[13.6, -4.6], [13.6, 4.6], [17.6, -4.6], [17.6, 4.6]]) g.add(limb([x, 2.3, z], [x, 6.7, z], 0.09, 0.09, gold, 8));
-    const fin = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8), gold); fin.position.set(15.6, 9.3, 0); g.add(fin);
+    roof.rotation.y = Math.PI / 4; roof.scale.set(0.62, 1, 1); roof.position.set(15.6, 7.9, 0); roof.castShadow = true; cg.add(roof);
+    for (const [x, z] of [[13.6, -4.6], [13.6, 4.6], [17.6, -4.6], [17.6, 4.6]]) cg.add(limb([x, 2.3, z], [x, 6.7, z], 0.09, 0.09, gold, 8));
+    const fin = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8), gold); fin.position.set(15.6, 9.3, 0); cg.add(fin);
     // thrones + king & queen — they applaud, rise to their feet, or turn away
     const robe = [0x8a1616, 0x1d3f8a]; world.royals = [];
     [-0.9, 0.9].forEach((z, i) => {
-      g.add(box([16.0, 3.3, z], [0.25, 1.9, 1.0], woodDark));
+      cg.add(box([16.0, 3.3, z], [0.25, 1.9, 1.0], woodDark));
       const fig = new THREE.Group(); fig.position.set(15.5, 2.4, z); fig.rotation.y = -Math.PI / 2;
       const robeMat = new THREE.MeshStandardMaterial({ color: robe[i], roughness: 0.8 }), skinMat = new THREE.MeshStandardMaterial({ color: 0xe0b896, roughness: 0.8 });
       const ermine = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9 });
@@ -272,7 +275,7 @@ export function buildWorld(scene, renderer, venue = {}) {
     world.setRoyalMood = (kind) => { world.royal = { kind, t0: world.now || 0 }; };
     for (let z = -4; z <= 4; z += 1) { if (Math.abs(z) > 1.6) crowdSpots.push([15.2 + r() * 1.5, 2.37, z + r() * 0.3, 1, 2]); }
     grp.add(g);
-    addBanner(13.6, -4.6, 9.6, 1.9, 1.1, 0, 0); addBanner(13.6, 4.6, 9.6, 1.9, 1.1, 5, 0);
+    cheapFlags.push(addBanner(13.6, -4.6, 9.6, 1.9, 1.1, 0, 0), addBanner(13.6, 4.6, 9.6, 1.9, 1.1, 5, 0));
   }
 
   // ---------- the commons: standing room at the rails ----------
@@ -299,23 +302,25 @@ export function buildWorld(scene, renderer, venue = {}) {
   if (GFX.crowd < 1 && !T) {      // lower tiers: fewer people (the notable ones, class 2 and 3, always stay)
     const keep = rng(777); const kept = crowdSpots.filter(s => s[4] >= 2 || keep() < GFX.crowd); crowdSpots.length = 0; crowdSpots.push(...kept);
   }
-  world.crowd = T ? { update() {}, setColors() {}, ladies: () => [], spotlight() {} } : buildCrowd(grp, crowdSpots, { seed: 99, colorsA: V.colorsA, colorsB: V.colorsB });
+  world.crowd = T ? { update() {}, setColors() {}, ladies: () => [], spotlight() {}, voiceSpot: () => null } : buildCrowd(grp, crowdSpots, { seed: 99, colorsA: V.colorsA, colorsB: V.colorsB });
   world.crowdState = { excitement: 0.12, anticipation: 0, favour: 0, scorer: 0, waveStart: -999, focusZ: 0 };
 
   // ---------- attendants, bunting, lance racks (re-liveried per match) ----------
   let propGrp = null, props = null;
   world.propState = { mode: 'menu', fanfare: false, excitement: 0.12 };
   let liveMats = [];
+  let lastLivery = null;
   world.setLivery = (colorsA, colorsB, armsA, armsB) => {
+    lastLivery = [colorsA, colorsB, armsA, armsB];
     liveMats.forEach(m => { m.map.dispose(); m.dispose(); }); liveMats = [];
     if (armsA && armsB) {
-      const mk = (a) => { const m = new THREE.MeshStandardMaterial({ map: armsTexture(a, 128, 256), side: THREE.DoubleSide, roughness: 0.9, envMapIntensity: 0.2 }); liveMats.push(m); return m; };
+      const mk = (a) => { const m = new THREE.MeshStandardMaterial({ map: armsTexture(a, 256, 512, undefined, { style: 'cloth' }), side: THREE.DoubleSide, roughness: 0.9, envMapIntensity: 0.2 }); liveMats.push(m); return m; };
       const mA = mk(armsA), mB = mk(armsB);
       for (const f of world.flags) { if (Math.abs(Math.abs(f.x) - 9.5) > 0.1) continue; f.mesh.material = f.z <= -24 ? mA : f.z >= 24 ? mB : f.mat0; }
     }
     if (propGrp) { grp.remove(propGrp); propGrp.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
     propGrp = new THREE.Group(); grp.add(propGrp);
-    props = T ? null : buildProps(propGrp, { seed: 7, colorsA, colorsB });
+    props = T ? null : buildProps(propGrp, { seed: 7, colorsA, colorsB, modelled: !!world.lists });
     world.crowd.setColors(colorsA, colorsB);
   };
 
@@ -391,9 +396,26 @@ export function buildWorld(scene, renderer, venue = {}) {
     if (props) props.update(t, dt, world.propState);
   };
 
+  // ---------- the modelled lists (src/lists.js): swapped in for the code-built ones as soon as the pieces are here ----------
+  world.lists = null;
+  const useLists = (lib) => {
+    if (!lib || world.dead || world.lists) return;
+    grp.remove(cheap); cheap.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    for (const b of cheapFlags) { grp.remove(b); b.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    world.flags = world.flags.filter(f => !cheapFlags.includes(f.mesh.parent));
+    const host = KNIGHTS.find(k => k.id === V.host);
+    world.lists = buildLists(grp, lib, { V, arms: BANNER_ARMS, hostArms: host && host.arms, addBanner });
+    world.lists.setTilt(tiltOn);
+    if (!heraldryReady()) whenHeraldry(() => { const L = world.lists; if (L && !world.dead) { L.setHangings(L.hangArms); L.setHostArms(L.hostArms); } });      // the charge atlas arrives later: repaint the hangings and the host's banner with the real charges
+    scene.traverse(o => { if (o.userData.cheapList) o.visible = false; });      // the other files' own daises and stools (ceremony.js, judges.js, stands_life.js)
+    if (lastLivery) world.setLivery(...lastLivery);      // the props again, without the pieces the lists now bring
+  };
+  if (!T) { if (LISTS.lib) useLists(LISTS.lib); else preloadLists().then(useLists); }
+
   scene.add(grp);
   world.dispose = () => {
     world.dead = true;
+    if (world.lists) world.lists.dispose();
     scene.remove(grp);
     grp.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); } });
     if (scene.environment) scene.environment.dispose();

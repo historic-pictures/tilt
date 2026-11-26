@@ -6,7 +6,9 @@
 // OAuth + PKCE: the page keeps the verifier (sessionStorage `tilt.pkce`), the Worker keeps the client secret, and the browser comes back with ?auth=<one-time code>.
 // EVERY CALL FAILS SOFT: a network error is { s: 0 }; the game never waits on it.
 import { DEFAULT_PROFILE, newMan, fixRetinue } from './data.js';
-import { apiBase, signLink, ensure as ensureRank, id as rankId } from './ranks.js';
+import { apiBase, ranksOffline, signLink, ensure as ensureRank, id as rankId } from './ranks.js';
+import { allowedArms, allowedFinish } from './cosmetics.js';
+import { PAY } from './config.js';
 
 const param = (k) => { try { return new URLSearchParams(location.search).get(k); } catch (e) { return null; } };
 const perTab = () => param('net') === 'local';
@@ -24,6 +26,8 @@ export const on = (what, fn) => { hooks[what].push(fn); };
 const fire = (what, ...a) => { for (const f of hooks[what]) { try { f(...a); } catch (e) { console.warn('[account]', e); } } };
 
 export const signedIn = () => !!sess;
+/** When the account's state was last fetched or the cloud save last sent (ms since 1970; 0 = not yet this visit), and whether a change is waiting to be sent. */
+export const syncState = () => ({ at: lastSync, pending: !!pending, error: syncErr });
 export const info = () => (sess ? sess.account : null);
 export const token = () => (sess ? sess.access : '');
 export let message = '';      // the last thing to tell the player (a sign-in that failed, a key that is tied elsewhere)
@@ -43,6 +47,7 @@ async function refresh() {
 }
 async function raw(method, path, body, auth = true, extra = {}) {
   let t = 0;
+  if (ranksOffline()) return { s: 0, j: null };
   try {
     const ctl = new AbortController(); t = setTimeout(() => ctl.abort(), 8000);
     const r = await fetch(apiBase() + path, { method, signal: ctl.signal, ...extra, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(auth && sess ? { Authorization: 'Bearer ' + sess.access } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -122,7 +127,7 @@ export async function fetchMe() {
   if (!sess) return null;
   const r = await api('GET', '/me');
   if (r.s !== 200 || !r.j || !r.j.account) return null;
-  sess.account = r.j.account; keep(); synced = true; fire('sync', r.j);
+  sess.account = r.j.account; keep(); synced = true; lastSync = Date.now(); syncErr = ''; fire('sync', r.j);
   return r.j;
 }
 /** The game's profile object, rebuilt from the server's account: gold, renown and every owned item come from the wallet and the inventory, never from local data. */
@@ -137,9 +142,13 @@ export function buildProfile(me) {
   for (const id of Object.keys(lv)) { const r = keepR[id]; d.retinue[id] = r && r.name ? { name: r.name, trait: r.trait, level: lv[id] } : newMan(id, Object.values(d.retinue).map((x) => x.name)); d.retinue[id].level = lv[id]; }
   fixRetinue(d);
   if (!d.skills) d.skills = {};
+  const ent = me.entitlements || { skus: [], badges: [] };      // what the account has bought (the server's word; store.js keeps the same copy)
+  d.ent = { skus: (ent.skus || []).slice(), badges: (ent.badges || []).slice() };
+  const own = PAY.live ? d.ent.skus : ['charter', 'herald', 'rolls', 'patron', 'finishes'];      // (PAY.live false: the game is free, everything is owned)
+  d.arms = allowedArms(d.arms, own); d.finish = allowedFinish(d.finish, own) || undefined;      // a refunded pack's heraldry falls back to free pieces
   return d;
 }
-let saveT = 0, pending = null, synced = false;      // (nothing is saved to the cloud until the account's own profile has been fetched)
+let saveT = 0, pending = null, synced = false, lastSync = 0, syncErr = '';      // (nothing is saved to the cloud until the account's own profile has been fetched)
 /** The profile changed (a colour, a setting, what he rides): save the cosmetic part to the account soon. Gold, renown and the owned lists are never sent. */
 export function queueSave(profile) {
   if (!sess || !synced) return;
@@ -150,9 +159,43 @@ export async function flushSave() {
   clearTimeout(saveT); if (!sess || !pending) return;
   const doc = pending; pending = null;
   if (JSON.stringify(doc).length > 55000) { delete doc.table; delete doc.stats; delete doc.achievements; }
-  await api('PUT', '/profile', { profile: doc });
+  const r = await api('PUT', '/profile', { profile: doc });
+  if (r.s === 200) { lastSync = Date.now(); syncErr = ''; } else { syncErr = r.s === 0 ? 'the server cannot be reached' : (r.j && r.j.error) || 'refused'; pending = pending || doc; }
 }
-window.addEventListener('pagehide', () => { if (pending && sess) { try { fetch(apiBase() + '/profile', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access }, body: JSON.stringify({ profile: pending }) }); } catch (e) { /* ignore */ } } });
+window.addEventListener('pagehide', () => { if (pending && sess && !ranksOffline()) { try { fetch(apiBase() + '/profile', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access }, body: JSON.stringify({ profile: pending }) }); } catch (e) { /* ignore */ } } });
+
+
+// ------------------------------------------------------------------ managing the account (src/account_panel.js)
+const failText = (r, what) => (r.s === 0 ? 'The server cannot be reached.' : r.s === 429 ? 'Too many tries, wait a moment.' : (r.j && r.j.error ? r.j.error[0].toUpperCase() + r.j.error.slice(1) + '.' : what + ' failed.'));
+/** Send what is waiting to the cloud now, then fetch the account again. Resolves { ok, error }. */
+export async function syncNow() {
+  if (!sess) return { ok: false, error: 'Not signed in.' };
+  await flushSave();
+  if (syncErr) return { ok: false, error: syncErr[0].toUpperCase() + syncErr.slice(1) + '.' };
+  const me = await fetchMe();
+  return me ? { ok: true } : { ok: false, error: 'The server cannot be reached.' };
+}
+/** Change the display name (the server cleans it and checks it against the block-list). Resolves { ok, name } or { ok:false, error }. */
+export async function rename(name) {
+  const r = await api('POST', '/account/name', { name });
+  if (r.s === 200 && r.j && r.j.ok) { await fetchMe(); return { ok: true, name: r.j.name }; }
+  return { ok: false, error: r.s === 422 ? 'That name is not allowed.' : failText(r, 'Renaming') };
+}
+/** Sign out of every device (all sessions of this account end, this one too). */
+export async function signOutAll() {
+  const r = await api('POST', '/auth/logout-all', {});
+  if (r.s !== 200) return { ok: false, error: failText(r, 'Signing out') };
+  sess = null; synced = false; keep(); fire('change', false);
+  return { ok: true, revoked: r.j && r.j.revoked };
+}
+/** Erase the account and its server data. The caller has already had the player type DELETE. */
+export async function deleteAccount() {
+  const r = await api('POST', '/account/delete', { confirm: 'DELETE' });
+  if (r.s !== 200) return { ok: false, error: failText(r, 'Deleting') };
+  sess = null; synced = false; pending = null; keep();
+  fire('change', false);
+  return { ok: true };
+}
 
 // ------------------------------------------------------------------ the shop and the rewards (the server decides every amount)
 /** Ask the server to sell an item ("horse:destrier", "cap:plain", "retinue:groom", "train:groom"). Resolves { ok, wallet, inventory } or { ok:false, error }. */

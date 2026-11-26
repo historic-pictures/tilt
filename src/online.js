@@ -113,7 +113,7 @@ export function applyRider(j, s) {
   j.root.position.set(-s.x, 0, -s.z); j.root.rotation.set(0, s.ry + Math.PI, s.rz);
   j.speed = s.sp; j.lanceLower = s.ll; j.aimLocal.set(s.ax, s.ay, s.az).normalize(); j.brace = s.br; j.guard = s.gd; j.raiseT = s.rs; j.look = s.lk; j.rear = s.re; j.agit = s.ag;
   j.visorUp = !!s.vu; j.helmOff = !!s.ho;
-  if (j.unhorsed && s.u && s.rp) {
+  if (j.unhorsed && s.u && s.rp && !j.rag) {      // (a ragdoll runs on both screens from the same launch: jouster.js _ragStart)
     j.rider.position.set(-s.rp[0], s.rp[1], -s.rp[2]); _q.set(s.rq[0], s.rq[1], s.rq[2], s.rq[3]).normalize(); j.rider.quaternion.copy(_yaw).multiply(_q); j.torsoD.rotation.x = s.tx;
   }
 }

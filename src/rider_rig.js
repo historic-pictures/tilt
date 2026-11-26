@@ -13,16 +13,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { GFX } from './gfx.js';
+import { GFX, wantNewModels } from './gfx.js';
 import { touchMode } from './touch.js';
 import { expect, progress, done } from './loadmeter.js';
+import { PHYS } from './data.js';
+import { trapperTexture } from './util.js';
 
 const DIR = new URL('../assets/models/armour/', import.meta.url).href;
 /** The rig is 1.73 m; the game's old code-built rider (the frame every number in PHYS.hitboxes is in) was 1 / KS times that. */
 export const KS = 0.8394;
 const QP = new URLSearchParams(location.search).get('rider');
 /** ?rider=rig forces the rig, ?rider=old the code-built rider; otherwise the rig on high and medium, the code-built rider on low (phones stay light). */
-export const riderWanted = () => (QP ? QP !== 'old' : GFX.tier !== 'low');
+export const riderWanted = () => (QP ? QP !== 'old' : wantNewModels());
 export const HARNESSES = ['mail', 'bascinet', 'milanese', 'stechzeug'], HELMS = ['greathelm', 'bascinet', 'armet', 'frogmouth'];
 /** lance id (data.js LANCES) -> glb; its tint mask is `<file>_mask_<res>.png` */
 export const LANCE_FILES = { light: 'lance_light', standard: 'lance', heavy: 'lance_heavy' };
@@ -172,6 +174,34 @@ function tintTexture(src, mask, c1, c2, key) {
   tintCache.set(id, t); return t;
 }
 
+/** Where the arms sit on each harness's cloth, in the figure's own bind pose (metres): left edge, top, width, and the panel's height and the arms' share of it in widths. */
+const R_ARMS = { mail: { x: -0.225, top: 1.47, w: 0.45, span: 2.25, arms: 1.38 }, bascinet: { x: -0.225, top: 1.46, w: 0.45, span: 1.38, arms: 1.38 } };
+const maskTex = new Map();
+/**
+ * The knight's arms on his surcoat or jupon, breast and back. The cloth is already dyed in the field's tincture (tintTexture, with all the folds of the scan in it);
+ * here the arms are laid over it from the front in the bind pose (the vertex shader's `position`), where the mask says cloth, as that dye's colour swapped for the arms' own.
+ * On the back they are turned round so they still read true; round the sides the cloth keeps the plain field.
+ */
+function armsOnCloth(m, mask, arms, B) {
+  let mt = maskTex.get(mask); if (!mt) { mt = new THREE.Texture(mask); mt.flipY = false; mt.needsUpdate = true; maskTex.set(mask, mt); }
+  const at = trapperTexture(arms, GFX.halfTex ? 256 : 512, B.span, B.arms); at.wrapS = THREE.ClampToEdgeWrapping; at.anisotropy = Math.min(4, GFX.aniso || 4);
+  const c1 = new THREE.Color(arms.c1);
+  m.customProgramCacheKey = () => 'armsOnCloth';
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uArms = { value: at }; sh.uniforms.uArmsMask = { value: mt }; sh.uniforms.uArmsC1 = { value: c1 };
+    sh.uniforms.uArmsBox = { value: new THREE.Vector4(B.x, B.top, 1 / B.w, 1 / (B.span * B.w)) };
+    sh.vertexShader = 'uniform vec4 uArmsBox; varying vec3 vArmsP;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vArmsP = vec3((position.x - uArmsBox.x) * uArmsBox.z, 1.0 - (uArmsBox.y - position.y) * uArmsBox.w, normal.z);`);
+    sh.fragmentShader = 'uniform sampler2D uArms; uniform sampler2D uArmsMask; uniform vec3 uArmsC1; varying vec3 vArmsP;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      { vec2 q = vArmsP.xy; if (vArmsP.z < 0.0) q.x = 1.0 - q.x;
+        float k = texture2D(uArmsMask, vMapUv).r * smoothstep(0.12, 0.4, abs(vArmsP.z)) * step(0.0, q.x) * step(q.x, 1.0);
+        vec3 ac = texture2D(uArms, clamp(q, 0.003, 0.997)).rgb;
+        float shade = (diffuseColor.r + diffuseColor.g + diffuseColor.b) / max(uArmsC1.r + uArmsC1.g + uArmsC1.b, 0.02);      // the scan's folds and wear, as light and dark only: the arms keep their own hue
+        diffuseColor.rgb = mix(diffuseColor.rgb, min(ac * shade, vec3(1.0)), k); }`);
+  };
+  m.needsUpdate = true;
+}
+
 // ------------------------------------------------------------------------------------------------ the body of one rider
 /** Two-bone IK: bring the wrist of chain A (upper arm) -> F (forearm) -> H (hand) to `tgt` (world) and the hand to world rotation `hq`. The elbow keeps the side it was on. */
 const _s = new THREE.Vector3(), _el = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3(), _p = new THREE.Vector3(), _e2 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _d1 = new THREE.Vector3(), _d2 = new THREE.Vector3();
@@ -193,6 +223,81 @@ export function solveArm(A, F, H, tgt, hq) {
   return reach;
 }
 
+
+// ------------------------------------------------------------------------------------------------ riding: the body gives to the saddle
+// Stages of the chain, one bone each. Channels: 0 vertical (m), 1 pitch (rad), 2 sideways (m), 3 roll (rad), 4 yaw (rad).
+const RIDE_BONES = ['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head'], NS = 6, NC = 5;
+/** The state of one rider's give: followers (position / velocity per stage and channel), the saddle's signal, the results the pose and the legs read. No allocations after this. */
+export function newRide() {
+  return { init: false, k: 1, sig: new Float64Array(NC), syn: new Float64Array(3), z: new Float64Array(NS * NC), v: new Float64Array(NS * NC), rel: new Float64Array(NS * NC),
+    surge: 0, surgeV: 0, surgeRel: 0, mean: 0, meanV: 0, dev: 0, tipY: 0, tipYV: 0, tipX: 0, tipXV: 0, shY: 0, shYV: 0, shX: 0, shXV: 0, sh: new Float64Array(4),
+    legF: 0, legSw: 0, legSide: 0, wobX: 0, wobY: 0 };
+}
+/** damped follower: z'' = w^2 (in - z) - 2 zeta w z'; semi-implicit Euler (h small enough that w h < 1) */
+function follow(r, key, inp, w, zt, h) { const kv = key + 'V'; r[kv] += (w * w * (inp - r[key]) - 2 * zt * w * r[kv]) * h; r[key] += r[kv] * h; }
+/**
+ * One step of the ride. R.ride.sig holds the saddle's vertical (m), pitch (rad), sideways (m), roll and yaw (rad); speed is the ground speed (m/s); fade 0..1 takes the ride away
+ * (he has come off). Everything is relative to the saddle: a steady saddle gives zero. Called from Jouster.update.
+ */
+export function rideStep(R, dt, speed, fade) {
+  const D = PHYS.ride, r = R.ride, z = r.z, v = r.v, rel = r.rel, sg = r.sig, on = D.on * fade, N3 = 3 * NC;
+  r.k = on;
+  if (!r.init) {      // start in equilibrium with the saddle: no transient at the first frame
+    for (let s = 0; s < NS; s++) for (let c = 0; c < NC; c++) { z[s * NC + c] = sg[c]; v[s * NC + c] = 0; }
+    r.surge = speed; r.mean = sg[0]; r.tipY = z[N3] + 0.45 * z[N3 + 1]; r.tipX = z[N3 + 2]; r.shY = z[N3]; r.shX = z[N3 + 2]; r.init = true;
+  }
+  if (dt > 0) {
+    dt = Math.min(dt, 0.05); const n = Math.ceil(dt / 0.007), h = dt / n;
+    for (let k = 0; k < n; k++) {
+      for (let c = 0; c < NC; c++) for (let s = 0; s < NS; s++) {
+        const i = s * NC + c, w = D.chain[s][0], zt = D.chain[s][1];
+        v[i] += (w * w * ((s ? z[i - NC] : sg[c]) - z[i]) - 2 * zt * w * v[i]) * h; z[i] += v[i] * h;
+      }
+      follow(r, 'surge', speed, D.surgeW, D.surgeZ, h); follow(r, 'mean', sg[0], 2.5, 1, h);
+      // the lance (a heavy beam held out in front) and the shield arm follow the chest (stage 3); the hand is about half a metre in front of the chest's axis, so its pitch counts
+      follow(r, 'tipY', z[N3] + 0.45 * z[N3 + 1], D.tipW, D.tipZ, h); follow(r, 'tipX', z[N3 + 2], D.tipW, D.tipZ, h);
+      follow(r, 'shY', z[N3], D.shW, D.shZ, h); follow(r, 'shX', z[N3 + 2], D.shW, D.shZ, h);
+    }
+  }
+  for (let s = 0; s < NS; s++) for (let c = 0; c < NC; c++) { const i = s * NC + c; rel[i] = (z[i] - (s ? z[i - NC] : sg[c])) * on; }
+  r.dev = (sg[0] - r.mean) * on;      // how far the saddle is from its mean height now: what the spine takes up
+  r.surgeRel = D.surgeMax * Math.tanh((r.surge - speed) * D.surgeK / D.surgeMax) * on;      // positive while the horse slows (the trunk goes forward), negative while it picks up
+  // legs: the pelvis's give opens and closes the hips; the saddle's pitch swings the shins; the sway swings them sideways in the irons
+  r.legF = D.legF * (rel[NC] + rel[0]) * 0.5; r.legSw = D.legSwing * (rel[1] + rel[NC + 1]) * 0.5; r.legSide = D.legSide * (rel[2] + rel[NC + 2]);
+  // the lance tip lags the hand: a turn about the grip; the shield shakes on its arm
+  const L = Math.max(1, R.reach || 2.8), dy = clamp(r.tipY - z[N3] - 0.45 * z[N3 + 1], -0.12, 0.12), dx = clamp(r.tipX - z[N3 + 2], -0.12, 0.12);
+  r.wobX = -dy * D.tipY / L * on; r.wobY = dx * D.tipX / L * on;
+  const sy = clamp(r.shY - z[N3], -0.05, 0.05), sx = clamp(r.shX - z[N3 + 2], -0.05, 0.05);
+  r.sh[0] = sx * D.shK * on; r.sh[1] = sy * D.shK * on; r.sh[2] = -sy * D.shK * 3 * on; r.sh[3] = sx * D.shK * 3 * on;
+}
+
+/** The ride's results as a flat array (for the replay snapshot) and back: a replay steps the riders with dt = 0, so it reads what was recorded instead of integrating the chain. */
+export function rideSave(r) { return [r.k, r.dev, r.surgeRel, r.legF, r.legSw, r.legSide, r.wobX, r.wobY, r.sh[0], r.sh[1], r.sh[2], r.sh[3], ...r.rel]; }
+export function rideLoad(r, a) {
+  r.k = a[0]; r.dev = a[1]; r.surgeRel = a[2]; r.legF = a[3]; r.legSw = a[4]; r.legSide = a[5]; r.wobX = a[6]; r.wobY = a[7]; r.sh[0] = a[8]; r.sh[1] = a[9]; r.sh[2] = a[10]; r.sh[3] = a[11];
+  for (let i = 0; i < r.rel.length; i++) r.rel[i] = a[12 + i]; r.init = false;
+}
+
+const _ra = new THREE.Euler();
+/** Turn the ride state into bone motion (called from poseRig after the clips and the puppet: additive on a freshly posed skeleton, so safe to repeat) and into the lance's wobble. */
+function rideApply(R) {
+  const D = PHYS.ride, r = R.ride, rel = r.rel, B = R.bones, k = (1 - R.w.stand) * (r.k ? 1 : 0);
+  R.lanceWob.rotation.set(r.wobX * k, r.wobY * k, 0); B.Spine.position.y = R.spineY0;
+  if (k < 0.001) return;
+  // pelvis: gives a little under the saddle (position) and turns a little
+  { const h = B.Hips; h.position.y += rel[0] * D.hipY * k; h.position.x += (rel[2] * D.hipX + r.syn[0] * r.k) * k;      // (the horse's own sway is not in the clip: the pelvis takes it here)
+    _q.setFromEuler(_ra.set(rel[1] * 0.5 * k, (rel[4] + r.syn[2] * r.k) * k, (rel[3] * 0.5 + r.syn[1] * r.k) * k, 'YXZ')); h.quaternion.premultiply(_q);
+    B.Spine.position.y = R.spineY0 - r.dev * D.absorb * k; }      // the trunk sinks into the pelvis as the saddle rises and stands up as it falls
+  // the trunk: each stage's lag in pitch, in vertical and sideways give bends its bone; the three spine bones share the surge jolt, the neck takes a little back
+  for (let s = 1; s < NS; s++) {
+    const i = s * NC, head = s === NS - 1 ? 1 : 0;
+    let px = rel[i + 1] * (D.spineP + head * D.headP) - rel[i] * (D.spineY + head * D.headY);
+    if (s === 1) px += r.surgeRel * 0.25; else if (s === 2) px += r.surgeRel * 0.3; else if (s === 3) px += r.surgeRel * 0.45; else if (s === 4) px -= r.surgeRel * 0.25;
+    const pz = rel[i + 3] * D.spineX + rel[i + 2] * D.spineR, py = rel[i + 4];
+    _q.setFromEuler(_ra.set(px * k, py * k, pz * k, 'YXZ')); B[RIDE_BONES[s]].quaternion.premultiply(_q);
+  }
+}
+
 const SPINE_W = [['Spine', 0.28], ['Spine1', 0.34], ['Spine2', 0.38]];
 
 /**
@@ -210,6 +315,7 @@ export function buildRigRider(J, figure) {
   const paint = (o, mask, c2) => { if (!done.has(o.material)) { const m = o.material.clone(); m.map = tintTexture(o.material.map, mask, arms.c1, c2 || arms.c1, o.material.name || hid); done.set(o.material, m); } o.material = done.get(o.material); };
   if (body && bm) { paint(body, bm); if (meshes.Rider_Head) meshes.Rider_Head.material = body.material; }
   if (FABRIC[hid] && RIG.masks.get(FABRIC[hid])) root.traverse(o => { if (o.isMesh && o.material.name.startsWith(FABRIC[hid])) paint(o, RIG.masks.get(FABRIC[hid]), arms.c2); });
+  if (FABRIC[hid] && RIG.masks.get(FABRIC[hid]) && R_ARMS[hid]) { const seen = new Set(); root.traverse(o => { if (o.isMesh && o.material.name.startsWith(FABRIC[hid]) && !seen.has(o.material)) { seen.add(o.material); armsOnCloth(o.material, RIG.masks.get(FABRIC[hid]), arms, R_ARMS[hid]); } }); }
   R.upper = meshes.Rider_HarnessUpper || null; R.headMesh = meshes.Rider_Head || null;
   // any helm on any harness: the helm file carries the same skeleton, so its mesh is re-bound to this rider's bones by name
   { const hp = helmFor(J.armourDef.helm);
@@ -242,12 +348,14 @@ export function buildRigRider(J, figure) {
   const la = LP.scene.clone(true), lg = new THREE.Group(); J.lance = lg; R.lanceFrame.add(lg);
   { let mat = null; la.traverse(o => { if (o.isMesh && !mat) mat = o.material; });
     const lm = RIG.masks.get(LANCE_FILES[lid]), m2 = mat.clone(); if (lm) m2.map = tintTexture(mat.map, lm, arms.c1, arms.c2, 'lance' + lid); la.traverse(o => { if (o.isMesh) o.material = m2; }); R.lanceMat = m2; }
-  for (const n of ['lance_rear', 'lance_fore', 'lance_vamplate', 'lance_grapper']) { const o = la.getObjectByName(n); o.position.set(0, 0, 0); lg.add(o); }
+  const wob = R.lanceWob = new THREE.Group(); wob.name = 'lanceWob'; lg.add(wob);      // the lance's own wobble (rideStep), turned about the grip: visual, the hit chain reads lg
+  for (const n of ['lance_rear', 'lance_fore', 'lance_vamplate', 'lance_grapper']) { const o = la.getObjectByName(n); o.position.set(0, 0, 0); wob.add(o); }
   lg.getObjectByName('coronel').visible = true; lg.getObjectByName('wartip').visible = false;
   J.lanceFore = lg.getObjectByName('lance_fore'); J.lanceRear = lg.getObjectByName('lance_rear');
   // the lance keeps its modelled length: the game's reach for this rider (hit chain, break points, tip) is that length, grip to the end of the coronel (coronel: light 2.47, standard 2.80, heavy 2.94 m; with the war tip 2.43, 2.88, 2.89 m)
   R.reach = LP.reach; R.reachWar = LP.reachWar; R.lanceId = lid;
   R.gripNow = new THREE.Vector3();
+  R.ride = newRide(); R.spineY0 = bones.Spine.position.y;
   return R;
 }
 
@@ -261,6 +369,7 @@ export function poseRig(J, R) {
   for (const [n, k] of SPINE_W) { const b = R.bones[n]; _q.setFromEuler(_e.set(ax * k, ay * k, az * k, 'YXZ')); b.quaternion.premultiply(_q); }
   // the helm's nod, turn and tilt (relative to the torso) go on the neck: the helm rides the Head bone, so the whole head follows
   { const b = R.bones.Neck; _q.setFromEuler(_e.set(H.x, H.y, H.z, 'YXZ')); b.quaternion.premultiply(_q); }
+  rideApply(R);      // the give to the saddle: hips, spine, neck and head lag (additive on the above), the lance's wobble
   // where the fist is: the grip, blended with the pose, in the lance frame (+ the jolt of the arm)
   legsRig(J, R);      // the legs wrap the horse's barrel (additive on the clips; see fitLegs)
   const g = P.grips; R.gripNow.copy(g.seated).lerp(g.raised, w.raised).lerp(g.couch, w.couch);
@@ -281,16 +390,16 @@ const worldTurn = (out, rq, q) => out.copy(rq).multiply(q).multiply(_lq3.copy(rq
  * The splay fades as the rider goes limp (the Stand pose).
  */
 export function legsRig(J, R) {
-  const L = R.legs, k = 1 - R.w.stand; if (!L || k < 0.001) return;
+  const L = R.legs, k = 1 - R.w.stand, rd = R.ride; if (!L || k < 0.001) return;
   R.root.updateMatrixWorld(true); J.rider.getWorldQuaternion(_rq);
   const rq = _rq, up_ = _lup, lg_ = _llg, dq = _ldq;
   for (let i = 0; i < 2; i++) {
     const side = i ? 'Right' : 'Left', s = i ? -1 : 1, B = R.bones, up = B[side + 'UpLeg'], kn = B[side + 'Leg'], ft = B[side + 'Foot'];
     if (!up || !kn || !ft || (!L.a[i] && !L.g[i] && !L.f[i])) continue;
-    legQ(up_, s * L.a[i] * k, L.f[i] * k); legQ(lg_, s * L.g[i] * k, 0);
+    legQ(up_, s * L.a[i] * k, (L.f[i] + rd.legF) * k); legQ(lg_, (s * L.g[i] + rd.legSide) * k, rd.legSw * k);
     rotateWorld(up, worldTurn(dq, rq, up_)); up.updateMatrixWorld(true);
     rotateWorld(kn, worldTurn(dq, rq, lg_.multiply(_lq2.copy(up_).invert()))); kn.updateMatrixWorld(true);      // (lg_ is spent after this)
-    legQ(lg_, s * L.g[i] * k, 0);
+    legQ(lg_, (s * L.g[i] + rd.legSide) * k, rd.legSw * k);
     rotateWorld(ft, worldTurn(dq, rq, lg_.invert())); ft.updateMatrixWorld(true);
   }
 }

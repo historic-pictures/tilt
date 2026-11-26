@@ -20,7 +20,9 @@ export const apiBase = () => base();
 let authToken = () => '';
 /** main.js: where the signed-in account's bearer token comes from (ranked reports must carry it). */
 export const setAuthSource = (fn) => { authToken = fn; };
-const base = () => { const u = param('ranks'); return u && /^(http:\/\/localhost|https:\/\/)/.test(u) ? u.replace(/\/+$/, '') : DEFAULT_URL; };
+/** TEST SWITCH: the live workers are never called from a local page. `?ranks=off` (or localhost/127.0.0.1/[::1] without `?ranks=live`) = offline: every call fails soft (null / { s: 0 }). `?ranks=http://localhost:8787` still points at a local wrangler dev. */
+export const ranksOffline = () => { const u = param('ranks'); if (u === 'off') return true; if (u === 'live') return false; if (u && /^http:\/\/(localhost|127\.0\.0\.1)/.test(u)) return false; try { return /^(localhost|127\.0\.0\.1|\[::1\]|\[?::1\]?)$/.test(location.hostname); } catch (e) { return false; } };
+const base = () => { if (ranksOffline()) return ''; const u = param('ranks'); return u && /^(http:\/\/localhost|https:\/\/)/.test(u) ? u.replace(/\/+$/, '') : DEFAULT_URL; };
 
 const b64u = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const unb64u = (s) => { s = String(s).replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); };
@@ -30,6 +32,7 @@ const ALG = { name: 'ECDSA', namedCurve: 'P-256' }, SIG = { name: 'ECDSA', hash:
 // ------------------------------------------------------------------ the HTTP call: JSON in, JSON out, null when it fails
 async function call(method, path, body) {
   let t = 0;
+  if (ranksOffline()) return null;
   try {
     const ctl = new AbortController(); t = setTimeout(() => ctl.abort(), TIMEOUT);
     const r = await fetch(base() + path, { method, signal: ctl.signal, ...(body ? { body: JSON.stringify(body) } : {}), headers: { ...(body ? { 'Content-Type': 'text/plain' } : {}), ...(path === '/result' && authToken() ? { Authorization: 'Bearer ' + authToken() } : {}) } });

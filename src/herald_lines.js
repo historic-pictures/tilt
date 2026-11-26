@@ -452,3 +452,64 @@ export const RESEARCH_NOTES = `PART 1 FINDINGS (a to e). Sources read: Tiptoft's
 (d) Crowd: at Saint-Inglevert a crowd of heralds, trumpeters, minstrels and all ranks shouted the names of the fighters. The Church's bans: [U] detail; lords largely ignored them.
 
 (e) A Knight's Tale [U]: a peasant competes under a false pedigree, whereas heralds checked noble birth; it uses simple points and spectacle shattering, not the judges' cheque; and it has rock music.`;
+
+// ---------------------------------------------------------------- the owner's brief (Nov 2026): more variety, the tone of a real herald's cry (plain English, no thee/thou), arms, horse, crowd and score named.
+// Appended to the pools above; main.js pickLine() never repeats a line within a match until a pool is used up. {hisArms} and {hisHorse} are filled by herald() in main.js.
+const more = (arr, ...l) => { arr.push(...l); };
+// the roll call before the first and the last course (spoken from the rail with the scroll, see ceremony.js: the announcer unrolls it while he speaks)
+HERALD.callKnights = [
+  "Oyez! {himFull}, of {land}, in {hisArms}, against {you}, in {arms}. Ride when the flag falls.",
+  "Hear the heralds! {you}, in {arms}, and {himFull} of {land}, in {hisArms}. The {course} course!",
+  "Make way, good people. {himFull} of {land} wears {hisArms}. {you} answers in {arms}.",
+  "Knights of the lists: {himFull}, {hisArms}, and {you}, {arms}. God give you good speed.",
+  "Cry the arms! {hisArms} for {himFull}. {arms} for {you}, on his {horse}.",
+  "{himFull}, of {land}, sets his lance against {you}. {hisArms} against {arms}.",
+  "Mark them well, ladies and gentles. {arms} on the one hand, {hisArms} on the other.",
+  "Come to the barrier, {him}. And you, {you}. The {course} course, by the marshal's leave.",
+  "A fair field and no favour! {you} on his {horse}, against {himFull} of {land}.",
+  "Hush, the commons! {himFull}, in {hisArms}, rides against {you}, in {arms}.",
+  "Good people of {city}, behold: {you}, in {arms}, and {himFull} of {land}, in {hisArms}.",
+  "Lances up! {you} for {arms}, {him} for {hisArms}. The {course} course, and God defend the right.",
+  "By the king's peace, {himFull} and {you} run the {course} course. Let none cry out.",
+  "Sirs, to your marks! {hisArms} on one side, {arms} on the other, and all {city} watching.",
+  "Let it be known: {you}, in {arms}, meets {himFull} of {land}. The score stands {yourScore} to {hisScore}.",
+  "Neither knight has yielded. {him}, in {hisArms}. {you}, in {arms}. The {course} course, and no mercy asked.",
+];
+more(HERALD.courseStart,
+  "God speed you both. The {course} course.", "By the marshal's leave, the {course} course.", "The {course} course. Fair play, and no foul.", "The crowd is hushed. The {course} course.",
+  "Sound the horn! The {course} course.", "Ride well. The {course} course.", "The {course} course, and may the best lance win.", "Barrier clear. The {course} course.",
+  "Tighten your girths. The {course} course.", "The {course} course. {him} is waiting.", "All eyes on the sand. The {course} course.", "Visors down. The {course} course begins.");
+more(HERALD.RES_YOU.miss, "{you} rides through empty air.", "The point finds nothing for {you}.", "{you}'s lance goes wide, and the crowd groans.", "{you} strikes at the wind.");
+more(HERALD.RES_YOU.attaint, "{you} touches, and the lance holds.", "A good touch from {you}.", "{you}'s point lands true, and the ash holds.", "A touch, and a fair one, for {you}.");
+more(HERALD.RES_YOU.glance, "{you} is turned aside.", "A slide of steel from {you}.", "{you}'s point finds only a curve of plate.");
+more(HERALD.RES_YOU.breakShield, "{you} splinters the shield, and the crowd roars.", "Wood flies from {you}'s lance on the shield.", "A shield cracked by {you}.", "{you} breaks his ash upon the shield.");
+more(HERALD.RES_YOU.breakBody, "{you} breaks his ash on the breastplate.", "A body stroke, well broken by {you}.", "The breastplate rings under {you}'s lance.", "A hard break on the body for {you}.");
+more(HERALD.RES_YOU.helm, "{you} rings the helm and breaks his lance!", "On the helm! {you} breaks true.", "{you} strikes the head, and the lance flies in pieces.");
+more(HERALD.RES_HIM.miss, "{him} rides through air.", "{him}'s lance goes wide.", "The point of {him} finds nothing.", "{him} strikes at the wind.");
+more(HERALD.RES_HIM.attaint, "{him} touches, and the lance holds.", "A good touch from {him}.", "{him}'s point lands true, and the ash holds.");
+more(HERALD.RES_HIM.glance, "{him} is turned aside.", "A slide of steel from {him}.", "{him}'s point finds only a curve of plate.");
+more(HERALD.RES_HIM.breakShield, "{him} splinters your shield, and the crowd roars.", "Wood flies from {him}'s lance on your shield.", "{him} breaks his ash upon your shield.");
+more(HERALD.RES_HIM.breakBody, "{him} breaks his ash on your breastplate.", "A hard break on your body by {him}.", "Your breastplate rings under {him}'s lance.");
+more(HERALD.RES_HIM.helm, "{him} rings your helm and breaks his lance!", "On your helm! {him} breaks true.", "{him} strikes your head, and the lance flies in pieces.");
+more(HERALD.RES_BOTH.miss, "Two lances, and only air between them.", "Both riders strike at the wind.");
+more(HERALD.RES_BOTH.attaint, "A touch each, and not a splinter.", "Both touch, and both lances hold.");
+more(HERALD.RES_BOTH.breakShield, "Splinters on both shields!", "Two ash lances shivered at once!");
+more(HERALD.RES_BOTH.breakBody, "Splinters from both lances, body to body!", "Two breastplates ring, two lances break!");
+more(HERALD.RES_BOTH.helm, "Both helms ring, and both lances break!");
+more(HERALD.RES_UNHORSE_YOU, "{him} is thrown over his horse's tail by {you}!", "{you} sends {him} to the sand, and the stands rise!", "Down goes {him}! A noble stroke by {you}!", "{him} is out of the saddle, and {you} rides on!");
+more(HERALD.RES_UNHORSE_HIM, "{you} is thrown to the sand by {him}!", "Down goes {you}! {him} rides on, victorious.", "{him} sends {you} over his horse's crupper!", "{you} is out of the saddle, and the gallery gasps!");
+more(HERALD.RES_UNHORSE_BOTH, "Both knights are on the sand!", "Two saddles empty, and one roar from the stands!");
+more(HERALD.SCORE.level, "Level at {n}, and the crowd leans in.", "{n} each. Nothing between them.");
+more(HERALD.SCORE.youAhead, "The cheque stands {yourW} to {hisW} for {you}.", "{you} leads, {yourW} to {hisW}, and the gallery knows it.");
+more(HERALD.SCORE.himAhead, "The cheque stands {hisW} to {yourW} for {him}.", "{him} leads, {hisW} to {yourW}. {you}, you must answer.");
+more(HERALD.SCORE.youTakes, "{you} goes ahead, {yourW} to {hisW}.");
+more(HERALD.SCORE.himTakes, "{him} goes ahead, {hisW} to {yourW}.");
+more(HERALD.win,
+  "Hear it, all {city}! {you} wins the match, {yourScore} to {hisScore}, and carries {arms} home in honour.",
+  "The field is {you}'s. {yourScore} to {hisScore}, and {him} yields the day with courtesy.",
+  "By the marshal's count and the judges' word: {you}, {yourScore} to {hisScore}. Let the trumpets sound!");
+more(HERALD.loss,
+  "Hear it, all {city}! {him} wins the match, {hisScore} to {yourScore}, and {hisArms} stands highest today.",
+  "The field is {him}'s, {hisScore} to {yourScore}. {you} leaves it with honour, if without the prize.",
+  "By the marshal's count and the judges' word: {him}, {hisScore} to {yourScore}. A hard-fought day.");
+more(HERALD.draw, "Hear it, all {city}: the match is level, {yourScore} each, and neither {arms} nor {hisArms} may claim the field.");

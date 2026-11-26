@@ -62,7 +62,7 @@ export class FX {
     for (let i = 0; i < this.maxS; i++) this.spl.setMatrixAt(i, this._zero);
     // the lance burst (see lanceBurst): splinters, the fore part, the crown, and a cloud of small chips
     const pm = pieceMat(), nS = GFX.tier === 'low' ? 90 : GFX.tier === 'medium' ? 150 : 220;
-    this.splR = new Rods(scene, splinterGeo(), pm, nS, this); this.foreR = new Rods(scene, foreGeo(), pm, 8, this); this.crownR = new Rods(scene, crownGeo(), pm, 6, this);
+    this.splR = new Rods(scene, splinterGeo(), pm, nS, this); this.foreR = new Rods(scene, foreGeo(), pm, 16, this); this.crownR = new Rods(scene, crownGeo(), pm, 6, this);
     this.chipP = new Puffs(scene, 360, false); this.onClack = null; this.tiltTop = 0; this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._c = new THREE.Vector3();
     this.woodCol = new THREE.Color(0xe2cfa4); this.paintCol = new THREE.Color();
   }
@@ -168,17 +168,37 @@ export class FX {
     const I = PHYS.impact, rnd = seeded(o.seed | 0), pw = o.power ?? 0.6, K = pw >= I.shatterAt ? I.shatter : pw >= I.cleanAt ? I.clean : I.crack;
     const tier = GFX.tier === 'low' ? 0.5 : GFX.tier === 'medium' ? 0.75 : 1, pk = Math.min(1.3, 0.55 + pw * 0.6), cls = K === I.shatter ? 2 : K === I.clean ? 1 : 0;
     const a = o.a, d = this._a.subVectors(o.b, a), L = d.length(); if (L < 0.2) return cls; const dn = d.clone().divideScalar(L);
-    const dir = o.dir ? o.dir.clone().normalize() : dn.clone(), paint = this.paintCol.set(o.paint ?? 0xb23a2a), vel = o.v || this._c.set(0, 0, 0), hv = o.hv || new THREE.Vector3();
+    const dir = o.dir ? o.dir.clone().normalize() : dn.clone(), paint = this.paintCol.set(o.paint ?? 0xb23a2a), vel = o.v ? o.v.clone() : new THREE.Vector3(), hv = o.hv || new THREE.Vector3();
+    // The pieces go on with the lance's momentum (dir: its axis) and, the more oblique the stroke (o.sinT), along the face it was sliding over (o.tan);
+    // a little comes back off the face (o.n points out of it). The struck man's own motion (hv) carries them a share of the way with him.
+    if (o.tan || o.n) {
+      const st = Math.min(1, Math.max(0, o.sinT || 0)); dir.multiplyScalar(1 - 0.55 * st);
+      if (o.tan) dir.addScaledVector(o.tan, 0.9 * st);
+      if (o.n) dir.addScaledVector(o.n, PHYS.impact.burstBack);
+      dir.normalize(); vel.addScaledVector(hv, PHYS.impact.burstCarry);
+    }
     const side = new THREE.Vector3(), tmp = new THREE.Vector3(), q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), sc = this._b;
-    // the fore part: the lance from the break to just short of the crown, flung on with what is left of the stroke, tumbling end over end
-    const crown = I.coronel.size, fl = Math.max(0.2, L - crown * 0.9);
+    side.crossVectors(dn, _Y); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
+    // What a real break leaves (film): the shaft goes in two to four big pieces (the stump stays in his hand; one to three fly, the head section
+    // tumbling end over end), a spray of small slivers and chips, and a puff of wood dust that is gone in a moment. Nearly everything keeps to the
+    // lance's line. K.big: how many big pieces fly; K.long: a few long splinters; K.slivers: small rods; K.chips: flying bits; then the dust.
+    const crown = I.coronel.size, fl = Math.max(0.2, L - crown * 0.9), r0 = o.r0 ?? 0.034;
     {
-      const r0 = o.r0 ?? 0.034;
-      q.setFromUnitVectors(_Z, dn); const b = this.foreR.spawn(tmp.copy(a).addScaledVector(dn, fl * 0.5), q, sc.set(r0, r0, fl), I.keep, paint, I.fade);
-      b.rad = r0 * 0.8; b.e = 0.2; b.mu = 0.7;
-      b.v.copy(vel).multiplyScalar(0.3).addScaledVector(dir, K.spray * 0.35 * (0.6 + rnd() * 0.5)); b.v.x += (rnd() - 0.5) * K.side; b.v.y = 2.0 + K.up * (0.5 + rnd());
-      side.crossVectors(dn, _Y); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
-      const sp = I.foreSpin[0] + (I.foreSpin[1] - I.foreSpin[0]) * rnd() * pk; b.w.copy(side).multiplyScalar((rnd() < 0.5 ? -1 : 1) * sp); b.w.y += (rnd() - 0.5) * 3;
+      const nB = Math.max(1, Math.min(3, Math.round(K.big[0] + (K.big[1] - K.big[0]) * rnd()))), cuts = [0];
+      for (let i = 1; i < nB; i++) cuts.push(fl * (i / nB) * (0.8 + 0.4 * rnd()));
+      cuts.push(fl); cuts.sort((x, y) => x - y);
+      for (let i = 0; i < nB; i++) {
+        const t0 = cuts[i], t1 = cuts[i + 1], ln = Math.max(0.12, t1 - t0), mid = (t0 + t1) / 2, head = i === nB - 1, r = r0 * (1 - 0.3 * mid / Math.max(L, 0.5));
+        q.setFromUnitVectors(_Z, dn); const b = this.foreR.spawn(tmp.copy(a).addScaledVector(dn, mid), q, sc.set(r, r, ln), I.keep, paint, I.fade);
+        b.rad = r * 0.8; b.e = 0.2; b.mu = 0.7;
+        // on with the lance (a share of the striker's pace and of the stroke), the head section kicked back and up off the face it struck
+        // (they were pressed against his face: they leave with a share of both men's pace, a little on along the lance, back off the face and up)
+        b.v.copy(vel).multiplyScalar(0.3).addScaledVector(hv, 0.3).addScaledVector(dir, K.spray * (0.12 + 0.15 * rnd()) * (head ? 0.5 : 1)).addScaledVector(side, (rnd() - 0.5) * K.side * 0.8);
+        b.v.y += 0.6 + K.up * (head ? 1.0 + 0.5 * rnd() : 0.4 + 0.4 * rnd());
+        if (o.n) b.v.addScaledVector(o.n, (head ? 1.4 : 0.7) + rnd());
+        const sp = (I.foreSpin[0] + (I.foreSpin[1] - I.foreSpin[0]) * rnd() * pk) * (head ? 1.4 : 0.8) / Math.max(0.5, ln);      // end over end: shorter pieces turn faster
+        b.w.copy(side).multiplyScalar((rnd() < 0.5 ? -1 : 1) * sp); b.w.y += (rnd() - 0.5) * 2;
+      }
     }
     // the crown
     {
@@ -187,36 +207,46 @@ export class FX {
       b.rad = 0.035 * z; b.e = 0.35; b.hold = hold; b.hv.copy(hv);
       b.launch = { v: new THREE.Vector3((rnd() - 0.5) * 2, 1.6 + rnd() * 1.8, 0).addScaledVector(dir, -(0.8 + rnd() * 1.6)).addScaledVector(hv, 0.5), w: new THREE.Vector3(rnd() * 14 - 7, rnd() * 14 - 7, rnd() * 14 - 7) };
     }
-    // the long splinters: from the break and for a metre beyond it, 0.3-1.2 m by the stroke, sprayed along it and out to the sides
-    const nL = Math.round(K.long * tier * (0.85 + rnd() * 0.3)), len0 = K.len[0], len1 = K.len[1];
+    // a few long splinters peeled off at the break, close to the lance's line
+    const nL = Math.round(K.long * tier * (0.75 + rnd() * 0.5)), len0 = K.len[0], len1 = K.len[1];
     for (let i = 0; i < nL; i++) {
-      const ln = len0 + (len1 - len0) * Math.pow(rnd(), 1.4), t = (rnd() * 0.95 - 0.12) * Math.min(L, 1.1);
-      tmp.copy(a).addScaledVector(dn, t); tmp.x += (rnd() - 0.5) * 0.06; tmp.y += (rnd() - 0.5) * 0.06;
+      const ln = len0 + (len1 - len0) * Math.pow(rnd(), 2), t = (rnd() * 0.5 - 0.1) * Math.min(L, 1.1);
+      tmp.copy(a).addScaledVector(dn, t); tmp.x += (rnd() - 0.5) * 0.05; tmp.y += (rnd() - 0.5) * 0.05;
       side.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
-      q.setFromUnitVectors(_Z, dn).premultiply(q2.setFromAxisAngle(side, 0.15 + rnd() * 0.5)); q.premultiply(q2.setFromAxisAngle(dn, rnd() * 6.28));
-      const b = this.splR.spawn(tmp, q, sc.set(0.018 + rnd() * 0.034, 0.005 + rnd() * 0.009, ln), I.keep, paint, I.fade);
+      q.setFromUnitVectors(_Z, dn).premultiply(q2.setFromAxisAngle(side, 0.1 + rnd() * 0.35)); q.premultiply(q2.setFromAxisAngle(dn, rnd() * 6.28));
+      const b = this.splR.spawn(tmp, q, sc.set(0.012 + rnd() * 0.022, 0.004 + rnd() * 0.006, ln), I.keep, paint, I.fade);
       b.mu = 0.55 + rnd() * 0.2; b.e = 0.2 + rnd() * 0.15;
-      side.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5); side.addScaledVector(dir, -side.dot(dir)).normalize();      // out to the side of the stroke
-      const spr = K.spray * (0.35 + rnd() * 0.9) * (1.15 - ln * 0.5);
-      b.v.copy(vel).multiplyScalar(0.15).addScaledVector(dir, spr).addScaledVector(side, K.side * (0.3 + rnd())); b.v.y += 0.6 + rnd() * K.up;
-      b.w.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize().multiplyScalar((6 + rnd() * 14) * (0.5 + pk * 0.5) / (0.4 + ln * 0.8));
+      side.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5); side.addScaledVector(dir, -side.dot(dir)).normalize();
+      b.v.copy(vel).multiplyScalar(0.3).addScaledVector(dir, K.spray * (0.4 + rnd() * 0.6)).addScaledVector(side, K.side * (0.2 + 0.6 * rnd())); b.v.y += 0.4 + rnd() * K.up;
+      b.w.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize().multiplyScalar((5 + rnd() * 10) / (0.4 + ln));
     }
-    // the chips: tiny slivers that go to the sand, a cloud of flying bits and a breath of pale wood dust
-    const nC = Math.round(K.chips * tier), nT = Math.min(26, Math.round(nC * 0.3));
-    for (let i = 0; i < nT; i++) {
-      tmp.copy(a).addScaledVector(dn, (rnd() - 0.1) * Math.min(L, 1)); side.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); q.setFromUnitVectors(_Z, side);
-      const b = this.splR.spawn(tmp, q, sc.set(0.008 + rnd() * 0.012, 0.004 + rnd() * 0.004, 0.03 + rnd() * 0.08), I.keep * 0.6, paint, I.fade);
-      side.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); b.v.copy(vel).multiplyScalar(0.1).addScaledVector(dir, K.spray * (0.2 + rnd())).addScaledVector(side, K.side * 1.3); b.v.y += rnd() * K.up * 1.4; b.w.set(rnd() * 30 - 15, rnd() * 30 - 15, rnd() * 30 - 15);
+    // many small slivers (rods that reach the sand) and a cloud of chips, mostly along the stroke
+    const nS = Math.round(K.slivers * tier);
+    for (let i = 0; i < nS; i++) {
+      tmp.copy(a).addScaledVector(dn, (rnd() - 0.15) * Math.min(L, 0.8)); side.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); q.setFromUnitVectors(_Z, side);
+      const b = this.splR.spawn(tmp, q, sc.set(0.006 + rnd() * 0.01, 0.003 + rnd() * 0.003, 0.03 + rnd() * 0.1), I.keep * 0.5, rnd() < 0.6 ? this.woodCol : paint, I.fade);
+      side.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); b.v.copy(vel).multiplyScalar(0.25).addScaledVector(dir, K.spray * (0.3 + rnd() * 0.8)).addScaledVector(side, K.side * (0.3 + rnd())); b.v.y += rnd() * K.up * 1.2; b.w.set(rnd() * 30 - 15, rnd() * 30 - 15, rnd() * 30 - 15);
     }
-    for (let i = 0; i < nC - nT; i++) {
-      const t = rnd() * Math.min(L, 0.9), sp = K.spray * (0.15 + rnd() * 0.7);
-      this.chipP.emit(a.x + dn.x * t, a.y + dn.y * t, a.z + dn.z * t, dir.x * sp + (rnd() - 0.5) * K.side * 1.6 + vel.x * 0.1, dir.y * sp + rnd() * K.up * 1.4, dir.z * sp + (rnd() - 0.5) * K.side * 1.6 + vel.z * 0.1,
-        0.5 + rnd() * 0.7, 0.025 + rnd() * 0.035, 0, 0.95, rnd() < 0.5 ? this.woodCol : paint, 9, 0.6);
+    const nC = Math.round(K.chips * tier);
+    for (let i = 0; i < nC; i++) {
+      const t = rnd() * Math.min(L, 0.8), sp = K.spray * (0.2 + rnd() * 0.8);
+      this.chipP.emit(a.x + dn.x * t, a.y + dn.y * t, a.z + dn.z * t, dir.x * sp + (rnd() - 0.5) * K.side * 1.2 + vel.x * 0.15, dir.y * sp + rnd() * K.up, dir.z * sp + (rnd() - 0.5) * K.side * 1.2 + vel.z * 0.15,
+        0.35 + rnd() * 0.5, 0.015 + rnd() * 0.025, 0, 0.95, rnd() < 0.6 ? this.woodCol : paint, 9, 0.6);
     }
-    const nD = Math.round((8 + 14 * pk) * tier);
+    // the wood dust at the break: a quick pale puff along the stroke, gone in under a second
+    const nD = Math.round((10 + 16 * pk) * tier);
     for (let i = 0; i < nD; i++) {
-      const t = rnd() * Math.min(L, 0.8);
-      this.dustP.emit(a.x + dn.x * t, a.y + dn.y * t, a.z + dn.z * t, dir.x * K.spray * 0.15 + (rnd() - 0.5) * 2.4, rnd() * 1.4, dir.z * K.spray * 0.15 + (rnd() - 0.5) * 2.4, 0.5 + rnd() * 0.6, 0.12 + rnd() * 0.1, 0.8, 0.28 * pk, this.chipCol, 1.6, 2.4);
+      const t = rnd() * Math.min(L, 0.6);
+      this.dustP.emit(a.x + dn.x * t, a.y + dn.y * t, a.z + dn.z * t, dir.x * K.spray * 0.25 + (rnd() - 0.5) * 1.6, rnd() * 1.0, dir.z * K.spray * 0.25 + (rnd() - 0.5) * 1.6, 0.3 + rnd() * 0.45, 0.1 + rnd() * 0.08, 0.8, 0.3 * pk, this.chipCol, 1.6, 2.4);
+    }
+    // and at the point, on his shield or harness: a puff of dust and a few flakes off the face, out along its normal
+    if (o.n) {
+      const n = o.n, P = o.b, nP = Math.round((6 + 8 * pk) * tier);
+      for (let i = 0; i < nP; i++) {
+        const sp = 0.8 + rnd() * 1.8;
+        this.dustP.emit(P.x, P.y, P.z, n.x * sp + (rnd() - 0.5) * 1.4 + hv.x * 0.6, n.y * sp + rnd() * 0.8, n.z * sp + (rnd() - 0.5) * 1.4 + hv.z * 0.6, 0.25 + rnd() * 0.35, 0.07 + rnd() * 0.06, 0.8, 0.35 * pk, this.dustCol, 1.4, 2.2);
+        if (i % 2 === 0) this.chipP.emit(P.x, P.y, P.z, n.x * sp * 1.5 + (rnd() - 0.5) * 2 + hv.x * 0.5, n.y * sp + rnd() * 1.5, n.z * sp * 1.5 + (rnd() - 0.5) * 2 + hv.z * 0.5, 0.3 + rnd() * 0.4, 0.012 + rnd() * 0.015, 0, 0.95, rnd() < 0.5 ? this.chipCol : this.clodCol, 9, 0.6);
+      }
     }
     return cls;
   }
