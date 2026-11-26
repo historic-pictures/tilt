@@ -19,17 +19,17 @@ export const HORSES = {
   },
   courser: {
     id: 'courser', name: 'Courser', hands: 15.0, withers: 1.524, kg: 470, length: 1.58, blurb: 'Fast and hot-blooded. Brings great speed to the strike, but the lance bounces.',
-    price: 170, top: 9.0, accel: 3.2, mass: 1.0, steady: 0.58, nerve: 0.5, stamina: 0.85, scale: 1.0, girth: 0.96,
+    price: 170, top: 9.0, accel: 3.2, mass: 1.0, steady: 0.58, nerve: 0.5, stamina: 0.85, scale: 1.0, girth: 1.04,
     coat: 0x6a3f22, mane: 0x16110d,
   },
   andalusian: {
     id: 'andalusian', name: 'Andalusian', hands: 14.3, withers: 1.499, kg: 450, length: 1.52, blurb: 'Iberian warhorse. Collected, smooth-gaited and quick off the mark.',
-    price: 130, top: 8.3, accel: 3.5, mass: 0.92, steady: 0.8, nerve: 0.68, stamina: 0.8, scale: 0.97, girth: 1.0,
+    price: 130, top: 8.3, accel: 3.5, mass: 0.92, steady: 0.8, nerve: 0.68, stamina: 0.8, scale: 0.97, girth: 1.03,
     coat: 0xb9b5ac, mane: 0x8d8a84, socks: false,
   },
   rouncey: {
     id: 'rouncey', name: 'Rouncey', hands: 14.1, withers: 1.448, kg: 420, length: 1.48, blurb: 'An honest all-rounder. Unflappable and tireless, but light in the shock.',
-    price: 0, top: 7.9, accel: 2.8, mass: 0.84, steady: 0.52, nerve: 0.92, stamina: 1.0, scale: 0.93, girth: 0.97,
+    price: 0, top: 7.9, accel: 2.8, mass: 0.84, steady: 0.52, nerve: 0.92, stamina: 1.0, scale: 0.93, girth: 1.03,
     coat: 0x7b4a26, mane: 0x2a1c12, socks: true,
   },
 };

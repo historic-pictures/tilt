@@ -115,6 +115,7 @@ export async function preloadKnight(url = 'assets/models/knight_plate.glb') {
 // the modelled horse's body volumes (PHYS.hitboxes horseChest / horseBarrel / horseQuarters were measured on the older model): capsule ends and radius in inner units
 // (the model's metres at MODEL_SCALE, before the breed's scale), measured on the barrel, haunch and shoulder over the gaits (shots/horsefit)
 const NEW_BODY = { horseChest: { a: [0, 1.45, 0.45], b: [0, 1.45, 0.78], r: 0.34 }, horseBarrel: { a: [0, 1.45, -0.5], b: [0, 1.45, 0.25], r: 0.41 }, horseQuarters: { a: [0, 1.5, -1.05], b: [0, 1.5, -0.65], r: 0.42 } };
+const CAP_FLARE = 0.13;      // model units (x MODEL_SCALE x breed scale = metres, about 5 cm): how far the caparison's hem stands out from the barrel, each side
 const SEAT_FWD_NEW = 0.03;     // m: the rider sits this far forward of the file's seat point (off the cantle's wrap)
 const SEAT_RISE_NEW = 0.115;   // m: pelvis above the new saddle's leather (the fauld and the padding of the thigh stand on it); see shots/horsefit
 const BAKED = new WeakMap();   // source geometry -> baked geometry per breed index
@@ -780,6 +781,7 @@ export class Jouster {
       if (o.material && o.material.name === 'Brass') { this.bossMeshes.push(o); o.castShadow = false; return; }
       const g0 = o.geometry, g = new THREE.BufferGeometry(); for (const a in g0.attributes) g.setAttribute(a, g0.attributes[a]);      // this rider's own copy of the positions (they are dented under his legs)
       g.setIndex(g0.index); g.setAttribute('position', g0.attributes.position.clone()); g.setAttribute('capw', g0.attributes.uv1 || new THREE.BufferAttribute(new Float32Array(g0.attributes.position.count * 2), 2));
+      { const P = g.attributes.position, W = g.attributes.capw; for (let i = 0; i < P.count; i++) { const t = W.getX(i); if (t > 0) P.setX(i, P.getX(i) + Math.sign(P.getX(i)) * CAP_FLARE * Math.pow(Math.min(1, t), 1.5)); } }      // the trapper hangs from the barrel's widest part and stands out a little toward the hem (cloth has body, it is not a wet sheet): CAP_FLARE model units at the hem
       o.geometry = g; o.material = this.clothSk; o.castShadow = true; o.receiveShadow = true; if (k === 'Caparison') this.capMeshes.push(o);
     });
     this.padMeshes = []; if (N.Saddle) N.Saddle.traverse(o => { if (o.isMesh && o.material && o.material.name === 'Cloth') this.padMeshes.push(o); });      // the saddle cloth: under the caparison when one is worn
@@ -2277,7 +2279,7 @@ export class Jouster {
       }
     }
     const cyc = this.phase * TAU;
-    { const b = this.body, m = this.modelPivot; b.rotation.set(0, 0, 0); b.position.x = b.position.z = 0; if (m) { m.rotation.set(0, 0, 0); m.position.z = -0.75; } }      // (undo last frame's _horseMotion before the clip is sampled)
+    { const b = this.body, m = this.modelPivot; b.rotation.set(0, 0, 0); b.position.x = b.position.z = 0; if (m) { m.rotation.set(0, 0, 0); m.position.x = m.position.y = 0; m.position.z = -0.75; } }      // (undo last frame's _horseMotion before the clip is sampled)
     this._lastDt = dt;
     const bob = g * amp * 0.1 * Math.sin(cyc + 2.0) + (1 - g) * amp * 0.022 * Math.sin(cyc * 2);
     const pitch = g * amp * 0.055 * Math.sin(cyc + 0.4);
