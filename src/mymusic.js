@@ -38,7 +38,9 @@ export const mymusic = {
   /** Cached list (empty until list() has resolved once). */
   get tracks() { return cache || []; },
   /** Which source plays: 'game' (the game's own music), 'files' (your files) or 'yt' (YouTube links). */
-  get source() { try { const v = localStorage.getItem('tilt.musicsrc'); return v === 'files' || v === 'yt' ? v : 'game'; } catch (e) { return 'game'; } },
+  // Pre-release test builds default to the YouTube "Mates' radio" (the three bardcore tracks, streamed by YouTube's own player, never re-hosted).
+  // For the public launch set DEFAULT_SRC back to 'game'.
+  get source() { const DEFAULT_SRC = 'yt'; try { const v = localStorage.getItem('tilt.musicsrc'); return v === 'files' || v === 'yt' || v === 'game' ? v : DEFAULT_SRC; } catch (e) { return DEFAULT_SRC; } },
   setSource(v) { v = v === 'files' || v === 'yt' ? v : 'game'; try { localStorage.setItem('tilt.musicsrc', v); localStorage.setItem(KEY, v === 'files' ? 'on' : 'off'); } catch (e) { /* ignore */ } this._emit('enabled'); },
   get enabled() { return this.source === 'files'; },
   setEnabled(on) { this.setSource(on ? 'files' : 'game'); },
