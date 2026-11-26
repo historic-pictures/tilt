@@ -1810,10 +1810,11 @@ export class Jouster {
       A.idle.setEffectiveWeight(1 - amp); A.walk.setEffectiveWeight(amp * (1 - g)); A.gallop.setEffectiveWeight(amp * g);
       A.idle.time = t % A.idleLen; A.walk.time = ph * A.walkLen; A.gallop.time = ((ph + 0.35) % 1) * A.gallopLen;
       this.mixer.update(0);
+      // (Gallop now carries the neck at 40 degrees and the face about 55 below horizontal itself, so the pace no longer lowers it; only the walk keeps the old tuck.)
       // A charging horse stretches his head forward and down; the model carries it high (its poll level with the rider's shield), which put
       // it in the line of the other man's lance. Lower it with the pace, after the clip has posed the neck (13 Nov).
       if (!this._neck) this._neck = [this.model.getObjectByName('Neck1'), this.model.getObjectByName('Neck2')];
-      { const k = (0.35 + 0.65 * g) * amp * (1 - this.rear); if (this._neck[0]) this._neck[0].rotation.x -= 0.42 * k; if (this._neck[1]) this._neck[1].rotation.x -= 0.22 * k; }
+      { const k = 0.35 * (1 - g) * amp * (1 - this.rear); if (this._neck[0]) this._neck[0].rotation.x -= 0.42 * k; if (this._neck[1]) this._neck[1].rotation.x -= 0.22 * k; }
       this.modelPivot.rotation.x = -this.rear * 0.62; this.modelPivot.position.y = this.rear * 0.1;
       this.root.updateMatrixWorld(true);
       const by = this.newHorse ? this._seatSample() - this.seatRest : this.root.worldToLocal(this.backBone.getWorldPosition(_v3)).y - this.backRest;
