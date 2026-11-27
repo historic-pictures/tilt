@@ -48,6 +48,7 @@ export function createBooth(host) {
       if (!SW.drewe && (isTurn(e) ? [e] : e).some(([spk, text, nf]) => spk === 'C' || /Walter|Drewe/.test(text + (nf || '')))) { u.push(i); continue; }      // Sir Walter is off (src/channels.js BOOTH): no exchange with him, no Pell line that speaks to him
       const ex = !isTurn(e), turns = (ex ? e : [e]).map(([spk, text, nf], k) => ({ spk, text: fill(text, vars) ?? (nf ? fill(nf, vars) : null), id: `booth.${path}.${i}${ex ? '.t' + k : ''}` }));      // id: the recorded clip for this turn (src/voice_clips.js)
       if (recOnly && host.hasClip && !turns.every(x => host.hasClip(x.id))) continue;      // only a recorded line (never the robot voice)
+      if (B.clipOnly && !turns.every(x => x.spk === 'P' && host.clip && host.clip(x.id, 'P'))) continue;      // a watched bout: only what Pell has recorded (never the robot voice)
       const total = turns.reduce((a, x) => a + (x.text ? sayTime(x.text) + 0.3 : 99), 0);
       if (turns.every(x => x.text) && sayTime(turns[0].text) <= fit && total <= fit + 1.5) { u.push(i); return turns; }      // fit: a line (or an exchange) that can be said in the quiet there is
     }
@@ -70,6 +71,7 @@ export function createBooth(host) {
   /** Ask for a line. key: a BOOTH path. o: { prio, ttl, delay, vars, cat }. Returns true when it was queued. */
   B.say = function say(key, o = {}) {
     if (!host.enabled()) return false;
+    if (B.only && !B.only.test(key)) return false;      // a watched bout: only the lines that do not speak of 'you'
     const vars = Object.assign({}, host.vars(), o.vars);
     const head = key.split('.')[0], fast = /^(exclaim|away|charge)$/.test(head);
     if (!poolAt(key)) return false;
@@ -199,6 +201,8 @@ export function createBooth(host) {
       B.note(L, 'course over'); return false;
     });
   };
+  /** A watched bout (the roll's Watch Round): clipOnly = Pell's recorded turns only; only = the pools that may be used. */
+  B.watch = function watch(on, only) { B.clipOnly = !!on; B.only = on ? only : null; };
   B.reset = function reset() { if (B.cur) endTurn('reset'); B.q.length = 0; B.course = 0; B.turns = 0; B.agenda = []; B.lastEnd = -99; B.gap = 0; B.fillerAt = -99; B.quietSince = B.t; };
   B.speaking = () => !!(B.cur && B.cur.spoken);
   B.busy = () => !!(B.cur || B.q.length);

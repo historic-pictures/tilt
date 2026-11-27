@@ -875,3 +875,9 @@ body:has(#verdict:not(.hidden)) :is(#prompt, .tCoach) { visibility: hidden; }
 .online .invnote { text-align: center; font-style: italic; }
 
 #ytfallback { position: fixed; z-index: 58; left: max(8px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); max-width: 320px; padding: 6px 10px; background: var(--red2); color: var(--vellum3); border: 1px solid var(--ink); border-radius: 3px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.45); pointer-events: none; }
+
+/* Watching the roll (a bout of other knights, main.js startSpectate): the broadcast keeps the scorebar and the names and nothing of the rider's own controls */
+body.spec #crowdPanel, body.spec #horsePanel, body.spec #lancePanel, body.spec #reticle, body.spec #cursorDot, body.spec #prompt, body.spec #yieldBtn, body.spec #verdict, body.spec #flashTxt, body.spec #lesson, body.spec #toast, body.spec #ticker,
+body.spec #replayYou, body.spec #replayHim, body.spec #rplCtl, body.spec #replayKeys, body.spec #pmRpl, body.spec #condP, body.spec #condO, body.spec #marks, body.spec #royalCap { display: none !important; }
+#specSkipAll { position: fixed; right: 16px; top: 74px; z-index: 40; display: none; padding: 8px 16px; }
+body.touch #specSkipAll { top: auto; bottom: 18px; right: 14px; padding: 12px 20px; }

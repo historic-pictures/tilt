@@ -38,7 +38,7 @@ const met = (rnds, a, b) => rnds.some(r => r.pairs.some(m => (m.a === a && m.b =
 export function standings(t, seen) {
   const row = {}; for (const id of t.entrants) row[id] = { id, w: 0, l: 0, pts: 0, ag: 0, best: 0, bouts: 0 };
   t.rnds.forEach((r) => r.pairs.forEach((m) => {
-    if (m.w == null || (seen && !r.shown && !hasYou(m))) return;
+    if (m.w == null || (seen && !r.shown && !hasYou(m) && !m.watched)) return;      // (a pair the player has watched ride counts at once)
     const A = row[m.a], B = row[m.b], wa = m.w === m.a;
     A.bouts++; B.bouts++; A.pts += m.sc[0]; A.ag += m.sc[1]; B.pts += m.sc[1]; B.ag += m.sc[0];
     (wa ? A : B).w++; (wa ? B : A).l++; const mg = Math.abs(m.sc[0] - m.sc[1]); (wa ? A : B).best = Math.max((wa ? A : B).best, mg);
@@ -127,6 +127,18 @@ export function recordMatch(p, won, score, oppId) {
   } else { res.next = roundName(t, t.cur + 1); res.head = `${from.toUpperCase()} ${won ? 'WON' : 'LOST'}`; res.note = `${mine} lance credit${mine === 1 ? '' : 's'} on the roll. Nobody is struck off: the next day is drawn from the roll.`; }
   res.to = res.next; t.reached = t.cur;
   return res;
+}
+
+/** The day's other pairs (the ones you are not riding in). */
+export const otherPairs = (t, r) => (t.rnds[r] ? t.rnds[r].pairs.filter(m => !hasYou(m)) : []);
+/**
+ * A pair the player watched ride in 3D (Watch Round): what the bout really decided replaces the drawn result before it is read, with the very same fields the drawn one had
+ * (w: the winner; sc: lance credits [a's, b's], the match's own score), so standings, the prizes and the next draw all follow from it. res = { w, sc: [a, b] }.
+ */
+export function setWatched(t, m, res) {
+  if (!m || !res || (res.w !== m.a && res.w !== m.b)) return false;
+  m.w = res.w; m.sc = [Math.max(0, res.sc[0] | 0), Math.max(0, res.sc[1] | 0)]; m.watched = true;
+  return true;
 }
 
 /** The herald has read (or you have skipped past) a day's other pairs. */

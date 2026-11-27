@@ -290,7 +290,7 @@ ranks.setAuthSource(() => account.token());
 const NET = { mid: '', oppPlay: null, net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0 };
 let world = null, worldKey = -1, venueIdx = -1, player = null, opp = null, M = null, C = null, R = null, attract = null;      // (attract: the menu joust, built at boot)
 /** The current difficulty level's numbers (data.js DIFFICULTY): Squire is the default for a new knight. */
-const DF = () => DIFFICULTY[profile.difficulty ?? 0] || DIFFICULTY[0];
+const DF = () => DIFFICULTY[M && M.spec ? 1 : (profile.difficulty ?? 0)] || DIFFICULTY[0];      // (a watched bout: Knight level for both riders)
 const couchLead = () => (DF().couchT ?? PHYS.lift.couchT) + 0.5;      // seconds before the shock to start lowering: the couch itself, and a beat for the lance to settle
 const couchStrides = () => Math.round(couchLead() * 1.95);      // the same in strides (about 1.95 a second at the gallop): 3 on Squire and Knight, 4 on Champion
 const STRIDE_WORD = { 2: 'two', 3: 'three', 4: 'four', 5: 'five' };
@@ -389,6 +389,7 @@ function mainTalking() {
 /** The booth's placeholders. {score} is the cheque in words, the leader's number first ("three to one", "two all"). */
 function boothVars() {
   if (!M) return {};
+  if (M.spec) { const a = M.score[0], b = M.score[1]; return { venue: M.V.name, city: M.V.city, score: a === b ? `${numW(a)} all` : `${numW(Math.max(a, b))} to ${numW(Math.min(a, b))}` }; }      // a watched bout: nothing that names you
   const a = M.score[0], b = M.score[1], sc = a === b ? `${numW(a)} all` : `${numW(Math.max(a, b))} to ${numW(Math.min(a, b))}`;
   return { you: profile.name, him: M.od.short, himFull: hailName(M.od), land: M.od.land, venue: M.V.name, city: M.V.city, score: sc,
     horse: HORSES[profile.horse].name.toLowerCase(), hisHorse: (HORSES[M.od.horse] || { name: 'horse' }).name.toLowerCase(),
@@ -427,7 +428,7 @@ function rivalJeer(kind, by) {
 /** A new knight (fewer than NEWBIE_MATCHES matches finished): now and then, after his own poor course, Pell tells him it gets easier; his first lance broken gets a cheer.
  *  Never online. At most NEWBIE_MAX per match. Returns true when a line was queued. */
 const NEWBIE_MATCHES = 5, NEWBIE_MAX = 3;
-const isNewbie = () => !S.online && !M.practice && ((profile.stats && profile.stats.played) || 0) < NEWBIE_MATCHES;
+const isNewbie = () => !S.online && !M.practice && !M.spec && ((profile.stats && profile.stats.played) || 0) < NEWBIE_MATCHES;
 function newbieSay(cy, heard) {
   if (!isNewbie()) return false;
   const st = profile.stats || (profile.stats = {}), n = M.nbSaid || 0, poor = cy === 'miss' || cy === 'glance', last = M.nbLast;
@@ -444,6 +445,7 @@ const roastDue = (won) => !won && !S.online && !M.practice && (profile.lesson ||
 const brkCat = (c) => c === 'breakShield' || c === 'breakBody' || c === 'helm';
 function boothAfter(p, o) {
   const cy = strokeCat(p), ch = strokeCat(o);
+  if (M.spec) return boothAfterSpec(cy, ch);
   const k = cy === 'unhorse' ? 'unhorseYou' : ch === 'unhorse' ? 'unhorseHim' : cy === 'foul' || ch === 'foul' ? 'foul' : C.tiltStruck ? 'tilt'
     : brkCat(cy) && brkCat(ch) ? 'bothBreak' : cy === 'helm' ? 'helmYou' : ch === 'helm' ? 'helmHim' : brkCat(cy) ? 'breakYou' : brkCat(ch) ? 'breakHim'
     : cy === 'miss' && ch === 'miss' ? 'bothMiss' : cy === 'glance' ? 'glanceYou' : ch === 'glance' ? 'glanceHim' : cy === 'attaint' || ch === 'attaint' ? 'attaint' : cy === 'miss' ? 'missYou' : 'missHim';
@@ -471,6 +473,8 @@ function judgeCall(cy, ch, lead) {
   crowdVoices.official(pick(OFFICIALS.scorer), hs[2].clone().setY(hs[2].y + 0.4), 'THE SCORER', lead + 1.7);
 }
 let skipKey = false;                          // Space / Enter held (the intro is skipped by HOLDING it, not by a tap)
+/** The autopilot rides the player's side: the test harness (G.auto) or a spectated bout (M.spec: two knights of the roll, nobody of yours). */
+function isAuto() { return !!(G.auto || (M && M.spec)); }
 const dirP = () => (player ? player.dir : 1);          // which way you are riding this course
 const gapNow = () => (opp.z - player.z) * dirP();        // metres still between you (negative once passed)
 
@@ -508,9 +512,9 @@ function loadProfile(from = null) {      // from: a profile built from the serve
   return d;
 }
 /** A skill's numbers if you have learned it, else null. */
-const sk = (id) => (!S.online && profile.skills && profile.skills[id] ? SKILLS[id] : null);      // (online: no skills, no retinue; both riders start equal)
+const sk = (id) => (!S.online && !(M && M.spec) && profile.skills && profile.skills[id] ? SKILLS[id] : null);      // (online: no skills, no retinue; both riders start equal)
 /** One of your retinue's numbers if he is in your service, else null. */
-const man = (id) => (!S.online && profile.retinue && profile.retinue[id] && !lateMen[id] ? menFx(id, profile.retinue[id]) : null);
+const man = (id) => (!S.online && !(M && M.spec) && profile.retinue && profile.retinue[id] && !lateMen[id] ? menFx(id, profile.retinue[id]) : null);
 /** Who is late this course (a Drinker now and then): his work, and what his temper adds, is skipped. */
 let lateMen = {};
 let lateRolled = false;      // a Drinker's lateness is rolled when you arrive at the end of the lists (his mates are there first), once per course
@@ -520,8 +524,9 @@ function rollLate() {
   for (const id of Object.keys(profile.retinue || {})) { const r = profile.retinue[id], t = r && TRAITS[r.trait]; if (t && t.late && Math.random() < t.late) { lateMen[id] = true; say(`Your ${(RETINUE[id] && RETINUE[id].name || id).toLowerCase()}, ${r.name}, hasn't turned up: he's been at the wine. No ${(RETINUE[id] && RETINUE[id].name || id).toLowerCase()} this course.`, r.name.toUpperCase(), 2, { ui: 'prompts' }); } }
 }
 /** The sum of one number from every man's temper (calm, rest, welcome) who is here this course. */
-const crew = (k) => S.online ? 0 : Object.keys(profile.retinue || {}).reduce((a, id) => { const r = profile.retinue[id]; return a + (r && !lateMen[id] && TRAITS[r.trait] ? TRAITS[r.trait][k] || 0 : 0); }, 0);
+const crew = (k) => S.online || (M && M.spec) ? 0 : Object.keys(profile.retinue || {}).reduce((a, id) => { const r = profile.retinue[id]; return a + (r && !lateMen[id] && TRAITS[r.trait] ? TRAITS[r.trait][k] || 0 : 0); }, 0);
 function saveProfile() {
+  if (M && M.spec) return;      // a spectated bout never writes the profile
   try { localStorage.setItem('tilt.body', JSON.stringify(cleanBody(profile.body))); } catch (e) { /* ignore */ }
   if (account.signedIn()) { account.queueSave(profile); return; }      // a signed-in player's profile lives in the cloud (gold, renown and owned items only ever come from the server); the guest's local save is left alone
   try { localStorage.setItem('tilt.profile', JSON.stringify(profile)); } catch (e) { /* ignore */ }
@@ -569,8 +574,9 @@ function makeRider(def, dir, isPlayer) {
 /** Free what a rider holds on the GPU: each skinned mesh's bone texture and each mesh's buffers (without this every match leaked ~34 bone textures and ~30 geometries; found by docs/perf-audit.md). Shared geometry is just uploaded again if something still draws it. */
 function freeGpu(o) { o.traverse((m) => { if (m.isSkinnedMesh && m.skeleton) m.skeleton.dispose(); if (m.isMesh && m.geometry) m.geometry.dispose(); }); }
 function disposeRider(j) { if (!j) return; scene.remove(j.root); if (j.unhorsed) scene.remove(j.rider); freeGpu(j.root); if (j.rider && j.rider !== j.root) freeGpu(j.rider); }
-function rebuildPlayer() {
+function rebuildPlayer(knight = null) {
   disposeRider(player);
+  if (knight) { player = makeRider(Object.assign({}, knight, { lance: knight.lance || 'standard' }), 1, true); player.setCaparison('livery'); player.setPose(-START_Z, 1); return; }      // a spectated knight (never the profile's look)
   if (!profile.bond) profile.bond = {};
   if (RIDE_AS) {      // ?as=palman: the player's rider wears a roster knight's whole look (arms, harness, helm, crest, horse) for captures; the profile is not touched
     player = makeRider(Object.assign({}, RIDE_AS, { lance: profile.lance || 'standard' }), 1, true); player.setCaparison('livery'); player.setPose(-START_Z, 1); return;
@@ -933,7 +939,7 @@ function fanfare(kind) { audio.fanfare(kind); S.fanfareT = kind === 'short' ? 1.
 const QUINTAIN_DEF = { id: 'quintain', name: 'The Quintain', short: 'the quintain', land: '—', arms: { c1: '#a81e1e', c2: '#ece8dc', c3: '#e0b83c', pattern: 'quarterly', charge: 'roundel' }, horse: 'rouncey', armour: 'milanese', skill: 0, seat: 9, drive: 0 };
 let TILT_TOP = 1.3;      // height of the tilt's rail (m), 0 when the lists are open
 // ---- the match intro (FIFA-style; shots and timings in src/ceremony.js SHOTS): wide, trumpets, royal box, warm-up canter, line-up and salute, the announcer, each knight's man boasts, marks.
-const introFired = new Set(), introNew = () => !!M && !M.practice;
+const introFired = new Set(), introNew = () => !!M && !M.practice && !M.spec;
 /** The spoken lines of the intro, all through the voice director (stoppage: one line at a time). Hugh Clement speaks aloud; the host and the boasters are ticker lines. */
 function introLines() {
   if (profile.herald === false) return;
@@ -1005,16 +1011,18 @@ function bridgeRestoreHarness(k) {
 
 let preparing = false;
 /** What the rigged riders of a match need (player and opponent: harness, helm, lance ids). An online friend's come from his profile (NET.od): both screens must build the same lance for him, since its length is his reach. */
-function rigWant(oppId, onl) {
+function rigWant(oppId, onl, spec) {
   const k = (onl && NET.od) || (oppId && (KNIGHTS.find(x => x.id === oppId) || FIELD.find(x => x.id === oppId))) || null;
+  const a = spec ? specKnight(spec.a) : null;      // a spectated bout: both riders are knights of the roll
+  if (a) return { armour: [a.armour, k && k.armour], helm: [a.helm || (ARMOURS[a.armour] || {}).helm, k && (k.helm || (ARMOURS[k.armour] || {}).helm)], lance: [a.lance || 'standard', k && k.lance] };
   return { armour: [profile.armour, k && k.armour], helm: [profile.helm, k && (k.helm || (ARMOURS[k.armour] || {}).helm)], lance: [profile.lance || 'standard', k && k.lance] };
 }
 /** Start a match. If the trees and props are still arriving in the background, wait for them behind "Preparing the lists…" rather than build the venue without them. */
 function startMatch(...args) {
-  if (touchMode) { noteMatch(); goFullscreen(); }
+  if (touchMode) { if (!args[8]) noteMatch(); goFullscreen(); }
   const sky = args[3] ? null : (VENUES[args[0]] || {}).sky;      // (the practice meadow has no photographed sky)
   const skyIn = !sky || !SCANS.skies[sky] || (SCANS.sky.get(sky) && SCANS.sky.get(sky).tex) || SCANS.sky.get(sky) === null;      // this venue's sky is in memory (or it has none / failed to load)
-  const rigIn = rigHas(rigWant(args[1], args[7]));      // the rigged rider (about 2 MB, fetched in the background after the menu) has arrived or failed
+  const rigIn = rigHas(rigWant(args[1], args[7], args[8]));      // the rigged rider (about 2 MB, fetched in the background after the menu) has arrived or failed
   if (SCANS.ready && skyIn && rigIn) return startMatchNow(...args);
   if (preparing) return;
   preparing = true; const el = $('preparing'), txt = $('prepTxt'); el.classList.remove('hidden');
@@ -1022,7 +1030,7 @@ function startMatch(...args) {
   paint(); const iv = setInterval(paint, 150);
   // the venue's photographed sky is waited for too: built without it the lists show a murky, dark half-lit scene until it arrives (the sky and the lighting come from it)
   const skyP = sky ? loadSky(sky, 'bg') : Promise.resolve(null);
-  Promise.race([Promise.all([SCANS.pending || preloadScans(), skyP, preloadRider(rigWant(args[1], args[7]))]), new Promise(r => setTimeout(r, 45000))]).catch(() => {}).then(() => {      // (after 45 s it goes ahead without them)
+  Promise.race([Promise.all([SCANS.pending || preloadScans(), skyP, preloadRider(rigWant(args[1], args[7], args[8]))]), new Promise(r => setTimeout(r, 45000))]).catch(() => {}).then(() => {      // (after 45 s it goes ahead without them)
     clearInterval(iv); preparing = false; el.classList.add('hidden');
     const s = sky && SCANS.sky.get(sky);
     if (s && s.tex && world && !world.photoSky && worldKey === args[0]) worldKey = -99;      // a world built earlier without this sky: build it again with it
@@ -1035,17 +1043,19 @@ function refreshWorldWithScans() {
   if (M || !world || worldScans || !SCANS.ready) return;
   const training = worldKey === -2; worldKey = -99; setVenue(venueIdx, training);
 }
-function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, courses = 0, bridge = null, onl = false) {
+function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, courses = 0, bridge = null, onl = false, spec = null) {
   S.online = !!onl; document.body.classList.toggle('online', !!onl);      // onl: a joust against a friend (the opponent is NET.od, driven from his stream)
   initAudio(); G.physLog = [];
   attract.park();      // the menu joust's riders leave the scene (kept for when the menu returns)
   setVenue(vIdx, practice);
   if (!practice && MODES[modeId || VENUES[vIdx].mode || 'planken'].bridge && !bridge) { bridge = newBridge(oppId); oppId = bridge.queue[0]; }      // a fresh pas d'armes: the queue is drawn once
   const V = VENUES[vIdx], od = practice ? QUINTAIN_DEF : onl ? NET.od : KNIGHTS.find(k => k.id === oppId) || FIELD.find(k => k.id === oppId);
-  rebuildPlayer(); disposeRider(opp); player.visorUp = false; player.helmOff = false;
+  const sa = spec ? specKnight(spec.a) : null;      // spec: a bout of the roll, watched (src/tourney_screen.js): knight a rides the player's side on the autopilot, nothing of the profile is used or paid
+  rebuildPlayer(sa); disposeRider(opp); player.visorUp = false; player.helmOff = false;
   if (bridge && bridge.keep) bridgeRestoreHarness(bridge.keep);
   if (practice) { opp = new Quintain(scene, LANE_X, 0); opp.setSide(1); } else if (onl) { opp = makeRider(Object.assign({}, od, { horseDef: HORSES[od.horse], armourDef: harness(od.armour, od.helm), lance: od.lance }), -1, false); opp.setCaparison(od.cap || 'livery'); opp.remote = true; opp.setPose(START_Z, -1); } else { opp = makeRider(od, -1, false); opp.setPose(START_Z, -1); }
-  world.setLivery([profile.arms.c1, profile.arms.c2], [od.arms.c1, od.arms.c2], profile.arms, od.arms);
+  const myArms = sa ? sa.arms : profile.arms;
+  world.setLivery([myArms.c1, myArms.c2], [od.arms.c1, od.arms.c2], myArms, od.arms);
   const mode = MODES[practice ? 'planken' : modeId || V.mode || 'planken'], PT = Object.assign({}, POINTS, mode.points);
   if (world.setTilt) world.setTilt(mode.tilt);
   player.foe = practice ? null : opp; if (!practice) opp.foe = player;
@@ -1059,15 +1069,16 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
   if (circuit && !onl && !practice && !bridge) { const dt = career.describe(profile); if (dt && dt.opp === od.id) M.tourn = dt; }      // a knockout tournament: the round, and what is at stake
   for (const j of [player, opp]) if (j && j.setTip) j.setTip(!!mode.sharp);      // sharp lances (Scharfrennen) wear the war tip, the rest the coronel
   if (onl) { M.mid = NET.mid; M.oppRid = LOBBY.friend ? LOBBY.friend.rid : ''; }
-  if (account.signedIn() && !practice && !onl) {      // a signed-in player's match is timed and paid by the server: it starts its own clock now (a bridge is one match across its bouts)
+  if (spec) { M.spec = spec; M.specA = sa; S.spec = true; document.body.classList.add('spec'); specBegin(); }
+  if (account.signedIn() && !practice && !onl && !spec) {      // a signed-in player's match is timed and paid by the server: it starts its own clock now (a bridge is one match across its bouts)
     if (M.bridge && M.bridge.spId) M.spId = M.bridge.spId;
     else { M.spId = account.spStart({ venue: vIdx, mode: mode.id, courses: M.bridge ? 20 : M.courses + 2, circuit: !!circuit }); if (M.bridge) M.bridge.spId = M.spId; }
   }
   if (bridge && bridge.keep) { const k = bridge.keep; M.stamina = k.stamina; M.hp.horse = k.horse; M.hp.body = k.body; M.agit = k.agit; M.focus = Math.min(k.focus, k.body); M.fav = Object.assign({}, k.fav); M.favour = k.favour; if (k.bodyS) Object.assign(M.bodyS.p, k.bodyS); }      // the bridge: nothing is mended between bouts
   if (M.kit.shieldTall > 1) { player.tallShield(M.kit.shieldTall); if (!practice) opp.tallShield(M.kit.shieldTall); }      // the Renntartsche: the same tall shield for both
-  M.retUsed = new Set(); field.setup(profile.retinue, profile.arms, practice, practice ? null : { name: od.short, arms: od.arms });
-  $('nameP').textContent = profile.name; $('nameO').textContent = od.name.replace(/, ".*"/, '');
-  drawCrest($('crestP'), profile.arms); drawCrest($('crestO'), od.arms);
+  M.retUsed = new Set(); field.setup(spec ? {} : profile.retinue, myArms, practice, practice ? null : { name: od.short, arms: od.arms });
+  $('nameP').textContent = sa ? sa.name.replace(/, ".*"/, '') : profile.name; $('nameO').textContent = od.name.replace(/, ".*"/, '');
+  drawCrest($('crestP'), myArms); drawCrest($('crestO'), od.arms);
   $('venueInfo').textContent = `${V.name.toUpperCase()} · ${V.city.toUpperCase()}${V.country ? ', ' + V.country.toUpperCase() : ''} · ${V.year} · ${mode.name.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`;
   $('screen').classList.remove('on'); $('card').classList.add('hidden'); $('verdict').classList.add('hidden'); $('lesson').classList.toggle('hidden', !practice);
   S.mode = 'intro'; S.introT = 0; S.skipHold = 0; S.skipWanted = { me: false, them: false }; introFired.clear(); skipKey = false;
@@ -1077,8 +1088,9 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
   if (practice) { $('bannerTop').textContent = 'THE TILTYARD'; $('bannerMain').textContent = 'At the Quintain'; $('bannerSub').innerHTML = 'The master of horse will teach you the joust, one thing at a time.'; }
   $('banner').classList.remove('hidden'); $('hud').classList.add('hidden');
   voice.reset(); strikeCall = null; booth.reset(); crowdVoices.reset();
-  if (!practice) boothOpen();
+  if (!practice) { if (spec) boothOpenSpec(); else boothOpen(); }
   if (practice) { ceremony.clear(); life.clear(); fanfare('start'); react('start', 0, false); }      // the quintain keeps the short old intro
+  else if (spec) { ceremony.setup(V); life.setup(); player.visorUp = false; fanfare('start'); react('start', 0, false); specIntroBanner(V, mode); }      // a watched bout: a short opening, no ceremony
   else { ceremony.setup(V); life.setup(); player.visorUp = false; introLines(); }
   flagmen.setup(V, practice); judges.setup(V, practice); judges.setVisible(true);      // (the judges sit in their stand through the intro too: it was hidden there, so the table read as empty whenever the intro cameras passed it)
   updateHud(true);
@@ -1105,8 +1117,9 @@ function beginCourse(first = false) {
       bias: new THREE.Vector2((Math.random() - 0.5), (Math.random() - 0.5)), seed: Math.random() * 50, brace: Math.random() < lerp(0.25, 0.9, od.skill), go: 0.25 + Math.random() * 0.35,
       guard: Math.random() < lerp(0.08, 0.5, od.skill), rattled: 1, retarget: false, knock: new THREE.Vector2() },
   };
+  if (M.spec) specCourse();
   C.rec.n = M.course; (M.recs || (M.recs = [])).push(C.rec);      // every course's recording is kept for the match (the pause menu's Replays)
-  if (!M.online) { const b = profile.bond, id = profile.horse, before =bondLevel(b[id]); b[id] = (b[id] || 0) + 1; saveProfile(); M.bondUp = bondLevel(b[id]) > before; }
+  if (!M.online && !M.spec) { const b = profile.bond, id = profile.horse, before =bondLevel(b[id]); b[id] = (b[id] || 0) + 1; saveProfile(); M.bondUp = bondLevel(b[id]) > before; }
   mouse.set(0, 0); aimMouse.set(0, 0); aimRebase = true;      // every course starts with the aim centred (the next pointer move is taken as the centre; touch drags start from it too)
   dropLanceBits(false); flagmen.raise(); judges.drop();      // flags up for this course; the judges' flags are down
   if (first) { player.setPose(-START_Z, 1); if (M.practice) opp.setSide(1); else opp.setPose(START_Z, -1); }
@@ -1129,7 +1142,7 @@ function beginCourse(first = false) {
   $('banner').classList.add('hidden'); $('hud').classList.remove('hidden'); $('card').classList.add('hidden');
   if (first) $('verdict').classList.add('hidden'); else fadeVerdict();      // the next course is ready: the course card goes by itself (it used to stay up, hiding the prompt, until you spurred)
   const extra = M.course > M.courses;
-  if (first && !M.practice && !G.auto) startHelmBeat();      // the helm is fitted before the lances go up
+  if (first && !M.practice && !isAuto()) startHelmBeat();      // the helm is fitted before the lances go up
   // now and then the squire mutters where a bold knight might look (until he has done it once; at most a few times ever)
   if (!first && !M.practice && !M.hintG && M.course >= 2 && !(profile.stats.ladySeen || []).length && (profile.stats.hintG || 0) < 3 && Math.random() < 0.18) {
     M.hintG = true;
@@ -1178,7 +1191,7 @@ function spur() {
     if (C.beat) return;      // the squire is at your helm
     if (player.helmOff) { say('Put your helm on first (H).', 'THE MARSHAL', 2, { ui: 'prompts', prompt: true, phases: 'ready' }); return; }
     if (!R.p) { R.p = true; player.raiseT = 1; if (player.visorUp) toast('VISOR', 'Your visor is up. Press H to close it before you meet.', 5); return; }       // the first W raises the lance
-    if (!R.sig) { if (!R.warned && !G.auto) { R.warned = true; say('Wait for the marshal.', 'THE MARSHAL', 2, { prompt: true, phases: 'ready' }); } return; }
+    if (!R.sig) { if (!R.warned && !isAuto()) { R.warned = true; say('Wait for the marshal.', 'THE MARSHAL', 2, { prompt: true, phases: 'ready' }); } return; }
     startCharge();
   }
   if (S.mode !== 'charge' || C.pL.done) return;
@@ -1215,7 +1228,7 @@ function burst() {
 const OTS = 1.5;      // seconds of the over-the-shoulder shot that opens each gesture (your knight from behind, looking the way he addresses), before the reaction shot
 /** Between courses: one gesture, with its own camera cut and its own price. */
 function interlude(n) {
-  if (!C || S.mode !== 'ready' || C.act || C.beat || M.practice || C.rd.p) return;
+  if (M.spec || !C || S.mode !== 'ready' || C.act || C.beat || M.practice || C.rd.p) return;
   C.act = n;
   if (n === 1) { C.saluted = true; C.saluteT = 1.2; react('salute', 1); world.setRoyalMood('applaud'); C.cut = { kind: 'royal', t: 2.4 + OTS, ots: OTS }; }
   else if (n === 2) { C.saluteT = 1.2; react('rouse', 1); M.agit = clamp(M.agit + (1 - player.horseDef.nerve) * 0.2 * DF().nerve, 0, 1); C.cut = { kind: 'commons', t: 2.4 + OTS, ots: OTS }; }
@@ -1355,7 +1368,7 @@ const MARK_R = 2.0, OVER_HERE = ['Sir, over here!', 'My lord, over here!', 'Here
 const _sq = new THREE.Vector3(), wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 /** True when the scripted ride-back should run: always, unless the menu setting says by hand. */
 function autoRide() {
-  if (G.auto || touchMode) return true;      // touch: no horse steering, the scripted ride-back
+  if (isAuto() || touchMode) return true;      // touch: no horse steering, the scripted ride-back
   return profile.autoRide !== false;      // the horse takes you back unless you chose to ride back by hand (Danilo, 15 Nov: auto is the default)
 }
 /** Turn rate (rad/s) of the horse at speed v: nearly on the spot when halted, tight at a walk, wide at a canter. */
@@ -1399,7 +1412,7 @@ function rideBack(j, T, dt) {
     const dist = Math.hypot(mk.x - x, mk.z - z), herr = Math.abs(wrapA(B.th - mk.th));
     B.onMark = dist < MARK_R && j.speed < 2.4 && herr < 0.8;      // within ~45 degrees of facing the lists
     B.dwell = B.onMark ? B.dwell + dt : 0;
-    if (B.dwell > 0.45) { T.stage = 'settle'; B.gl = 0; B.rt = 0; if (!B.calls) { profile.stats.markHits = (profile.stats.markHits || 0) + 1; withFeats(() => checkFeats(profile)); saveProfile(); } }      // at your mark, unaided
+    if (B.dwell > 0.45) { T.stage = 'settle'; B.gl = 0; B.rt = 0; if (!B.calls && !M.spec) { profile.stats.markHits = (profile.stats.markHits || 0) + 1; withFeats(() => checkFeats(profile)); saveProfile(); } }      // at your mark, unaided
     // the squire calls you in until you know your mark
     const knows = !!(profile.achievements && profile.achievements.knowsmark), bearing = Math.atan2(mk.x - x, mk.z - z);
     B.away = dist < 8 || Math.abs(wrapA(bearing - B.th)) < 1.05 ? 0 : B.away + dt; B.callT -= dt;
@@ -1529,8 +1542,8 @@ function updateRide(dt, dtReal) {
   const after = S.mode === 'after';
 
   // ---------------- your horse: tap to climb the gaits, rhythm at the gallop, rein to slow
-  if (G.auto && S.mode === 'charge') autoPilot(gap); else if (G.auto && S.mode === 'after' && G.autoKeepLow !== true) C.couchHeld = false;
-  else if (touchMode && !G.auto) C.couchHeld = S.mode === 'charge' && gap < 36 && !C.pL.done;      // touch: the lance lowers by itself, and rises the moment the stroke is done (the quick-raise credit)
+  if (isAuto() && S.mode === 'charge') autoPilot(gap); else if (isAuto() && S.mode === 'after' && G.autoKeepLow !== true) C.couchHeld = false;
+  else if (touchMode && !isAuto()) C.couchHeld = S.mode === 'charge' && gap < 36 && !C.pL.done;      // touch: the lance lowers by itself, and rises the moment the stroke is done (the quick-raise credit)
   if (live && keys.rein) { C.reinT += dtReal; if (C.reinT > 0.28) { C.reinT = 0; C.tier = Math.max(0, C.tier - 1); if (gap < 28 && C.tier < 3) C.checked = true; } } else C.reinT = 0.2;
   if (looseHorse(player, dt)) { /* no rider: the horse runs on and stops by itself */ }
   else if (after && (!M.result || C.turn.p.init && C.turn.p.stage === 'run')) rideOut(player, C.turn.p, dt);      // (once begun, the ride-out is finished even if the match ends under it)
@@ -1555,7 +1568,7 @@ function updateRide(dt, dtReal) {
   // lateral: steer + shying
   if (live) {
     let steer = ((keys.left ? -1 : 0) + (keys.right ? 1 : 0)) * (M.kit.blind ? PHYS.kit.blindSteer : 1);
-    if (touchMode && !G.auto) steer = clamp(-(C.lat - LANE_X) * 1.2 - C.latV * 0.4, -1, 1) * 0.85 * (M.kit.blind ? PHYS.kit.blindSteer : 1);      // phone: no reins, so the rider keeps his own line (a fretful horse still wavers)          // left = toward the tilt; a blinkered horse keeps his line and is slow to be turned
+    if (touchMode && !isAuto()) steer = clamp(-(C.lat - LANE_X) * 1.2 - C.latV * 0.4, -1, 1) * 0.85 * (M.kit.blind ? PHYS.kit.blindSteer : 1);      // phone: no reins, so the rider keeps his own line (a fretful horse still wavers)          // left = toward the tilt; a blinkered horse keeps his line and is slow to be turned
     // a fretful horse (agit > swayAt) sways about his lane, both ways and centred: his position is a slow sine pair that starts at the lane, so he never pulls one way (a blinkered horse cannot)
     const swayA = M.kit.blind ? 0 : clamp((M.agit - PHYS.kit.swayAt) / (1 - PHYS.kit.swayAt), 0, 1) * PHYS.kit.swayMax * clamp(player.speed / 5, 0, 1);
     C.swayT = (C.swayT || 0) + dt; if (C.swayDir === undefined) { C.swayDir = Math.random() < 0.5 ? -1 : 1; C.swayPos = 0; }
@@ -1569,7 +1582,7 @@ function updateRide(dt, dtReal) {
     C.latV += (steer * 3.2 + shy) * dt * clamp(player.speed / 5, 0.15, 1);
     C.latV *= Math.exp(-2.4 * dt);
     C.lat += C.latV * dt + (swayNow - C.swayPos); C.swayPos = swayNow;
-    if (!touchMode && !G.auto && !M.taught.drift && swayA > 0.02 && Math.abs(C.lat - LANE_X) > PHYS.kit.swayHint && !keys.left && !keys.right) { M.taught.drift = true; callout('YOUR HORSE IS FRETFUL · STEER WITH A / D', 'bad'); }      // the nervous horse's sway is a mechanic: say how to answer it, once a match, only when it is large
+    if (!touchMode && !isAuto() && !M.taught.drift && swayA > 0.02 && Math.abs(C.lat - LANE_X) > PHYS.kit.swayHint && !keys.left && !keys.right) { M.taught.drift = true; callout('YOUR HORSE IS FRETFUL · STEER WITH A / D', 'bad'); }      // the nervous horse's sway is a mechanic: say how to answer it, once a match, only when it is large
     if (C.lat < BARRIER_X && !M.mode.tilt) { C.lat = BARRIER_X; C.latV = Math.max(C.latV, 0.4); }       // open field: nothing to strike, the horses simply will not close further
     else if (C.lat < BARRIER_X) {
       C.lat = BARRIER_X; C.latV = 0.9; player.speed *= 0.93;
@@ -1620,10 +1633,10 @@ function updateRide(dt, dtReal) {
   // ---------------- the raise: each rider lifts his lance upright; when both are up the marshal gives the signal
   if (S.mode === 'ready') {
     const R = C.rd;
-    if (G.auto && !R.p && !player.helmOff) { R.p = true; player.raiseT = 1; }
+    if (isAuto() && !R.p && !player.helmOff) { R.p = true; player.raiseT = 1; }
     stepBeat(dtReal);
     // keep the lists waiting at your mark and the host loses patience (once a match): lance not up after 12 s, or not away 8 s after the signal
-    if (!C.beat && !M.practice && !G.auto) {
+    if (!C.beat && !M.practice && !isAuto()) {
       R.wait = (R.wait || 0) + dtReal; if (R.sig) R.sigWait = (R.sigWait || 0) + dtReal;
       if (!M.restless && ((!R.p && R.wait > 12) || (R.sig && R.sigWait > 8)) && hostSay('restless', 0, 'ready')) M.restless = true;
     }
@@ -1669,12 +1682,15 @@ function updateRide(dt, dtReal) {
   if (live && gap2 > 0.5) {
     aimMouse.x = damp(aimMouse.x, mouse.x, 16 * Math.sqrt(PHYS.lanceArm.refKg / lanceOf(true).kg), dt); aimMouse.y = damp(aimMouse.y, mouse.y, 16 * Math.sqrt(PHYS.lanceArm.refKg / lanceOf(true).kg), dt);
     if (dazeFrac() > 0.01) { const dz = dazeFrac() * 0.045; _dm.set(aimMouse.x + Math.sin(S.time * 7.1) * dz, aimMouse.y + Math.cos(S.time * 5.3) * dz); }      // a ringing head: the point drifts
-    ray.setFromCamera(G.auto ? mouse : dazeFrac() > 0.01 ? _dm : aimMouse, camera);
+    if (M.spec && C.pa) _a.copy(C.pa.pt);      // a spectated rider aims at his own world point (a side-on camera cannot be aimed through)
+    else {
+    ray.setFromCamera(isAuto() ? mouse : dazeFrac() > 0.01 ? _dm : aimMouse, camera);
     opp.zoneWorld('body', _zc);
     const o = ray.ray.origin, d = ray.ray.direction;
     const t = d.z * D > 0.02 ? clamp((_zc.z - o.z) / d.z, 3, 140) : 140;
     _a.copy(o).addScaledVector(d, t);
     aimAssist(dt);
+    }
     player.gripWorld(_b); _c.subVectors(_a, _b).normalize();
     // work in the rider's own frame so the same code serves both directions of travel
     let cmdYaw = Math.atan2(_c.x * D, _c.z * D), cmdPitch = Math.asin(clamp(_c.y, -1, 1));
@@ -1683,7 +1699,7 @@ function updateRide(dt, dtReal) {
       const AM = PHYS.aim, ke = aimEaseOf(gap2), yLo = lerp(-0.7, AM.yawMin, ke), yHi = lerp(1.3, AM.yawMax, ke), pLo = lerp(-0.6, AM.pitchMin, ke), pHi = lerp(0.6, AM.pitchMax, ke);
       const cy = clamp(cmdYaw, yLo, yHi), cp = clamp(cmdPitch, pLo, pHi);
       C.aimEdge = ke > 0.15 && (cmdYaw <= yLo + 0.01 || cmdYaw >= yHi - 0.01 || cmdPitch <= pLo + 0.01 || cmdPitch >= pHi - 0.01);      // (at the stop: the point is held on it, so test with a hair of slack)
-      if (C.aimEdge && !G.auto) {
+      if (C.aimEdge && !isAuto()) {
         const r = _a.distanceTo(_b);
         _c.set(D * Math.sin(cy) * Math.cos(cp), Math.sin(cp), D * Math.cos(cy) * Math.cos(cp)); _a.copy(_b).addScaledVector(_c, r).project(camera);
         if (Number.isFinite(_a.x + _a.y)) { mouse.set(clamp(_a.x, -1, 1), clamp(_a.y, -1, 1)); aimMouse.copy(mouse); }
@@ -1858,7 +1874,7 @@ function celFire(J, id, mode, sw = false) {
   if (!sw && CELEBS[id].kind === 'win') {
     const big = mode === 'match'; celCheer(J === player ? 1 : -1, big);
     if (G.boothCelebrate && !M.practice) G.boothCelebrate(id);      // the booth remarks on the celebration (src/booth_lines.js celebrate.*)
-    if (profile.herald !== false && (big || Math.random() < 0.5)) say(heraldLine(id, J === player ? profile.name : M.od.short, big), ANNOUNCER.label, 3, { phases: ['after', 'end'], ttl: big ? 5 : 4, cat: 'celebrate' });
+    if (profile.herald !== false && (big || Math.random() < 0.5)) say(heraldLine(id, J === player ? (M.spec ? M.specA.short : profile.name) : M.od.short, big), ANNOUNCER.label, 3, { phases: ['after', 'end'], ttl: big ? 5 : 4, cat: 'celebrate' });
   }
   return true;
 }
@@ -1872,10 +1888,11 @@ function celWinner() {
 }
 /** The player's prompt: a default plays at once; a choice within ~1.5 s replaces it. */
 function celPrompt(mode) {
+  if (M.spec) { const ok = (id) => celOk(player, id, mode); celFire(player, aiPick(M.specA, ok), mode); return; }      // a spectated knight celebrates as his own arms would
   const ok = (id) => celOk(player, id, mode), ch = promptChoices(profile, ok); if (!ch.length) return;
   const fav = favourites(profile).filter(ok), def = (fav.length ? fav : ch)[Math.floor(Math.random() * (fav.length || ch.length))];
   celFire(player, def, mode);
-  if (G.auto && !G.celPrompt) return;      // (the harness: no prompt unless asked)
+  if (isAuto() && !G.celPrompt) return;      // (the harness: no prompt unless asked)
   showPrompt(ch, def, (id) => { if (player.cel && C && C.cel) celFire(player, id, mode, true); }, 1500);
 }
 function celCourse() {
@@ -1918,7 +1935,7 @@ function tlog() {
 }
 
 /** Is the unhorsed man still getting up? Offline only: online nothing waits for it, and the harness's autopilot skips it unless G.aftermathAuto. */
-const aftermathHolding = () => !!(C && C.cine && !S.online && !(M && M.practice) && (!G.auto || G.aftermathAuto) && afterM.holding(C.cine));
+const aftermathHolding = () => !!(C && C.cine && !S.online && !(M && M.practice) && (!isAuto() || G.aftermathAuto || M.spec) && afterM.holding(C.cine));
 /** What happens once both lances are spent: replay, the verdict, the royal gallery, then wheel about for the next course. */
 function aftermath(dtReal) {
   C.afterT += dtReal; recMeta();
@@ -1929,7 +1946,7 @@ function aftermath(dtReal) {
   if (C.countDue) { if (C.raised || C.afterT > 2.5) { C.countDue = false; settleCount(); } else return; }      // Judged Tilt: the card waits a moment for the lance to come up
   const anyHit = (C.pL.res && C.pL.res.zone !== 'miss' && C.pL.res.zone !== 'none') || (C.oL.res && C.oL.res.zone !== 'miss' && C.oL.res.zone !== 'none');
   const wait = C.cine ? 3.0 : M.practice ? 2.3 : 1.25;      // at the quintain, wait for the bag to come about before the replay
-  const replay = anyHit && G.replays !== false && replaysMode() !== 'off' && C.rec.f.length > 20 && !S.online;      // (online: no replays, the match does not wait)
+  const replay = anyHit && G.replays !== false && replaysMode() !== 'off' && C.rec.f.length > 20 && !S.online && (!M.spec || brk(C.pL.res) || brk(C.oL.res) || bigMoment() || !!M.result);      // (a watched bout replays only a broken lance, a fall or the deciding course)      // (online: no replays, the match does not wait)
   if (!C.replayed && C.afterT > wait) {
     if (!M.practice) {
       if (!C.lanceDone) { C.lanceDone = true; if (C.meet && !C.cine && seenCine('lance')) { dropLanceBits(true); C.cut = { kind: 'lance', t: 1.2 }; } }      // the full version: 1.2 s on the broken lance on the sand
@@ -1937,7 +1954,7 @@ function aftermath(dtReal) {
       if (!C.montDone) { C.montDone = true; startMontage(); }      // a big moment gets the reaction montage first
       if (C.mont) { stepMontage(dtReal); return; }
       if (!C.batDone) { C.batDone = true; startBatter(); if (C.mont) { stepMontage(dtReal); return; } }      // the battered knight: a close-up after a heavy blow
-      if (!C.judged) { C.judged = true; raiseJudges(false); }      // the judges' flags go up in the world, but the camera never visits them and nothing waits for them (owner: the score is at the top and the hit diagram says the rest)
+      if (!C.judged) { C.judged = true; if (!M.spec) raiseJudges(false); }      // the judges' flags go up in the world, but the camera never visits them and nothing waits for them (owner: the score is at the top and the hit diagram says the rest)
     }
     if (replay) { startReplay(); return; }
     trimRec(C.rec); C.replayed = true;
@@ -1947,9 +1964,10 @@ function aftermath(dtReal) {
   if (C.mont) { stepMontage(dtReal); return; }
   if (M.result) {
     if (!C.carded) {
-      if (!C.vJudge && !M.practice && !G.auto && judges.has()) { C.vJudge = true; judges.act('verdict', VERDICT_CUT - 0.2); C.cut = { kind: 'judges', t: VERDICT_CUT, total: VERDICT_CUT, split: 1.8, verdict: true }; }      // the match is decided: the middle judge stands his baton up, the others nod
+      if (!C.vJudge && !M.practice && !isAuto() && judges.has()) { C.vJudge = true; judges.act('verdict', VERDICT_CUT - 0.2); C.cut = { kind: 'judges', t: VERDICT_CUT, total: VERDICT_CUT, split: 1.8, verdict: true }; }      // the match is decided: the middle judge stands his baton up, the others nod
       if (C.cut && C.cut.kind === 'judges') return;
-      if (M.tourn && M.result === 'draw' && !M.tied) settleTie();      // a knockout has no draws
+      if ((M.tourn || M.spec) && M.result === 'draw' && !M.tied) settleTie();
+      if (M.spec) { specResult(dtReal); return; }      // a watched bout: the winner's moment and a short result beat, then on to the next (no card, no reckoning)      // a knockout has no draws
       if (!C.lapDone && lapOk()) { if (!C.lap && !lapStart()) C.lapDone = true; if (C.lap && !C.lap.ended) { lapStep(dtReal); return; } }
       if (!C.celMDone) { C.celMDone = true; const res = M.result, w = /^win/.test(res) && !/forfeit/.test(res) ? player : /^loss/.test(res) ? opp : null; if (w && !(M.bridge && !M.bridge.final) && !M.void) celMatch(w, w === player ? opp : player); }
       if (celBusy()) return;
@@ -1967,7 +1985,7 @@ function aftermath(dtReal) {
 // Holding Space skips the helm fitting and the montage (the same ring as the intro's).
 /** The marshal's signal: sometimes he holds the flags up a while (more on the last courses), and the horns sound on the first and the last course only. */
 function planSignal() {
-  if (M.practice || G.auto) return { hold: 0, horns: false };
+  if (M.practice || isAuto()) return { hold: 0, horns: false };
   const last = M.course >= M.courses, pen = M.course === M.courses - 1;
   return { hold: Math.random() < (last ? 0.6 : pen ? 0.4 : 0.25) ? 1.5 + Math.random() * 1.5 : 0, horns: M.course === 1 || last };
 }
@@ -2011,7 +2029,7 @@ function bigMoment() {
 const MONT_LEN = [1.4, 1.9, 2.4], MONT_END = [1.4, 3.3, 5.7];      // the stands (the ribbons fly), your squire runs to his lord, a lady of the gallery reacts and holds: 5.7 s, each cut long enough for its gesture to finish (was 3 x 1.1 s)
 const hasSpot = () => !!(world && world.crowd && world.crowd.spotlight);
 function startMontage() {
-  if (G.auto || !G.reactions || !bigMoment()) return;      // (off: the owner dislikes the cuts to the stands, the squire and the ladies, and the winner's celebration is followed from start to end instead. G.reactions = true brings it back)
+  if (isAuto() || !G.reactions || !bigMoment()) return;      // (off: the owner dislikes the cuts to the stands, the squire and the ladies, and the winner's celebration is followed from start to end instead. G.reactions = true brings it back)
   const p = C.pL.res, o = C.oL.res, real = (r) => !!r && r.broke && !r.foul && r.zone !== 'horse';
   const decides = !!M.result || M.course >= M.courses;      // (the stands, the squire and the lady: the first time, an unhorsing, or the course that decides the match; never online)
   if (S.online || !(p.unhorse || o.unhorse || decides || seenCine('montage'))) return;
@@ -2047,6 +2065,7 @@ function endMontage() { C.mont = null; C.cut = null; $('royalCap').classList.add
 /** Hold Space to skip the helm fitting and the reaction montage (the ring fills as in the intro). */
 let beatUi = false;
 function beatSkip(dtReal) {
+  if (M && M.spec) return;      // (a watched bout has its own hold, see specTick)
   const on = !!(M && C && S.mode !== 'intro' && S.mode !== 'replay' && (C.mont || C.beat || aftermathHolding() || (C.cut && (C.cut.kind === 'judges' || C.cut.kind === 'herald'))));
   if (!on) { if (beatUi) { beatUi = false; ceremony.skipUI(false); S.skipHold = 0; } return; }
   beatUi = true; S.skipHold = skipKey ? S.skipHold + dtReal : Math.max(0, S.skipHold - dtReal * 2.5);
@@ -2595,7 +2614,7 @@ function aftermathEvent(name, d) {
 // conditions, a yield, a spare helm and a dropped lance, and the host's messages carry none of them; the existing online rules (body <= 0.02 ends it by yield,
 // as netApplyCourse mirrors) are left exactly as they were. The herald's "Laissez-aller!" and the tally are cosmetic and local, so they run everywhere.
 const DR = PHYS.drama;
-const injuriesOn = () => !!M && !S.online && !M.practice;
+const injuriesOn = () => !!M && !S.online && !M.practice && !M.spec;
 const COND_RANK = { FIT: 0, DOUBTFUL: 1, UNFIT: 2 };
 /** FIT / DOUBTFUL / UNFIT for one man (0 you, 1 him), from his body, the jolt in arm and wind, and the heavy blows he has taken. */
 function conditionOf(side) {
@@ -2669,7 +2688,7 @@ function dramaBetween() {
 
 // ---- the battered knight: a short close-up of the struck man's helm and harness after a heavy blow (a C.mont of kind 'batter': hold Space / touch to skip, like the montage)
 function startBatter() {
-  if (!injuriesOn() || (G.auto && !G.dramaAuto) || !C.heavyHit) return;
+  if (!injuriesOn() || (isAuto() && !G.dramaAuto) || !C.heavyHit) return;
   let h = null; for (const x of C.heavyHit) if (x && (!h || x.p > h.p)) h = x;
   const J = h && (h.who ? opp : player);
   if (!h || J.unhorsed || J.going || M.course - M.dr.batterAt < DR.batterGap) return;
@@ -2692,7 +2711,7 @@ function tendReason(i) {
   return null;
 }
 function startTend() {
-  if (!injuriesOn() || (G.auto && !G.dramaAuto)) return;
+  if (!injuriesOn() || (isAuto() && !G.dramaAuto)) return;
   const r = [tendReason(0), tendReason(1)], who = r[0] ? 0 : r[1] ? 1 : -1;
   if (who < 0) { M.dr.cond = [conditionOf(0), conditionOf(1)]; return; }
   const cond = conditionOf(who), nm = M.od.short; M.dr.cond = [conditionOf(0), conditionOf(1)];
@@ -2870,7 +2889,7 @@ function finishCourse() {
     C.mutual = brk(p) && brk(o);
     M.note = suddenNote();
   }
-  if (!M.practice) {      // feats of the course (the toasts wait for the verdict)
+  if (!M.practice && !M.spec) {      // feats of the course (the toasts wait for the verdict)
     const real = p.broke && p.zone !== 'horse' && !p.foul;
     withFeats(() => courseFeats(profile, { broke: real, helm: real && p.code === 'h', unhorse: !!p.unhorse, perfect: real && p.code === 'h' && !!C.perfectHit }));
   }
@@ -3349,6 +3368,7 @@ function closeReplays() {
 }
 
 function advance() {
+  if (M && M.spec) return;      // (a watched bout is left by holding Space, the button, or the pause menu)
   if (R && R.hl) { replayView(); return; }      // a tap (or a click) in a highlight: the next angle
   if (S.paused) return;
   if (celCamOn()) { celSkip(); return; }      // Space / a tap: end the celebration and its cam
@@ -3365,6 +3385,7 @@ function nextBout() {
 }
 function endMatch(keepLink = false) {
   celStop(); ceremony.skipUI(false);
+  if (S.spec) specClear();
   if (S.online && !keepLink) netLeave();
   if (world && world.setTilt) world.setTilt(true);
   for (const id of ['card', 'hud', 'verdict', 'lesson', 'royalCap', 'replayTag', 'replayKeys', 'replayYou', 'replayHim']) $(id).classList.add('hidden');
@@ -3401,11 +3422,161 @@ function recordTournament() {
   saveProfile();
 }
 
+// ------------------------------------------------------------------ watching the roll (src/tourney_screen.js: Watch Round)
+// A bout of the roll played as a spectator: the knights a and b of one pair ride the real match engine (the same lists, strokes, falls and scoring as a match of yours), but nobody
+// is yours. Knight a takes the player's side on the autopilot (his own skill sets how true his point is), knight b is the ordinary AI; both wear their own arms, horse and harness.
+// The player's profile is never used or paid: it is snapshotted at the start of each bout and restored at its end (saveProfile does nothing meanwhile), so no gold, renown, feat,
+// stat, bond or injury can leak out of it. The caller (tourney_screen.js) gets each bout's result through onBout and the end through onEnd.
+// Controls: hold Space (or the screen on a phone) to skip the bout, the Skip all button to leave all that is left, Esc for the pause menu (Stop watching).
+const specKnight = (id) => KNIGHTS.find(k => k.id === id) || FIELD.find(k => k.id === id) || null;
+const SPEC_INTRO = 4.6, SPEC_RESULT = 3.2;      // seconds: the short opening; the result beat after the winner's moment
+const SPEC_BOOTH = /^(welcome|venue|knight|mode|exclaim|away|charge|ready|filler|history|after\.(bothBreak|bothMiss|attaint)|momentum\.(level|lastCourse|extra))/;      // the pools that never say "you" (and Pell's recorded turns only: booth.watch)
+let specRun = null, specSnap = null, specBtn = null, specDefer = null;
+const SC = { shot: '', t: 0, z: undefined, mz: 0, on: null };
+
+/** Start watching: cfg = { v, mode, courses, label, pairs: [{ a, b, ref }], onBout(pair, res | null), onEnd('done' | 'skipall' | 'leave') }. res = { w, sc: [a's, b's], result } is what the bout really decided. */
+function startSpectate(cfg) {
+  if (M || specRun || !cfg || !cfg.pairs || !cfg.pairs.length) return false;
+  specRun = { cfg, i: 0 }; specNext(); return true;
+}
+function specNext() {
+  const r = specRun, pr = r.cfg.pairs[r.i];
+  startMatch(r.cfg.v, pr.b, false, false, r.cfg.mode || null, r.cfg.courses || 3, null, false, { a: pr.a, b: pr.b, i: r.i, n: r.cfg.pairs.length, label: r.cfg.label || '' });
+}
+function specBegin() {      // the bout's start: the profile is put by, the Skip all button shows
+  specSnap = JSON.stringify(profile);
+  if (!specBtn) {
+    specBtn = document.createElement('button'); specBtn.id = 'specSkipAll'; specBtn.className = 'btn'; specBtn.textContent = 'Skip all'; specBtn.title = 'Leave the rest of the round: every remaining result is read at once';
+    for (const ev of ['pointerdown', 'mousedown', 'touchstart']) specBtn.addEventListener(ev, (e) => e.stopPropagation());
+    specBtn.addEventListener('click', (e) => { e.stopPropagation(); specSkipAll(); });
+    document.body.appendChild(specBtn);
+  }
+  specBtn.style.display = 'block';
+}
+function specRestore() {      // the profile as it was before the bout, in place (everyone holds the same object)
+  if (!specSnap) return;
+  try { const o = JSON.parse(specSnap); for (const k of Object.keys(profile)) delete profile[k]; Object.assign(profile, o); } catch (e) { /* keep what there is */ }
+  specSnap = null;
+}
+function specClear() {      // (endMatch) the watched bout's screen furniture goes
+  S.spec = false; document.body.classList.remove('spec'); booth.watch(false); if (specBtn) specBtn.style.display = 'none'; $('pmLeave').textContent = 'Leave the lists'; $('pmRide').innerHTML = 'Ride on <kbd>Esc</kbd>'; $('banner').classList.add('hidden'); ceremony.skipUI(false);
+}
+/** What the bout decided, from knight a's side (null if it was not decided: the roll keeps its drawn result). */
+function specResultOf() {
+  if (!M || !M.spec || !M.result || !/^(win|loss)/.test(M.result)) return null;
+  const pr = specRun.cfg.pairs[specRun.i];
+  return { w: M.result.startsWith('win') ? pr.a : pr.b, sc: [M.score[0], M.score[1]], result: M.result };
+}
+/** The bout is over (played out, or skipped): the profile is restored, the match torn down, the caller told, and the next pair begins. Always run from the frame's start (specDefer): never from inside a ride. */
+function specFinishBout() {
+  const run = specRun; if (!run || !M) return;
+  const pr = run.cfg.pairs[run.i], res = specResultOf();
+  specRestore(); endMatch();
+  try { run.cfg.onBout(pr, res); } catch (e) { console.error(e); }
+  run.i++;
+  if (run.i < run.cfg.pairs.length && specRun === run) specNext(); else { specRun = null; try { run.cfg.onEnd('done'); } catch (e) { console.error(e); } }
+}
+function specStop(reason) {      // leave now: 'skipall' (every remaining result is read) or 'leave' (stop watching, the round stays open)
+  const run = specRun; if (!run || !M) return;
+  const pr = run.cfg.pairs[run.i], res = reason === 'skipall' ? specResultOf() : null;
+  specRun = null; specRestore(); endMatch();
+  try { if (res) run.cfg.onBout(pr, res); run.cfg.onEnd(reason); } catch (e) { console.error(e); }
+}
+function specSkipAll() { if (M && M.spec && !specDefer) specDefer = () => specStop('skipall'); }
+function specLeave() { if (M && M.spec) specStop('leave'); }
+/** Every frame of a watched bout: the hold-to-skip ring and its count. */
+function specTick(dtReal) {
+  if (S.mode === 'ready' && C && C.rd.sig && !S.paused) startCharge();      // (nobody to spur: the knights go at the marshal's signal)
+  S.skipHold = skipKey ? S.skipHold + dtReal : Math.max(0, S.skipHold - dtReal * 2.5);
+  ceremony.skipUI(!S.paused, S.skipHold / SKIP_HOLD, touchMode ? 'Hold the screen to skip this bout' : 'Hold <kbd>SPACE</kbd> to skip this bout');
+  if (S.skipHold >= SKIP_HOLD && !specDefer) { S.skipHold = 0; skipKey = false; specDefer = () => specFinishBout(); }
+}
+/** The decided bout: the winner's moment (the celebration and its camera), then a short result beat. */
+function specResult(dtReal) {
+  const res = M.result, aWon = res.startsWith('win');
+  C.specT = (C.specT || 0) + dtReal;
+  if (!C.celMDone) { C.celMDone = true; const w = aWon ? player : opp; if (!M.void) celMatch(w, aWon ? opp : player); }
+  if (celBusy() && C.specT < 8) return;
+  celStop();
+  if (!C.specShown) {
+    C.specShown = true; C.specT = 0; fanfare('short');
+    const wn = (aWon ? M.specA : M.od), ln = aWon ? M.od : M.specA, hi = Math.max(M.score[0], M.score[1]), lo = Math.min(M.score[0], M.score[1]);
+    $('bannerTop').textContent = 'THE BOUT IS DECIDED'; $('bannerMain').textContent = `${wn.short} wins`; $('bannerSub').innerHTML = `${wn.name.replace(/, ".*"/, '')} over ${ln.name.replace(/, ".*"/, '')} &nbsp;·&nbsp; ${hi} credits to ${lo}`; $('banner').classList.remove('hidden');
+    ceremony.hideCard();
+  }
+  if (C.specT > SPEC_RESULT && !specDefer) specDefer = () => specFinishBout();
+}
+/** A course's autopilot and camera plan: the knight's aim, and which shot follows the charge. */
+function specCourse() {
+  const K = M.specA;
+  C.pa = { zone: Math.random() < K.skill * 0.3 ? 'helm' : Math.random() < 0.75 ? 'shield' : 'body', bias: new THREE.Vector2(Math.random() - 0.5, Math.random() - 0.5), seed: Math.random() * 50, brace: Math.random() < lerp(0.25, 0.9, K.skill), pt: new THREE.Vector3() };
+  let sh = G.specShot || 'chase'; M.lastShot = sh;      // (only down-the-lists views: from behind a knight or from behind the end, so both riders are always in frame)
+  C.shot = sh; C.side = Math.random() < 0.5 ? -1 : 1; C.shotWho = G.specWho ?? (Math.floor(M.course / 2) % 2); C.flip = Math.random() < 0.5 ? -1 : 1;
+}
+/** The first words on the screen: the two names and the roll's round. */
+function specIntroBanner(V, mode) {
+  const S2 = M.spec, a = M.specA, b = M.od, nm = (k) => k.name.replace(/, ".*"/, '');
+  $('bannerTop').textContent = `${V.city.toUpperCase()} · ANNO ${V.year} · ${(S2.label || 'THE ROLL').toUpperCase()}${S2.n > 1 ? ` · BOUT ${S2.i + 1} OF ${S2.n}` : ''}`;
+  $('bannerMain').textContent = V.name; $('bannerSub').innerHTML = `${nm(a)} &nbsp;against&nbsp; ${nm(b)}<div id="tape"><div><b>${ovr(a)}</b>${HORSES[a.horse].name} · ${a.land}<small>${ARMOURS[a.armour].name.toUpperCase()}</small></div><div><b>${ovr(b)}</b>${HORSES[b.horse].name} · ${b.land}<small>${ARMOURS[b.armour].name.toUpperCase()}</small></div></div>`;
+  $('venueInfo').textContent = `${V.name.toUpperCase()} · ${(S2.label || 'THE ROLL').toUpperCase()} · WATCHING${S2.n > 1 ? ` · BOUT ${S2.i + 1} OF ${S2.n}` : ''}`;
+}
+function boothOpenSpec() {
+  const a = M.specA, b = M.od, ag = [`venue.${M.V.id}`, `mode.${M.mode.id}`, poolAt(`knight.${b.id}`) ? `knight.${b.id}` : null, poolAt(`knight.${a.id}`) ? `knight.${a.id}` : null, 'history'].filter(Boolean);
+  booth.watch(true, SPEC_BOOTH); booth.setAgenda(ag); booth.say('welcome', { delay: 0.6, ttl: 9, prio: 2.5 });
+}
+/** The booth after a stroke of a watched bout: only what holds for either man (both broke, both missed, a touch); the falls and the breaks are called by the exclamations. */
+function boothAfterSpec(cy, ch) {
+  const k = cy === 'unhorse' || ch === 'unhorse' || cy === 'foul' || ch === 'foul' ? null : brkCat(cy) && brkCat(ch) ? 'bothBreak' : cy === 'miss' && ch === 'miss' ? 'bothMiss' : !brkCat(cy) && !brkCat(ch) && (cy === 'attaint' || ch === 'attaint') ? 'attaint' : null;
+  if (k) booth.say('after.' + k, { delay: 0.8, ttl: 14, prio: 4 });
+  if (!M.result && M.score[0] === M.score[1] && Math.random() < 0.6) booth.say('momentum.level', { delay: 3.5, ttl: 14, prio: 3, when: () => !!C && S.mode !== 'charge' });
+}
+/** The opening: slow orbits of the two knights at their ends. */
+function specIntroCam(want, look) {
+  const t = S.introT, on = t < SPEC_INTRO / 2 ? opp : player, tt = on === opp ? t : t - SPEC_INTRO / 2, a = tt * 0.3 - 0.95, dd = on.dir || -1, c = on.root.position, snap = SC.on !== on; SC.on = on;
+  want.set(c.x + Math.sin(a) * 6.2 * dd, on.seatY - 0.05 + tt * 0.16, c.z + Math.cos(a) * 6.2 * dd); look.set(c.x, on.seatY + 0.05, c.z);
+  return { fov: 40, snap };
+}
+/** The broadcast feed of a watched bout: behind a knight at his mark; then the course's shot (alongside, behind, low by the tilt, or the whole lists); cut to the meeting at the lances; the turn at the end. */
+function specCam(dtReal, want, look) {
+  const mid = (player.z + opp.z) / 2, gap = gapNow();
+  let shot, snap = false;
+  const who = C.shotWho || 0;
+  if (S.mode === 'ready') shot = 'salute';
+  else if (S.mode === 'charge' && !C.pL.done && !C.oL.done) shot = C.shot === 'wide' && gap < 10 ? 'impact' : C.shot || 'chase';
+  else if (S.mode === 'after' && C.afterT < 1.7) shot = 'impact';
+  else shot = 'turn';
+  if (shot !== SC.shot) { SC.shot = shot; SC.t = 0; SC.z = undefined; snap = true; }
+  SC.t += dtReal; SC.mz = damp(SC.mz, mid, 6, dtReal);
+  const R = who ? opp : player, d = R.dir || 1, o = Math.sign(R.root.position.x) || 1, s = C.side || 1;
+  const u = clamp(SC.t / 7, 0, 1); let fov = 40, rate = 5;
+  switch (shot) {
+    case 'salute': { const j = R, dj = j.dir || 1, oj = Math.sign(j.root.position.x) || 1; want.set(j.root.position.x + oj * 2.5, 1.95, j.z - dj * 4.8); look.set(0, 1.55, j.z + dj * 13); fov = 36; rate = 6; break; }
+    case 'wide': want.set(s * 2.4, 4.2 - 0.6 * u, -(START_Z + 9) * d); look.set(0, 1.2, mid * 0.5 + 6 * d); fov = 44; rate = 6; break;
+    case 'chase': { SC.z = damp(SC.z ?? R.z - d * 6, R.z - d * 6, 5, dtReal); const X = R === player ? opp : player; want.set(R.root.position.x + o * 2.8, 3.0, SC.z); look.set(lerp(R.root.position.x, X.root.position.x, 1), 1.5, lerp(R.z, X.z, 0.6)); fov = 40; rate = 9; break; }      // (a little outside his lane and looking between the two: the far rider is never hidden behind the near one)
+    case 'skim': if (SC.z === undefined) { SC.z = clamp(mid, -14, 14) - d * 10.5; SC.sx = o * 3.3; } want.set(SC.sx, 0.5, SC.z); look.set(0, 1.3, SC.z + d * 9.5); fov = 42; rate = 9; break;
+    case 'track': SC.z = damp(SC.z ?? R.z, R.z + d * 1.5, 4, dtReal); want.set(R.root.position.x + o * 4.8, 1.6, SC.z); look.set(-o * 0.6, 1.5, SC.z + d * 1.2); fov = 36; rate = 9; break;
+    case 'impact': { const mz = C.meet ? C.meet.z : clamp(SC.mz, -14, 14), ang = 0.15 + 0.7 * clamp(SC.t / 4, 0, 1) * (C.flip || 1); want.set(s * 7.0, 1.9 + 0.3 * clamp(SC.t / 4, 0, 1), mz - 1.2 + Math.sin(ang) * 2.4); look.set(0, 1.7, mz); fov = 46; rate = 10; break; }
+    default: { const e = (player.dir || 1); want.set(s * 5.6, 2.2, e * (LIST_HALF - 8) - e * 2 * clamp(SC.t / 6, 0, 1)); look.set(0, 1.2, e * 40); fov = 42; rate = 4; }
+  }
+  return { fov, rate, snap };
+}
+
 // ------------------------------------------------------------------ autopilot (testing / demo)
 /** 0 at the couch .. 1 at the meeting: both riders' aim yaw goes from the couch value to the one the target needs by the same rule (PHYS.aim), so the lances lie parallel in plan. */
 const aimEaseOf = (gap) => smoothstep(0, 1, clamp((PHYS.aim.easeFar - gap) / (PHYS.aim.easeFar - PHYS.aim.easeNear), 0, 1));
 function autoPilot(gap) {
   if (C.tier < 4 && C.t > 0.2 * (C.tier + 1)) { C.tier++; C.maxTier = Math.max(C.maxTier, C.tier); C.flags['t' + C.tier] = true; if (C.tier === 4) C.galT = C.t; }
+  if (M.spec && C.pa) {      // a watched knight: rides as the AI opponent does (his own skill sets how true his point is); the aim is a world point, not the mouse
+    const P = C.pa, K = M.specA;
+    C.couchHeld = gap < 36 && !C.pL.done;
+    if (gap < 3.6 && C.braceCd <= 0 && P.brace) doBrace();
+    opp.zoneWorld(P.zone, _a);
+    const amp = lerp(0.5, 0.11, clamp(K.skill + DF().ai, 0, 1)) * (1 + 0.4 * clamp(1 - K.seat, 0, 1) * 0.5);
+    _a.x += amp * (wobble(S.time * 1.7, P.seed) * 0.7 + P.bias.x * 0.9);
+    _a.y += amp * (wobble(S.time * 2.1, P.seed + 9) * 0.7 + P.bias.y * 0.9);
+    if (opp.hb) { let top = 0; for (const h of opp.hb) if (h.name === 'horseHead' || h.name === 'horseNeck') top = Math.max(top, h.c.ay + h.c.r, h.c.by + h.c.r); if (top > 0) _a.y = Math.max(_a.y, top + 0.12); }
+    P.pt.copy(_a); return;
+  }
   C.couchHeld = gap < (G.autoCouch ?? 36) && (!C.pL.done || G.autoKeepLow === true);
   if (gap < 3.6 && C.braceCd <= 0 && G.autoBrace !== false) doBrace();
   if (G.autoBurst && gap < 30) burst();
@@ -3998,8 +4169,8 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'KeyT') keys.throw = true;
   else if (k === 'KeyQ') { if (!keys.guard && C) C.guardAge = 0; keys.guard = true; }
   else if (k === 'KeyC') keys.look = true;
-  else if (k === 'Space' || k === 'Enter') { e.preventDefault(); if (S.mode === 'intro' || (C && (C.mont || C.beat || (C.lap && !C.lap.ended)))) { skipKey = true; return; } if (e.repeat) return; if (S.mode === 'charge' && k === 'Space') doBrace(); else advance(); }
-  else if (k === 'KeyV') { if (S.mode === 'replay') replayView(); else { S.fp = !S.fp; profile.firstPerson = S.fp; saveProfile(); } }
+  else if (k === 'Space' || k === 'Enter') { e.preventDefault(); if (S.mode === 'intro' || (M && M.spec) || (C && (C.mont || C.beat || (C.lap && !C.lap.ended)))) { skipKey = true; return; } if (e.repeat) return; if (S.mode === 'charge' && k === 'Space') doBrace(); else advance(); }
+  else if (k === 'KeyV') { if (S.mode === 'replay') replayView(); else if (M && M.spec) { /* a spectator has one feed */ } else { S.fp = !S.fp; profile.firstPerson = S.fp; saveProfile(); } }
   else if (k === 'KeyM') setSound(S.muted);
   else if (k === 'KeyN') { if (S.mode === 'menu' && !e.repeat) musicNext(); }
   else if (k === 'KeyR') { if (M && S.paused && !S.rpl) openReplays('pause'); else if (M && !S.paused && M.result && C && C.carded && S.mode === 'after') openReplays('card'); else if (C && S.mode === 'after' && C.replayed && C.rec.f.length > 20 && !C.cut && !R && !S.online) startReplay({ frozen: true }); }
@@ -4010,7 +4181,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'Digit2') interlude(2);
   else if (k === 'Digit3') interlude(3);
   else if (k === 'Escape' || k === 'KeyP') { if (M) { if (S.rpl) closeReplays(); else setPaused(!S.paused); } }
-  else if (k === 'Backspace') { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } }
+  else if (k === 'Backspace') { if (M && S.paused) { if (M.spec) { setPaused(false); specLeave(); return; } setPaused(false); endMatch(); menus.show('main'); } }
   if (k.startsWith('Arrow') || k === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => {
@@ -4024,7 +4195,7 @@ let rplDrag = null;      // a mouse button held down on a replay: a drag turns t
 window.addEventListener('mousemove', (e) => {
   if (rplDrag && !touchMode) { const dx = e.clientX - rplDrag.x, dy = e.clientY - rplDrag.y; rplDrag.x = e.clientX; rplDrag.y = e.clientY; rplDrag.moved += Math.abs(dx) + Math.abs(dy); if (rplDrag.moved > 5 && R) freeOrbit(dx, dy); return; }
   if (touchMode) return;      // a finger moves the aim by dragging (src/touch.js); the synthetic mouse move must not jump it
-  if (G.auto && S.mode === 'charge') return;
+  if (isAuto() && S.mode === 'charge') return;
   const nx = (e.clientX / window.innerWidth) * 2 - 1, ny = -(e.clientY / window.innerHeight) * 2 + 1;
   if (aimRebase) { aimRebase = false; aimOrigin.set(nx, ny); }      // the first move of a course takes wherever the hand is as the screen centre: the aim starts centred, whatever the pointer was doing
   mouse.set(clamp(nx - aimOrigin.x, -1, 1), clamp(ny - aimOrigin.y, -1, 1));
@@ -4046,6 +4217,7 @@ function setPaused(v) {
   if (!v && typeof menus !== 'undefined' && menus.overOpen()) menus.closeOver();      // (the touch pause button also closes Settings)
   if (!v) { if (R && R.hl) closeHL(); if (S.rpl) { const card = S.rplFrom === 'card'; closeReplays(); if (card) return; } }      // (the touch pause button also backs out of a highlight, and of the list)
   S.paused = v; const b = $('banner');
+  if (M && M.spec) { ceremony.skipUI(false); $('pmLeave').textContent = 'Stop watching'; $('pmRide').innerHTML = 'Keep watching <kbd>Esc</kbd>'; }
   if (v) { showPauseMain(); if (window.speechSynthesis && !S.online) window.speechSynthesis.pause(); }
   else { S.rpl = false; document.body.classList.remove('rpl-open'); $('pmenu').classList.add('hidden'); if (S.mode !== 'intro') b.classList.add('hidden'); if (window.speechSynthesis) window.speechSynthesis.resume(); }
   if (!S.muted && !S.online) audio.setMuted(v);
@@ -4062,7 +4234,7 @@ function openPauseSettings() {
 $('pmSet').addEventListener('click', openPauseSettings);
 { const fs = $('pmFs'), de = document.documentElement; const can = !!(de.requestFullscreen || de.webkitRequestFullscreen);      // desktop pause menu: a Full screen toggle
   if (!can || touchMode) fs.remove(); else fs.addEventListener('click', () => { try { if (document.fullscreenElement) document.exitFullscreen(); else (de.requestFullscreen || de.webkitRequestFullscreen).call(de); } catch (e) { /* ignore */ } }); }
-$('pmLeave').addEventListener('click', () => { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } });
+$('pmLeave').addEventListener('click', () => { if (M && S.paused) { if (M.spec) { setPaused(false); specLeave(); return; } setPaused(false); endMatch(); menus.show('main'); } });
 $('hlBack').addEventListener('click', () => closeHL());
 $('rplCtl').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b || !R) return; e.stopPropagation();
@@ -4272,6 +4444,8 @@ function updateCamera(dtReal) {
       want.set(c.x + Math.sin(S.menuAng) * 6.2, 2.3 + Math.sin(S.menuAng * 0.7) * 0.4, c.z + 1.0 + Math.cos(S.menuAng) * 6.2);
       wantLook.set(c.x - 1.2, 1.75, c.z + 0.4); rate = 3; wantFov = 42;
     }
+  } else if (S.mode === 'intro' && M && M.spec) {
+    const r = specIntroCam(want, wantLook); wantFov = r.fov; rate = 4; snap = r.snap;
   } else if (S.mode === 'intro' && introNew()) {
     const r = ceremony.camera(S.introT, player, opp, want, wantLook); wantFov = r.fov; snap = r.snap || S.introT < 0.05; rate = r.id === 'warmP' || r.id === 'warmO' ? 8 : 4;
   } else if (S.mode === 'intro') {
@@ -4346,6 +4520,8 @@ function updateCamera(dtReal) {
     const fp = afterM.focus(C.cine, _d), r = fp || C.cine.rider.position;      // (getting up: the pelvis as he poses it; else where he fell)
     want.set(r.x + Math.sign(r.x) * (fp ? 5.2 : 6.2), fp ? 1.5 : 1.45, r.z + (fp ? 3.0 : 3.6) * C.cine.dir); wantLook.set(r.x, fp ? 0.3 + r.y * 0.7 : 0.75, r.z); rate = 3.5; wantFov = fp ? 38 : 42;
     if (!C.cineCut) { C.cineCut = true; snap = true; }
+  } else if (M && M.spec && S.mode !== 'menu') {      // a watched bout: the broadcast feed (never first person, never over a shoulder of yours)
+    const r = specCam(dtReal, want, wantLook); wantFov = r.fov; rate = r.rate; snap = snap || r.snap; if (C && C.cutWas) C.cutWas = false;
   } else if (S.fp && !player.unhorsed) {
     player.helm.getWorldPosition(want); want.y += player.eyeY ?? 0.17;
     const fwd = _a.set(0, 0, 1).applyQuaternion(player.root.quaternion), lk = player.look;
@@ -4454,6 +4630,7 @@ G.physLog = [];
 G.hitboxes = (on = true) => { G._hbDebug = !!on; if (!on) { if (player) player.dbgUpdate(frameId, false); if (opp && opp.dbgUpdate) opp.dbgUpdate(frameId, false); } return G._hbDebug; };
 G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) frame(dt); };
 function frame(dtReal) {
+  if (specDefer) { const f = specDefer; specDefer = null; f(); }      // (a watched bout ends here, between frames, never inside a ride)
   touch.update();
   if (S.paused && !S.online) {      // (online the pause menu opens but the match goes on)
     musicSync();      // (the pause menu has its own music)
@@ -4482,13 +4659,15 @@ function frame(dtReal) {
     if (introNew()) { if (S.introT < MOVE.end) ceremony.stage(S.introT, player, opp, dt); introCues(S.introT); }      // the knights' walk-out, then the cues
     player.update(dt); opp.update(dt);
     // hold Space / Enter to skip: the ring fills; a tap does nothing
+    if (!M.spec) {
     S.skipHold = skipKey ? S.skipHold + dtReal : Math.max(0, S.skipHold - dtReal * 2.5);
     // online: a vote once cast stands (players rarely hold at the same moment); the ring says who is still to vote
     const tch = touchMode ? 'Hold the screen' : 'Hold <kbd>SPACE</kbd>';
     const lbl = !S.online ? null : S.skipWanted.me ? 'Waiting for your opponent to skip…' : S.skipWanted.them ? `Your opponent wants to skip · ${tch}` : null;
     ceremony.skipUI(true, S.skipWanted.me ? 1 : S.skipHold / SKIP_HOLD, lbl);
     if (S.skipHold >= SKIP_HOLD && !S.skipWanted.me) skipVote();
-    if (S.mode === 'intro' && S.introT > (introNew() ? INTRO_END : 8.4)) finishIntro();
+    }
+    if (S.mode === 'intro' && S.introT > (M.spec ? SPEC_INTRO : introNew() ? INTRO_END : 8.4)) finishIntro();
   } else if (S.mode === 'menu') { if (S.celPrev) { if (S.menuView !== 'armoury' || !player) { S.celPrev = null; if (player) celClear(player); } else if (!celActive(player) && (S.celPrevT += dtReal) > 0.9) { S.celPrevT = 0; celStart(player, S.celPrev, { mode: 'course' }); } } if (attract.update(dtReal, dt)) { if (player) player.root.visible = false; } else { if (player) { player.root.visible = true; if (!celActive(player) && player.rear > 0) player.rear = Math.max(0, player.rear - dtReal * 2.5); player.update(dt); } } if ((S.menuView === 'armoury' || S.menuView === 'welcome')) previews.update(dtReal, menus.root, profile.arms, profile.body, { armour: profile.armour, helm: profile.helm }); if (S.menuView === 'stable') stable.update(dtReal, menus.root, menus.stableHorse(), profile.arms, menus.stableCap()); else stable.release(); }
   else if (S.mode === 'replay') updateReplay(dtReal, dt);
   else if (M && C) { if (C.patCd > 0) C.patCd -= dtReal; updateRide(dt, dtReal); }
@@ -4497,6 +4676,7 @@ function frame(dtReal) {
   field.update(dt, fieldEnv());
   if (M && player && opp) afterM.update(dt, { jousters: [player, opp], decide: aftermathDecide, replay: !!R || S.mode === 'replay', online: S.online, sides: [player, opp] }); else if (!M) afterM.reset();
   if (M) ceremony.update(dtReal, S.time);
+  if (M && M.spec) specTick(dtReal);
   if (M) flagmen.update(dtReal, S.time, [player && player.root.position, opp && opp.root && opp.root.position]);
   if (M) { judges.update(dtReal, S.time); beatSkip(dtReal); }
   life.update(dt, { mode: M ? S.mode : 'menu', focusZ: attract.running ? attract.focusZ() : player && opp && M ? (player.z + opp.z) / 2 : 0, canCall: !!M && !M.result && (S.mode === 'ready' || S.mode === 'after') });
@@ -4543,7 +4723,7 @@ const touch = initTouch({ S, mouse, rpl: { active: () => !!R && S.mode === 'repl
   leave() { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } } });
 store.bindProfile(() => profile); store.onChange(() => { if (!M && player) rebuildPlayer(); });
 const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
-  get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, newTable,
+  get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, startSpectate, newTable,
   setBody(b) { profile.body = cleanBody(b); if (player) applyBody(player, profile.body); saveProfile(); },      // (the Body section of the menus: looks only, so the rider is reshaped where he sits)
   online: onlineApi, account: accountApi,
   resetCircuit() { career.newSeasonFor(profile); profile.venue = 0; saveProfile(); },
@@ -4568,7 +4748,7 @@ showMusicBtn();
 G.attract = attract;
 G.drama = { conditionOf, lancesLeft, startTend, startBatter, doYield, openYield, swapHelm, dropLance: (side = 0) => dropLance(side ? opp : player, side), yieldOk, aiYields };
 G.tl = TL; G.tlReset = () => { TL.length = 0; tlSig = ""; };
-G.squireCheer = (sit) => squireCheer(sit, 0.2); initFps(); G.aftermath = afterM; G.lanceBits = () => lanceBits; G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.celFire = (who, id, mode) => celFire(who === 'opp' ? opp : player, id, mode || 'course'); G.celStop = celStop; G.celForce = (who, id, mode) => { const W = who === 'opp' ? opp : player, L = W === player ? opp : player, md = mode === 'match' ? 'match' : 'course'; celStop(); C.cel = { W, L, mode: md, t: 0, cam: true, hold: !S.online, lose: { at: 0.8 + Math.random() * 0.5 }, shot: 0 }; return celFire(W, id, md); }; G.celCourse = celCourse; G.celMatch = (w) => celMatch(w === 'opp' ? opp : player, w === 'opp' ? player : opp); G.fx = fx; G.endReplay = endReplay; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
+G.squireCheer = (sit) => squireCheer(sit, 0.2); initFps(); G.aftermath = afterM; G.lanceBits = () => lanceBits; G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.celFire = (who, id, mode) => celFire(who === 'opp' ? opp : player, id, mode || 'course'); G.celStop = celStop; G.celForce = (who, id, mode) => { const W = who === 'opp' ? opp : player, L = W === player ? opp : player, md = mode === 'match' ? 'match' : 'course'; celStop(); C.cel = { W, L, mode: md, t: 0, cam: true, hold: !S.online, lose: { at: 0.8 + Math.random() * 0.5 }, shot: 0 }; return celFire(W, id, md); }; G.celCourse = celCourse; G.celMatch = (w) => celMatch(w === 'opp' ? opp : player, w === 'opp' ? player : opp); G.fx = fx; G.endReplay = endReplay; G.post = post; G.startMatch = startMatch; G.startSpectate = startSpectate; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
 resize();
 const firstVenue = Math.min(profile.venue || 0, VENUES.length - 1);
 // Staged loading: the menu needs only the two models (and, at medium and high, the first sky, but not for more than a few seconds).

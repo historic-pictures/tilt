@@ -766,7 +766,7 @@ export function initMenus(api) {
       else { const item = shopItem(p, d); if (item) { api.account.buy(item).then((r) => { if (!r.ok) { api.ui('error'); return show(root.dataset.name); } api.ui('select'); serverOk = true; onClick({ target: t }); serverOk = false; }); return; } }
     }
     api.ui(d.go || d.act || d.tt ? 'select' : 'click');
-    if (d.tt) return tourneyAct(d.tt, { p, api, show, here: () => root.dataset.name === 'circuit' });
+    if (d.tt) return tourneyAct(d.tt, { p, api, show, here: () => root.dataset.name === 'circuit', mode: circMode(p), courses: fixedCourses(circMode(p)) || 3 });      // (Watch Round: the same rules as your own bouts, three courses unless the rules fix it)
     if (d.act === 'aimmode') { setAimMode(d.v); return show('settings'); }
     if (d.act === 'aimspeed') { setAimSpeed(d.v); return show('settings'); }
     if (d.lock === 'charter') { const [why, v] = String(d.why || 'store').split(':'); openUpsell({ reason: why, venue: +v || 0, show }); return; }      // free content ends here: the popup

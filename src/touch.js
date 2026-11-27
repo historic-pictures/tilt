@@ -102,7 +102,7 @@ export function initTouch(h) {
   const joyShow = (on) => joyEl.classList.toggle('on', on);
   const joyKnob = () => { const k = joyEl.firstChild; k.style.transform = `translate(${(joy ? joy.nx : 0) * JOY.R}px, ${(joy ? joy.ny : 0) * JOY.R}px)`; };
   const aiming = () => { const C = h.getC(); return !S.paused && (S.mode === 'ready' || S.mode === 'charge') && !!C && !(C.pL && C.pL.done) && !C.mont && !C.beat; };
-  const skippable = () => { const C = h.getC(); return S.mode === 'intro' || !!(C && (C.mont || C.beat)); };
+  const skippable = () => { const C = h.getC(); return S.mode === 'intro' || !!S.spec || !!(C && (C.mont || C.beat)); };
   layer.addEventListener('pointerdown', (e) => {
     e.preventDefault(); h.initAudio();
     try { layer.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
