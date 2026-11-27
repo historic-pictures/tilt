@@ -3,9 +3,9 @@
 // Lists are kept in localStorage 'tilt.ytlist' (video ids). The default list is "Mates' radio".
 const KEY = 'tilt.ytlist';
 // Opens with Big Poppa (bardcore); the whole list loops.
-export const DEFAULT_IDS = ['-tJYN-eG1zk', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'];
+export const DEFAULT_IDS = ['BROaC0gtyQs', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'];
 // Earlier default lists: a saved list equal to one of these was never customised, so it follows the new default.
-const OLD_DEFAULTS = [['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'], ['3okjFDo2aSU', 'dywM446-vcE', 'Z83PICHUwSc'], ['_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc']].map(a => a.join());
+const OLD_DEFAULTS = [['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'], ['3okjFDo2aSU', 'dywM446-vcE', 'Z83PICHUwSc'], ['_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'], ['-tJYN-eG1zk', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc']].map(a => a.join());
 const DUCK = 0.35, MIN = 200, BIG_W = 320, BIG_H = 220, FADE_MS = 1000, CKEY = 'tilt.ytcollapsed';
 // YouTube's embedded-player rules: the player stays visible and at least 200x200, so "collapsed" is exactly that size (the bar stays on top of it).
 
@@ -48,7 +48,7 @@ export function bagDraw(st, n, cur, rnd = Math.random) {
 
 const listeners = new Set();
 export const ytmusic = {
-  DEFAULTS: { '-tJYN-eG1zk': 'Queen - We Will Rock You', '_yICA0JNmig': 'Big Poppa (bardcore)', '3okjFDo2aSU': 'The Real Slim Shady (bardcore)', 'L1Uvr5v8IOE': 'Still Dre (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)", 'zg3Ggn3CMgU': 'Lose Yourself (bardcore)', 't70UQr_fMgM': 'The Next Episode (bardcore)', 'XbigmX35ICQ': 'Blinding Lights (bardcore)', 'kJWvmSJ3k9Q': 'What Is Love (bardcore)', 'nKGsnHF7PTI': 'Hey Ya! (bardcore)', 'AWEwF0PGTmI': 'Land Down Under (medieval)', 'p8M2TPZG0f4': 'Gimme! Gimme! Gimme! (medieval)', 'YMnC1SHxct0': 'Ms. Jackson (bardcore)', 'NOPPcsrsM4M': 'Numb/Encore (bardcore)', 'Z83PICHUwSc': 'Eiffel 65 - Blue (Da Ba Dee)' },
+  DEFAULTS: { 'BROaC0gtyQs': 'We Will Rock You (bardcore)', '_yICA0JNmig': 'Big Poppa (bardcore)', '3okjFDo2aSU': 'The Real Slim Shady (bardcore)', 'L1Uvr5v8IOE': 'Still Dre (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)", 'zg3Ggn3CMgU': 'Lose Yourself (bardcore)', 't70UQr_fMgM': 'The Next Episode (bardcore)', 'XbigmX35ICQ': 'Blinding Lights (bardcore)', 'kJWvmSJ3k9Q': 'What Is Love (bardcore)', 'nKGsnHF7PTI': 'Hey Ya! (bardcore)', 'AWEwF0PGTmI': 'Land Down Under (medieval)', 'p8M2TPZG0f4': 'Gimme! Gimme! Gimme! (medieval)', 'YMnC1SHxct0': 'Ms. Jackson (bardcore)', 'NOPPcsrsM4M': 'Numb/Encore (bardcore)', 'Z83PICHUwSc': 'Eiffel 65 - Blue (Da Ba Dee)' },
   player: null, box: null, ready: false, idx: 0, note: '', title: '', vol: 0.6, ducked: false, muted: false, wantPlay: false, _failed: 0, held: false, fade: 1, collapsed: false,
   get ids() { try { const j = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(j)) { const a = j.filter(x => /^[\w-]{11}$/.test(x)); return OLD_DEFAULTS.includes(a.join()) ? DEFAULT_IDS.slice() : a; } } catch (e) { /* default */ } return DEFAULT_IDS.slice(); },
   _save(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } this._emit('list'); },
