@@ -15,7 +15,7 @@ const words = (s) => strip(s).split(/\s+/).filter(Boolean).length;
 export const turnTime = (s, fast = false) => Math.max(fast ? 1.1 : 1.7, 0.36 * words(s) + (fast ? 0.5 : 0.9));      // subtitle time for a turn (reading pace; the robot voice ends it sooner or later via onEnd)
 const PRIO = { exclaim: 6, away: 5, charge: 5, result: 6, after: 4, celebrate: 4, momentum: 3, score: 3, stakes: 2.5, ready: 2, agenda: 2, filler: 1 };
 const BUDGET = 10;          // turns per course (the exclamation and the charge lines do not count)
-const GAP = 0.5, MAIN_CLEAR = 0.5, EX_GAP = 0.3, QMAX = 6, TIGHT = 7;
+const GAP = 0.8, MAIN_CLEAR = 0.5, EX_GAP = 0.6, QMAX = 6, TIGHT = 7;      // GAP: the breath between two of his lines (~0.6-1 s)
 const used = new Map();    // pool path -> indexes used (session-wide)
 
 /** The pool at a dotted path of BOOTH ('after.breakYou', 'venue.smithfield'). */
@@ -25,7 +25,7 @@ export function poolAt(path) { let o = BOOTH; for (const k of path.split('.')) {
 const isTurn = (e) => typeof e[0] === 'string';
 
 /**
- * host = { phase(), mainBusy(), mainQuiet() (s until the main channel's next scheduled line), mainIdle() (s since it last showed a line ended),
+ * host = { phase(), abort() (true when the match was left / paused to the menu / commentary off: the only time a line is cut), speaking() (his sound is still playing), mainBusy(), mainQuiet() (s until the main channel's next scheduled line), mainIdle() (s since it last showed a line ended),
  *          enabled(), vars() (placeholder values), clip(id, spk) -> { t, d } | null (a recorded clip is ready), speak(text, key, onEnd, clipId) -> false | true (robot voice) | 'clip', stopSpeak(), show(label, text, who), hide(), dev }
  */
 export function createBooth(host) {
@@ -37,7 +37,7 @@ export function createBooth(host) {
     return miss ? null : out.replace(/(^|[.!?]\s+)([a-z])/g, (m, p, c) => p + c.toUpperCase());      // a sentence opened by a placeholder ("two all.") starts with a capital
   }
   /** Pick an entry from a pool: not used this session while the pool lasts; fill its placeholders; returns [{ spk, text }] (one turn, or the exchange). */
-  function pickFrom(path, vars, fit = Infinity) {
+  function pickFrom(path, vars, fit = Infinity, recOnly = false) {
     const pool = poolAt(path); if (!pool || !pool.length) return null;
     let u = used.get(path); if (!u) used.set(path, u = []);
     let cand = pool.map((_, i) => i).filter(i => !u.includes(i));
@@ -47,6 +47,7 @@ export function createBooth(host) {
       const e = pool[i];
       if (!SW.drewe && (isTurn(e) ? [e] : e).some(([spk, text, nf]) => spk === 'C' || /Walter|Drewe/.test(text + (nf || '')))) { u.push(i); continue; }      // Sir Walter is off (src/channels.js BOOTH): no exchange with him, no Pell line that speaks to him
       const ex = !isTurn(e), turns = (ex ? e : [e]).map(([spk, text, nf], k) => ({ spk, text: fill(text, vars) ?? (nf ? fill(nf, vars) : null), id: `booth.${path}.${i}${ex ? '.t' + k : ''}` }));      // id: the recorded clip for this turn (src/voice_clips.js)
+      if (recOnly && host.hasClip && !turns.every(x => host.hasClip(x.id))) continue;      // only a recorded line (never the robot voice)
       const total = turns.reduce((a, x) => a + (x.text ? sayTime(x.text) + 0.3 : 99), 0);
       if (turns.every(x => x.text) && sayTime(turns[0].text) <= fit && total <= fit + 1.5) { u.push(i); return turns; }      // fit: a line (or an exchange) that can be said in the quiet there is
     }
@@ -61,7 +62,7 @@ export function createBooth(host) {
     if (P === 'end') return /^(result|celebrate|after|exclaim|momentum)/.test(L.key);
     if (/^(ready|momentum\.lastCourse|momentum\.extra)/.test(L.key)) return P === 'ready';      // the quiet before the flag, and nowhere else
     if (/^(agenda|filler|history)/.test(L.cat) && B.t - B.lastEx < 8) return false;              // not on top of a stroke
-    if (P === 'intro') return /^(welcome|venue|knight|mode|history|you|stakes|grudge|revenge|horse|arms|agenda)/.test(L.key) || L.cat === 'agenda';
+    if (P === 'intro') return /^(welcome|venue|knight|mode|history|filler|you|stakes|grudge|revenge|horse|arms|agenda)/.test(L.key) || L.cat === 'agenda';
     if (/^(away|charge)/.test(L.key)) return false;
     return true;
   }
@@ -74,20 +75,18 @@ export function createBooth(host) {
     if (!poolAt(key)) return false;
     const turns = fast ? pickFrom(key, vars) : null; if (fast && !turns) return false;      // the rest is picked when it is about to be said, to fit the quiet there is then
     const prio = o.prio ?? PRIO[o.cat] ?? PRIO[head] ?? 2;
-    const L = { key, cat: o.cat || head, turns, i: 0, prio, at: B.t + (o.delay || 0), ttl: o.ttl ?? (head === 'exclaim' ? 0.9 : head === 'away' || head === 'charge' ? 1.2 : 5), course: B.course, when: o.when || null, ex: head === 'exclaim', fast, vars };
+    const L = { key, rec: !!o.rec, cat: o.cat || head, turns, i: 0, prio, at: B.t + (o.delay || 0), ttl: o.ttl ?? (head === 'exclaim' ? 0.9 : head === 'away' || head === 'charge' ? 1.2 : 5), course: B.course, when: o.when || null, ex: head === 'exclaim', fast, vars };
     if (!okIn(L, host.phase()) && !(o.delay > 0)) { B.note(L, 'phase'); return false; }
-    if (L.ex) {      // the stroke: the exclamation goes now, cutting whatever the booth was saying; the small talk queued for before it goes
+    if (L.ex) {      // the stroke: the exclamation goes as soon as the line he is saying is finished (a line that has started is never cut); the small talk queued for before it goes
       B.lastEx = B.t;
-      if (B.cur && !B.cur.ex) { B.cur.cut = true; endTurn('cut'); B.gap = 0; }
       B.q = B.q.filter(c => { const keep = !/^(ready|agenda|filler|history|away|charge|momentum\.lastCourse)/.test(c.cat === 'agenda' ? 'agenda' : c.key); if (!keep) B.note(c, 'stroke'); return keep; });
     }
     enqueue(L); pump(); return true;
   };
   B.note = (L, why) => { if (host.dev && B.log.length < 2000) B.log.push({ t: +B.t.toFixed(2), key: L.key, dropped: why, text: L.turns ? L.turns.map(x => x.text).join(' / ') : '(not yet picked)' }); };
-  /** The lances meet: no small talk now (whatever is up is cut; what was queued for before the stroke goes); the exclamation follows. */
+  /** The lances meet: no more small talk is started now (what was queued for before the stroke goes; a line already being said finishes); the exclamation follows. */
   B.mark = function mark() {
     B.lastEx = B.t;
-    if (B.cur && !B.cur.ex && !/^(away|charge)/.test(B.cur.key)) { B.cur.cut = true; endTurn('cut'); B.gap = 0; }
     B.q = B.q.filter(c => { const keep = c.cat !== 'agenda' && !/^(ready|filler|history|momentum\.lastCourse)/.test(c.key); if (!keep) B.note(c, 'stroke'); return keep; });
   };
   /** The talking points for the quiet moments of this match, in order (keys of BOOTH). */
@@ -107,7 +106,7 @@ export function createBooth(host) {
     host.show(cast.label, tr.text, tr.spk);
     const me = L;
     L.spoken = host.speak(tr.text, cast.id, () => { if (B.cur === me && me.spoken) me.endAt = Math.min(me.endAt, B.t + 0.15); }, clip ? tr.id : null);
-    if (L.spoken) L.endAt = clip && L.spoken === 'clip' ? B.t + clip.d + 0.4 : Math.max(L.endAt, B.t + 0.8) + 0.6;      // a robot voice slower than the subtitle extends it (onEnd brings it back); a clip runs its own length
+    if (L.spoken) L.endAt = clip && L.spoken === 'clip' ? B.t + clip.d + 0.4 : Math.max(L.endAt, B.t + 0.8) + 0.6;      // (a spoken line is never ended before its sound is: see pump)      // a robot voice slower than the subtitle extends it (onEnd brings it back); a clip runs its own length
     L.logRow = { t: +B.t.toFixed(2), phase: P, course: B.course, who: cast.label, spk: tr.spk, key: L.key, id: tr.id, text: tr.text, spoken: L.spoken, via: L.spoken === 'clip' ? 'clip' : L.spoken ? 'tts' : 'none' }; B.log.push(L.logRow);
     if (B.log.length > 2000) B.log.shift();
     if (!L.ex && !/^(away|charge)/.test(L.key)) B.turns++;
@@ -119,22 +118,19 @@ export function createBooth(host) {
     if (why !== 'done' && L.logRow && B.t - L.shownAt < 0.8 * (L.endAt - L.shownAt)) L.logRow.cut = +(B.t - L.shownAt).toFixed(1);      // (for transcripts: how long it was up before it was cut)
     B.cur = null; B.lastEnd = B.t; B.quietSince = B.t;
     L.i++;
-    if (why === 'yield' && B.t - L.shownAt < 0.5 * (L.endAt - L.shownAt)) {      // cut early by the herald: the turn that was cut is said again later, if there is still time
-      L.i = Math.max(0, L.i - 1); L.at = B.t + 0.6; L.ttl = 9; L.prio += 0.5; enqueue(L);
-      B.gap = GAP; return;
-    }
-    if (L.i < L.turns.length) { L.at = B.t + 0.25; L.ttl = 9; L.prio += 0.5; enqueue(L); B.gap = 0.25; return; }      // the reply waits (a while) for the herald to finish
-    B.gap = L.ex ? EX_GAP : L.fast ? 0.3 : GAP;
+    if (L.i < L.turns.length) { L.at = B.t + GAP; L.ttl = 9; L.prio += 0.5; enqueue(L); B.gap = GAP; return; }      // the reply waits (a while) for the herald to finish
+    B.gap = L.ex || L.fast ? EX_GAP : GAP;
   }
-  /** The main channel shows a line: stop talking. */
-  B.yield = function yieldTo() { if (B.cur) endTurn(B.cur.ex ? 'done' : 'yield'); };
+  /** The main channel shows a line (the marshal's 'Ride!'): a line he has started is never cut, so this does nothing now (his new lines wait for him, see pump). */
+  B.yield = function yieldTo() { /* never cut */ };
 
   function pump() {
     const P = host.phase();
-    if (!host.enabled()) { if (B.cur) endTurn('off'); B.q.length = 0; return; }
+    if (host.abort && host.abort()) { if (B.cur) endTurn('abort'); B.q.length = 0; return; }      // the only cut: the player left the match, paused to the menu or switched commentary off
+    if (!host.enabled()) { if (B.cur && !B.cur.spoken) endTurn('off'); B.q.length = 0; return; }      // (a line being spoken finishes even when the squire's cheer comes up)
     if (B.cur) {
-      if (!okIn(B.cur, P)) endTurn('phase');
-      else if (B.t >= B.cur.endAt) endTurn('done');
+      const c = B.cur, talking = c.spoken && host.speaking && host.speaking() && B.t < c.shownAt + 45;      // his voice is still on: the line (and its subtitle) stays up
+      if (c.spoken ? (!talking && B.t >= c.endAt) : (!okIn(c, P) || B.t >= c.endAt)) endTurn('done');      // a line that has started plays out whatever the phase
     }
     if (B.cur) return;
     for (let i = 0; i < B.q.length; i++) {      // what has gone stale, or belongs to a course or a phase that is over
@@ -149,7 +145,7 @@ export function createBooth(host) {
     if (!L.fast && host.mainIdle() < MAIN_CLEAR) return;
     if (!L.turns) {      // pick the words now, to fit the quiet: between courses (the herald's next line unknown) assume a short gap
       let fit = host.mainQuiet(); if (!isFinite(fit) && ['after', 'replay', 'ready'].includes(P)) fit = TIGHT;
-      L.turns = pickFrom(L.key, L.vars, fit - 0.1); if (!L.turns) return;
+      L.turns = pickFrom(L.key, L.vars, fit - 0.1, L.rec || P === 'intro'); if (!L.turns) return;      // (the opening: recorded lines only, never the robot voice)
     }
     const tr = L.turns[L.i], need = sayTime(tr.text);
     if (!L.fast && host.mainQuiet() < need) return;
@@ -158,13 +154,32 @@ export function createBooth(host) {
     B.cur = L; startTurn(L);
   }
 
-  /** Quiet moments: a talking point from the agenda, else filler (at most once a course, after a long quiet). */
+  /** Is there an unused entry in this pool whose every turn has a recorded clip (and fits the cast and placeholders)? For the opening, which uses recorded lines only. */
+  function recAvail(path) {
+    const pool = poolAt(path); if (!pool || !host.hasClip) return !!pool;
+    const u = used.get(path) || [], vars = host.vars();
+    return pool.some((e, i) => {
+      if (u.includes(i)) return false;
+      const ts = isTurn(e) ? [e] : e;
+      if (!SW.drewe && ts.some(([spk, text, nf]) => spk === 'C' || /Walter|Drewe/.test(text + (nf || '')))) return false;
+      return ts.every(([spk, text, nf], k) => (fill(text, vars) ?? (nf ? fill(nf, vars) : null)) !== null && host.hasClip(`booth.${path}.${i}${isTurn(e) ? '' : '.t' + k}`));
+    });
+  }
+  /** Quiet moments: a talking point from the agenda, else filler. In the opening (the intro and the wait for the first 'Ride!') he keeps talking, one recorded line after another with a breath between,
+   *  so there is no long silence; later at most one filler a course, after a long quiet. */
   function quiet() {
     const P = host.phase();
     if (B.cur || B.q.length || !['ready', 'after', 'intro'].includes(P) || host.mainBusy()) return;
     if (host.soon && host.soon()) return;      // the lances are up: the marshal is about to cry the signal
+    const open = P === 'intro' || (P === 'ready' && B.course <= 1);
     const still = B.t - B.quietSince, mi = host.mainIdle(), mq = host.mainQuiet();
-    if (still < (P === 'intro' ? 1.0 : 2) || mi < 1.0 || mq < 3.5) return;
+    if (still < (open ? 0.1 : 2) || mi < 1.0 || mq < 3.5) return;      // (the breath between two lines is B.gap)
+    if (open) {
+      if (B.turns >= BUDGET - 1) return;
+      while (B.agenda.length) { const k = B.agenda.shift(); if (recAvail(k)) { B.say(k, { cat: 'agenda', prio: PRIO.agenda, ttl: 4 }); return; } }
+      for (const k of ['history', 'filler']) if (recAvail(k) && B.say(k, { cat: k === 'filler' ? 'filler' : 'agenda', prio: PRIO.filler, ttl: 4, rec: true })) return;
+      return;
+    }
     if (B.agenda.length && B.turns < BUDGET - 2) { const k = B.agenda.shift(); B.say(k, { cat: 'agenda', prio: PRIO.agenda, ttl: 4 }); return; }
     if (P !== 'intro' && still > 5 && B.t - B.fillerAt > 14 && B.turns < BUDGET - 2) { B.fillerAt = B.t; B.say(Math.random() < 0.8 ? 'filler' : 'history', { cat: 'filler', ttl: 4 }); }
   }
@@ -185,6 +200,7 @@ export function createBooth(host) {
     });
   };
   B.reset = function reset() { if (B.cur) endTurn('reset'); B.q.length = 0; B.course = 0; B.turns = 0; B.agenda = []; B.lastEnd = -99; B.gap = 0; B.fillerAt = -99; B.quietSince = B.t; };
+  B.speaking = () => !!(B.cur && B.cur.spoken);
   B.busy = () => !!(B.cur || B.q.length);
   return B;
 }

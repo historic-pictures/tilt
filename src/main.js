@@ -346,7 +346,7 @@ const textBandUp = () => !!($('prompt').textContent.trim() && !$('hud').classLis
 function boothSubTick() {
   if (performance.now() < squireUntil) return;
   const up = textBandUp(), g = subGate;
-  if (up && g.shown) { boothSub.hide(); g.shown = false; }
+  if (up && g.shown) { if (booth.speaking()) return; boothSub.hide(); g.shown = false; }      // (a line he is saying keeps its subtitle up until he finishes)
   else if (!up && !g.shown && g.last) { if (performance.now() - g.last.at < 2500) { boothSub.show(g.last.l, g.last.t, g.last.s); g.shown = true; } else g.last = null; }
 }
 const booth = createBooth({
@@ -358,8 +358,10 @@ const booth = createBooth({
   vars: () => boothVars(),
   soon: () => !!(M && C && S.mode === 'ready' && C.rd.p && C.rd.o),
   clip: (id, spk) => (spk === 'P' && SPEECH.booth && commentaryOn() && !S.muted && !G.manual ? clips.get('pell', id) : null),
-  speak: (text, key, onEnd, clipId) => boothSpeak(text, key, onEnd, clipId), stopSpeak: boothHush,
-  show: (label, text, spk) => { subGate.last = { l: label, t: text, s: spk, at: performance.now() }; if (textBandUp()) { subGate.shown = false; return; } boothSub.show(label, text, spk); subGate.shown = true; }, hide: () => { subGate.last = null; subGate.shown = false; boothSub.hide(); },
+  speak: (text, key, onEnd, clipId) => boothSpeak(text, key, onEnd, clipId), stopSpeak: boothHush, speaking: () => !!boothClipH || !!boothUtt,
+  abort: () => !M || S.mode === 'menu' || !commentaryOn(),      // the player left the match / paused to the menu / switched commentary off: the only times his line is cut
+  hasClip: (id) => !!clips.get('pell', id),
+  show: (label, text, spk) => { subGate.last = { l: label, t: text, s: spk, at: performance.now() }; boothSub.show(label, text, spk); subGate.shown = true; }, hide: () => { subGate.last = null; subGate.shown = false; boothSub.hide(); },      // show: the strip goes up at once; boothSubTick takes it down if a UI band is up and he is not speaking
   dev: /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),
 });
 const crowdVoices = createCrowdVoices(camera, {
@@ -937,7 +939,7 @@ function introLines() {
   if (profile.herald === false) return;
   const host = hostOf(M.V.id), hl = HOST_LINES[host.id] || HOST_LINES.lord, od = M.od, ret = profile.retinue || {};
   const vars = { venue: M.V.name, city: M.V.city, year: M.V.year, himFull: hailName(od), land: od.land, him: od.short, you: profile.name, arms: `${tinct(profile.arms.c1)} and ${tinct(profile.arms.c2)}` };
-  const L = (at, text, who, hold, extra = {}) => voice.later(at, () => say(fill(text, vars), who, 3, Object.assign({ phases: 'intro', ttl: 6, hold, gapAfter: 0.7 }, extra)));
+  const L = (at, text, who, hold, extra = {}) => !gate({ text, who, tier: 3, speak: !!extra.speak, voice: extra.voice }).show ? null : voice.later(at, () => say(fill(text, vars), who, 3, Object.assign({ phases: 'intro', ttl: 6, hold, gapAfter: 0.7 }, extra)));
   const hugh = (at, text, hold) => L(at, text, ANNOUNCER.label, hold, { speak: true, speaker: speakerOf.hugh, voice: 'hugh', onShown() { ceremony.speak(hold); } });
   const TO = M.tourn;
   if (TO) { vars.size = TO.size; vars.round = TO.name; }
@@ -975,7 +977,7 @@ function skipVote() {
   if (!S.online || S.skipWanted.them) skipIntro();
 }
 G.skipThem = (v) => { S.skipWanted.them = !!v; if (S.mode === 'intro' && S.skipWanted.me && S.skipWanted.them) skipIntro(); };
-function skipIntro() { if (window.speechSynthesis) window.speechSynthesis.cancel(); voice.reset(); finishIntro(true); }
+function skipIntro() { if (window.speechSynthesis && !booth.speaking()) window.speechSynthesis.cancel(); voice.reset(); finishIntro(true); }      // (the commentator finishes his line)
 /** The intro is over (played out or skipped): tidy the scene and ride the first course. */
 function finishIntro(skipped = false) {
   ceremony.hideCard(); ceremony.skipUI(false); ceremony.raise(false); S.skipHold = 0; skipKey = false;
