@@ -498,10 +498,8 @@ export function buildProps(group, opts = {}) {
     S.box(0.06, 0.4, 1.9, x + Math.sign(x) * 0.21, 0.72, z, W.rail, 0, 0, 0); // low back plank
     for (let i = -1; i <= 1; i += 2) S.box(0.36, 0.43, 0.07, x, 0.215, z + i * 0.8, W.dark);
   };
-  bench(-8.6, -24);
-  bench(-8.6, 18);
-  bench(8.6, -18);
-  bench(8.6, 30);
+  // (none placed: benches out on the sand of the lists read as odd, owner 27 Nov)
+  void bench;
 
   // water troughs
   const trough = (x, z) => {
@@ -522,7 +520,7 @@ export function buildProps(group, opts = {}) {
     S.box(0.84, 0.04, 0.84, x, 0.44, z, W.stoneTop);
     S.box(0.4, 0.2, 0.7, x - Math.sign(x) * 0.6, 0.1, z, W.stone);
   };
-  if (cheapLists) { block(-7.0, -36); block(7.0, 36); }
+  void block;      // (no mounting blocks on the sand: the knights are already mounted when the lists open, owner 27 Nov)
 
   // lance racks + perron frames
   const rackLances = [new Acc(), new Acc()];

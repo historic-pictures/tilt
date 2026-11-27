@@ -188,7 +188,7 @@ export function buildLists(parent, lib, o) {
   put('fence', fen); put('fence_post', posts); put('gate', [at(0, 0, 51), at(0, 0, -51, PI)]);
   // ---- the dais, the marshal's stage, racks and blocks
   put('dais', [at(0, 0, 0)]); put('marshal_stand', [at(-7.6, 0, 0)]);
-  put('lance_rack', [at(8, 0, 41), at(-8, 0, -41, PI)]); put('mount_block', [at(7, 0, 36), at(-7, 0, -36, PI)]);
+  put('lance_rack', [at(8, 0, 41), at(-8, 0, -41, PI)]);      // (no mounting blocks: owner 27 Nov)
 
   // ---- waving banners (world.js's own): pennons on the stands' posts, the royal pavilion, the gate posts and the ends of the tilt
   const flags = [];
