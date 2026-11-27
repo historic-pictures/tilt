@@ -1212,7 +1212,7 @@
 "crowd": {
 "crowd.start.0": {
 "f": "crowd/crowd.start.0.mp3",
-"d": 1.06,
+"d": 1.1,
 "t": "Here they come!"
 },
 "crowd.start.1": {
@@ -1232,22 +1232,22 @@
 },
 "crowd.start.4": {
 "f": "crowd/crowd.start.4.mp3",
-"d": 2.53,
+"d": 2.58,
 "t": "Get your hat off, I cannot see!"
 },
 "crowd.start.5": {
 "f": "crowd/crowd.start.5.mp3",
-"d": 3.06,
+"d": 10.85,
 "t": "Lances! Lances for everyone!"
 },
 "crowd.start.6": {
 "f": "crowd/crowd.start.6.mp3",
-"d": 1.98,
+"d": 2.45,
 "t": "Two to one the blue! Two to one!"
 },
 "crowd.start.7": {
 "f": "crowd/crowd.start.7.mp3",
-"d": 3.56,
+"d": 3.52,
 "t": "Not like the old days. Look at them. Babies."
 },
 "crowd.start.8": {
@@ -1257,577 +1257,577 @@
 },
 "crowd.start.9": {
 "f": "crowd/crowd.start.9.mp3",
-"d": 2.12,
+"d": 3.07,
 "t": "Which is he? The one with the feathers?"
 },
 "crowd.ready.0": {
 "f": "crowd/crowd.ready.0.mp3",
-"d": 2.0,
+"d": 1.79,
 "t": "Come on! Come on!"
 },
 "crowd.ready.1": {
 "f": "crowd/crowd.ready.1.mp3",
-"d": 1.33,
+"d": 1.24,
 "t": "Get on with it!"
 },
 "crowd.ready.2": {
 "f": "crowd/crowd.ready.2.mp3",
-"d": 2.75,
+"d": 2.48,
 "t": "Quiet, you, he is about to go!"
 },
 "crowd.ready.3": {
 "f": "crowd/crowd.ready.3.mp3",
-"d": 2.07,
+"d": 4.12,
 "t": "Mother, I cannot see!"
 },
 "crowd.ready.4": {
 "f": "crowd/crowd.ready.4.mp3",
-"d": 1.61,
+"d": 1.69,
 "t": "Sit down at the front!"
 },
 "crowd.ready.5": {
 "f": "crowd/crowd.ready.5.mp3",
-"d": 4.26,
+"d": 4.17,
 "t": "Lower the flag! Lower it! Lower... the flag."
 },
 "crowd.ready.6": {
 "f": "crowd/crowd.ready.6.mp3",
-"d": 2.32,
+"d": 2.6,
 "t": "Last bets! Last bets on the course!"
 },
 "crowd.ready.7": {
 "f": "crowd/crowd.ready.7.mp3",
-"d": 2.41,
+"d": 2.51,
 "t": "Shh! Shh!"
 },
 "crowd.ready.8": {
 "f": "crowd/crowd.ready.8.mp3",
-"d": 2.83,
+"d": 2.86,
 "t": "Lord, have mercy on the both of them."
 },
 "crowd.ready.9": {
 "f": "crowd/crowd.ready.9.mp3",
-"d": 2.06,
+"d": 2.32,
 "t": "I cannot look. Tell me when."
 },
 "crowd.away.0": {
 "f": "crowd/crowd.away.0.mp3",
-"d": 1.04,
+"d": 1.07,
 "t": "Go on!"
 },
 "crowd.away.1": {
 "f": "crowd/crowd.away.1.mp3",
-"d": 1.75,
+"d": 1.7,
 "t": "Ride! Ride!"
 },
 "crowd.away.2": {
 "f": "crowd/crowd.away.2.mp3",
-"d": 1.37,
+"d": 1.02,
 "t": "Go on, then!"
 },
 "crowd.away.3": {
 "f": "crowd/crowd.away.3.mp3",
-"d": 1.64,
+"d": 1.65,
 "t": "Now! Now!"
 },
 "crowd.away.4": {
 "f": "crowd/crowd.away.4.mp3",
-"d": 2.22,
+"d": 4.18,
 "t": "Go! Go! Go!"
 },
 "crowd.away.5": {
 "f": "crowd/crowd.away.5.mp3",
-"d": 3.59,
+"d": 6.49,
 "t": "Faster! Fast... faster!"
 },
 "crowd.away.6": {
 "f": "crowd/crowd.away.6.mp3",
-"d": 2.67,
+"d": 2.3,
 "t": "Point down, boy! Point down!"
 },
 "crowd.away.7": {
 "f": "crowd/crowd.away.7.mp3",
-"d": 2.11,
+"d": 8.15,
 "t": "Lower, man, lower!"
 },
 "crowd.break.0": {
 "f": "crowd/crowd.break.0.mp3",
-"d": 1.1,
+"d": 2.11,
 "t": "Broken!"
 },
 "crowd.break.1": {
 "f": "crowd/crowd.break.1.mp3",
-"d": 2.09,
+"d": 2.14,
 "t": "Did you see that? Did you see it?"
 },
 "crowd.break.2": {
 "f": "crowd/crowd.break.2.mp3",
-"d": 2.14,
+"d": 2.61,
 "t": "Oh, well struck!"
 },
 "crowd.break.3": {
 "f": "crowd/crowd.break.3.mp3",
-"d": 1.68,
+"d": 1.74,
 "t": "Splinters! Ha!"
 },
 "crowd.break.4": {
 "f": "crowd/crowd.break.4.mp3",
-"d": 2.28,
+"d": 2.74,
 "t": "That is how it is done!"
 },
 "crowd.break.5": {
 "f": "crowd/crowd.break.5.mp3",
-"d": 2.1,
+"d": 2.21,
 "t": "It broke! It broke!"
 },
 "crowd.break.6": {
 "f": "crowd/crowd.break.6.mp3",
-"d": 2.27,
+"d": 3.77,
 "t": "Again! Do it again!"
 },
 "crowd.break.7": {
 "f": "crowd/crowd.break.7.mp3",
-"d": 2.15,
+"d": 2.24,
 "t": "That is my money, that is!"
 },
 "crowd.break.8": {
 "f": "crowd/crowd.break.8.mp3",
-"d": 1.95,
+"d": 2.16,
 "t": "Bravely struck, sir!"
 },
 "crowd.break.9": {
 "f": "crowd/crowd.break.9.mp3",
-"d": 3.13,
+"d": 2.9,
 "t": "Mind the wood! There is wood coming!"
 },
 "crowd.break.10": {
 "f": "crowd/crowd.break.10.mp3",
-"d": 2.06,
+"d": 3.35,
 "t": "Another lance! Another!"
 },
 "crowd.break.11": {
 "f": "crowd/crowd.break.11.mp3",
-"d": 1.54,
+"d": 1.34,
 "t": "Smashed it!"
 },
 "crowd.helm.0": {
 "f": "crowd/crowd.helm.0.mp3",
-"d": 1.41,
+"d": 1.26,
 "t": "On the helm!"
 },
 "crowd.helm.1": {
 "f": "crowd/crowd.helm.1.mp3",
-"d": 2.16,
+"d": 3.67,
 "t": "Rang him like a bell!"
 },
 "crowd.helm.2": {
 "f": "crowd/crowd.helm.2.mp3",
-"d": 1.9,
+"d": 1.96,
 "t": "Right in the face! Ha!"
 },
 "crowd.helm.3": {
 "f": "crowd/crowd.helm.3.mp3",
-"d": 2.46,
+"d": 2.86,
 "t": "Oh, the poor man's head!"
 },
 "crowd.helm.4": {
 "f": "crowd/crowd.helm.4.mp3",
-"d": 1.92,
+"d": 1.89,
 "t": "Is he dead? Is he dead?"
 },
 "crowd.helm.5": {
 "f": "crowd/crowd.helm.5.mp3",
-"d": 3.01,
+"d": 4.07,
 "t": "Ding! Ding!"
 },
 "crowd.helm.6": {
 "f": "crowd/crowd.helm.6.mp3",
-"d": 2.66,
+"d": 2.85,
 "t": "The sight! Right in the sight!"
 },
 "crowd.helm.7": {
 "f": "crowd/crowd.helm.7.mp3",
-"d": 3.56,
+"d": 5.72,
 "t": "Oh! Oh, I cannot bear it!"
 },
 "crowd.glance.0": {
 "f": "crowd/crowd.glance.0.mp3",
-"d": 2.0,
+"d": 2.2,
 "t": "Ohhh!"
 },
 "crowd.glance.1": {
 "f": "crowd/crowd.glance.1.mp3",
-"d": 2.46,
+"d": 1.98,
 "t": "So close!"
 },
 "crowd.glance.2": {
 "f": "crowd/crowd.glance.2.mp3",
-"d": 3.4,
+"d": 6.0,
 "t": "Square, man! Hit it square!"
 },
 "crowd.glance.3": {
 "f": "crowd/crowd.glance.3.mp3",
-"d": 2.3,
+"d": 1.71,
 "t": "Skidded off!"
 },
 "crowd.glance.4": {
 "f": "crowd/crowd.glance.4.mp3",
-"d": 4.23,
+"d": 3.27,
 "t": "Too gentle! You're not courting her!"
 },
 "crowd.glance.5": {
 "f": "crowd/crowd.glance.5.mp3",
-"d": 2.96,
+"d": 2.56,
 "t": "That counts? Does that count?"
 },
 "crowd.attaint.0": {
 "f": "crowd/crowd.attaint.0.mp3",
-"d": 2.02,
+"d": 2.27,
 "t": "A touch! Only a touch!"
 },
 "crowd.attaint.1": {
 "f": "crowd/crowd.attaint.1.mp3",
-"d": 3.09,
+"d": 2.86,
 "t": "Should have broken. That should have broken."
 },
 "crowd.attaint.2": {
 "f": "crowd/crowd.attaint.2.mp3",
-"d": 1.99,
+"d": 2.43,
 "t": "Break it! Break it next time!"
 },
 "crowd.attaint.3": {
 "f": "crowd/crowd.attaint.3.mp3",
-"d": 3.2,
+"d": 3.28,
 "t": "One point. One miserable point."
 },
 "crowd.miss.0": {
 "f": "crowd/crowd.miss.0.mp3",
-"d": 2.52,
+"d": 4.3,
 "t": "Missed! Missed by a mile!"
 },
 "crowd.miss.1": {
 "f": "crowd/crowd.miss.1.mp3",
-"d": 2.18,
+"d": 2.47,
 "t": "My grandmother rides straighter!"
 },
 "crowd.miss.2": {
 "f": "crowd/crowd.miss.2.mp3",
-"d": 2.07,
+"d": 1.94,
 "t": "Open your eyes, sir!"
 },
 "crowd.miss.3": {
 "f": "crowd/crowd.miss.3.mp3",
-"d": 2.12,
+"d": 2.17,
 "t": "Where's the other one gone?"
 },
 "crowd.miss.4": {
 "f": "crowd/crowd.miss.4.mp3",
-"d": 2.26,
+"d": 2.28,
 "t": "Boo!"
 },
 "crowd.miss.5": {
 "f": "crowd/crowd.miss.5.mp3",
-"d": 1.89,
+"d": 1.92,
 "t": "Hit something! Anything!"
 },
 "crowd.miss.6": {
 "f": "crowd/crowd.miss.6.mp3",
-"d": 1.78,
+"d": 2.05,
 "t": "I paid good money for that!"
 },
 "crowd.miss.7": {
 "f": "crowd/crowd.miss.7.mp3",
-"d": 3.78,
+"d": 3.76,
 "t": "Lowered too soon. Always too soon."
 },
 "crowd.miss.8": {
 "f": "crowd/crowd.miss.8.mp3",
-"d": 1.33,
+"d": 2.56,
 "t": "He missed!"
 },
 "crowd.miss.9": {
 "f": "crowd/crowd.miss.9.mp3",
-"d": 1.86,
+"d": 1.87,
 "t": "Oh, for shame."
 },
 "crowd.bothMiss.0": {
 "f": "crowd/crowd.bothMiss.0.mp3",
-"d": 1.44,
+"d": 1.51,
 "t": "Are they courting?"
 },
 "crowd.bothMiss.1": {
 "f": "crowd/crowd.bothMiss.1.mp3",
-"d": 1.65,
+"d": 1.66,
 "t": "Kiss him next time!"
 },
 "crowd.bothMiss.2": {
 "f": "crowd/crowd.bothMiss.2.mp3",
-"d": 3.61,
+"d": 6.36,
 "t": "They're friends! Look! They're friends!"
 },
 "crowd.bothMiss.3": {
 "f": "crowd/crowd.bothMiss.3.mp3",
-"d": 2.34,
+"d": 2.31,
 "t": "I could do better with a broom!"
 },
 "crowd.bothMiss.4": {
 "f": "crowd/crowd.bothMiss.4.mp3",
-"d": 1.41,
+"d": 1.26,
 "t": "Whistle them off!"
 },
 "crowd.bothMiss.5": {
 "f": "crowd/crowd.bothMiss.5.mp3",
-"d": 2.85,
+"d": 2.96,
 "t": "Nobody wins that! Nobody!"
 },
 "crowd.near.0": {
 "f": "crowd/crowd.near.0.mp3",
-"d": 2.42,
+"d": 2.47,
 "t": "Oh! Oh, that was close!"
 },
 "crowd.near.1": {
 "f": "crowd/crowd.near.1.mp3",
-"d": 1.75,
+"d": 1.3,
 "t": "By his ear!"
 },
 "crowd.near.2": {
 "f": "crowd/crowd.near.2.mp3",
-"d": 2.2,
+"d": 1.81,
 "t": "Saints preserve him!"
 },
 "crowd.near.3": {
 "f": "crowd/crowd.near.3.mp3",
-"d": 2.46,
+"d": 1.9,
 "t": "An inch! An inch!"
 },
 "crowd.tilt.0": {
 "f": "crowd/crowd.tilt.0.mp3",
-"d": 1.56,
+"d": 1.53,
 "t": "Mind the barrier!"
 },
 "crowd.tilt.1": {
 "f": "crowd/crowd.tilt.1.mp3",
-"d": 1.86,
+"d": 1.93,
 "t": "He's hit the fence! Ha!"
 },
 "crowd.tilt.2": {
 "f": "crowd/crowd.tilt.2.mp3",
-"d": 2.8,
+"d": 2.96,
 "t": "Into the tilt. Disgraceful."
 },
 "crowd.tilt.3": {
 "f": "crowd/crowd.tilt.3.mp3",
-"d": 2.09,
+"d": 2.16,
 "t": "Somebody's paying for that!"
 },
 "crowd.foul.0": {
 "f": "crowd/crowd.foul.0.mp3",
-"d": 2.01,
+"d": 4.33,
 "t": "Foul! Foul!"
 },
 "crowd.foul.1": {
 "f": "crowd/crowd.foul.1.mp3",
-"d": 2.62,
+"d": 2.76,
 "t": "The horse! The poor horse!"
 },
 "crowd.foul.2": {
 "f": "crowd/crowd.foul.2.mp3",
-"d": 2.28,
+"d": 2.26,
 "t": "Shame! For shame!"
 },
 "crowd.foul.3": {
 "f": "crowd/crowd.foul.3.mp3",
-"d": 1.71,
+"d": 3.21,
 "t": "Off! Get him off!"
 },
 "crowd.foul.4": {
 "f": "crowd/crowd.foul.4.mp3",
-"d": 1.72,
+"d": 1.73,
 "t": "He hurt the horse!"
 },
 "crowd.foul.5": {
 "f": "crowd/crowd.foul.5.mp3",
-"d": 1.56,
+"d": 1.51,
 "t": "God forgive him."
 },
 "crowd.foul.6": {
 "f": "crowd/crowd.foul.6.mp3",
-"d": 1.72,
+"d": 1.54,
 "t": "Shame on you, sir!"
 },
 "crowd.unhorse.0": {
 "f": "crowd/crowd.unhorse.0.mp3",
-"d": 2.11,
+"d": 2.8,
 "t": "He's down! He's down!"
 },
 "crowd.unhorse.1": {
 "f": "crowd/crowd.unhorse.1.mp3",
-"d": 1.54,
+"d": 2.22,
 "t": "Oh, Jesu!"
 },
 "crowd.unhorse.2": {
 "f": "crowd/crowd.unhorse.2.mp3",
-"d": 1.18,
+"d": 1.37,
 "t": "Off he goes!"
 },
 "crowd.unhorse.3": {
 "f": "crowd/crowd.unhorse.3.mp3",
-"d": 2.03,
+"d": 4.22,
 "t": "Like a sack of turnips!"
 },
 "crowd.unhorse.4": {
 "f": "crowd/crowd.unhorse.4.mp3",
-"d": 2.22,
+"d": 2.5,
 "t": "He fell off! He fell off!"
 },
 "crowd.unhorse.5": {
 "f": "crowd/crowd.unhorse.5.mp3",
-"d": 2.55,
+"d": 3.82,
 "t": "Get up! Get up and fight him!"
 },
 "crowd.unhorse.6": {
 "f": "crowd/crowd.unhorse.6.mp3",
-"d": 1.59,
+"d": 1.78,
 "t": "Pay me! Pay me!"
 },
 "crowd.unhorse.7": {
 "f": "crowd/crowd.unhorse.7.mp3",
-"d": 2.21,
+"d": 2.3,
 "t": "Is he hurt? Somebody look!"
 },
 "crowd.unhorse.8": {
 "f": "crowd/crowd.unhorse.8.mp3",
-"d": 2.12,
+"d": 1.83,
 "t": "Lord have mercy."
 },
 "crowd.unhorse.9": {
 "f": "crowd/crowd.unhorse.9.mp3",
-"d": 3.19,
+"d": 3.2,
 "t": "Over the cantle. Seen it a hundred times."
 },
 "crowd.unhorse.10": {
 "f": "crowd/crowd.unhorse.10.mp3",
-"d": 2.25,
+"d": 2.85,
 "t": "Ho! Ho! A man down!"
 },
 "crowd.unhorse.11": {
 "f": "crowd/crowd.unhorse.11.mp3",
-"d": 2.19,
+"d": 2.2,
 "t": "Unhorsed, by God!"
 },
 "crowd.win.0": {
 "f": "crowd/crowd.win.0.mp3",
-"d": 3.06,
+"d": 2.33,
 "t": "Huzzah! Huzzah!"
 },
 "crowd.win.1": {
 "f": "crowd/crowd.win.1.mp3",
-"d": 2.19,
+"d": 1.46,
 "t": "God bless him!"
 },
 "crowd.win.2": {
 "f": "crowd/crowd.win.2.mp3",
-"d": 2.12,
+"d": 2.26,
 "t": "Champion! Champion!"
 },
 "crowd.win.3": {
 "f": "crowd/crowd.win.3.mp3",
-"d": 2.06,
+"d": 3.99,
 "t": "He won! He won!"
 },
 "crowd.win.4": {
 "f": "crowd/crowd.win.4.mp3",
-"d": 3.57,
+"d": 2.88,
 "t": "Well ridden, sir. Well ridden."
 },
 "crowd.win.5": {
 "f": "crowd/crowd.win.5.mp3",
-"d": 2.95,
+"d": 5.57,
 "t": "Drink! Everybody drink!"
 },
 "crowd.win.6": {
 "f": "crowd/crowd.win.6.mp3",
-"d": 2.74,
+"d": 2.56,
 "t": "Pay up! Pay up, the lot of you!"
 },
 "crowd.win.7": {
 "f": "crowd/crowd.win.7.mp3",
-"d": 2.94,
+"d": 4.13,
 "t": "Bravo! Oh, bravo!"
 },
 "crowd.win.8": {
 "f": "crowd/crowd.win.8.mp3",
-"d": 3.44,
+"d": 5.4,
 "t": "Largesse! Largesse!"
 },
 "crowd.win.9": {
 "f": "crowd/crowd.win.9.mp3",
-"d": 3.55,
+"d": 2.75,
 "t": "Largesse, my lord! Largesse!"
 },
 "crowd.loss.0": {
 "f": "crowd/crowd.loss.0.mp3",
-"d": 1.41,
+"d": 1.39,
 "t": "Bad luck, sir!"
 },
 "crowd.loss.1": {
 "f": "crowd/crowd.loss.1.mp3",
-"d": 2.44,
+"d": 2.3,
 "t": "There, there. Next time."
 },
 "crowd.loss.2": {
 "f": "crowd/crowd.loss.2.mp3",
-"d": 1.59,
+"d": 1.69,
 "t": "He rode well enough."
 },
 "crowd.loss.3": {
 "f": "crowd/crowd.loss.3.mp3",
-"d": 1.38,
+"d": 1.47,
 "t": "There goes the rent."
 },
 "crowd.loss.4": {
 "f": "crowd/crowd.loss.4.mp3",
-"d": 1.85,
+"d": 2.07,
 "t": "Rubbish! Rubbish!"
 },
 "crowd.loss.5": {
 "f": "crowd/crowd.loss.5.mp3",
-"d": 3.62,
+"d": 7.18,
 "t": "I knew it. I knew it all along."
 },
 "crowd.gallery.0": {
 "f": "crowd/crowd.gallery.0.mp3",
-"d": 2.12,
+"d": 4.51,
 "t": "Oh, well struck, sir!"
 },
 "crowd.gallery.1": {
 "f": "crowd/crowd.gallery.1.mp3",
-"d": 2.56,
+"d": 2.47,
 "t": "Sir knight! Sir knight, here!"
 },
 "crowd.gallery.2": {
 "f": "crowd/crowd.gallery.2.mp3",
-"d": 1.41,
+"d": 2.01,
 "t": "Look this way, sir!"
 },
 "crowd.gallery.3": {
 "f": "crowd/crowd.gallery.3.mp3",
-"d": 2.5,
+"d": 2.71,
 "t": "My lady says you ride very well!"
 },
 "crowd.gallery.4": {
 "f": "crowd/crowd.gallery.4.mp3",
-"d": 2.23,
+"d": 2.38,
 "t": "I'll have him! I'll have that one!"
 },
 "crowd.gallery.5": {
 "f": "crowd/crowd.gallery.5.mp3",
-"d": 2.8,
+"d": 2.87,
 "t": "Leave him alone, he's spoken for!"
 },
 "crowd.gallery.6": {
 "f": "crowd/crowd.gallery.6.mp3",
-"d": 1.9,
+"d": 1.93,
 "t": "For you, sir! Catch!"
 },
 "crowd.gallery.7": {
@@ -1837,117 +1837,117 @@
 },
 "crowd.idle.0": {
 "f": "crowd/crowd.idle.0.mp3",
-"d": 2.99,
+"d": 3.12,
 "t": "Three to one the stranger! Who'll take three to one?"
 },
 "crowd.idle.1": {
 "f": "crowd/crowd.idle.1.mp3",
-"d": 2.24,
+"d": 2.15,
 "t": "Evens, evens on the next course!"
 },
 "crowd.idle.2": {
 "f": "crowd/crowd.idle.2.mp3",
-"d": 2.16,
+"d": 2.24,
 "t": "A penny says he falls. A penny!"
 },
 "crowd.idle.3": {
 "f": "crowd/crowd.idle.3.mp3",
-"d": 2.49,
+"d": 2.47,
 "t": "Who had money on the blue? Hard luck."
 },
 "crowd.idle.4": {
 "f": "crowd/crowd.idle.4.mp3",
-"d": 2.15,
+"d": 2.28,
 "t": "Oi! Herald! What's the score?"
 },
 "crowd.idle.5": {
 "f": "crowd/crowd.idle.5.mp3",
-"d": 3.09,
+"d": 2.97,
 "t": "Get on with it! We're dying of age up here!"
 },
 "crowd.idle.6": {
 "f": "crowd/crowd.idle.6.mp3",
-"d": 2.37,
+"d": 2.41,
 "t": "In my day they had proper lances."
 },
 "crowd.idle.7": {
 "f": "crowd/crowd.idle.7.mp3",
-"d": 2.31,
+"d": 2.43,
 "t": "Take your elbow out of my pie."
 },
 "crowd.idle.8": {
 "f": "crowd/crowd.idle.8.mp3",
-"d": 3.34,
+"d": 6.37,
 "t": "I could do that. I could. Give me a horse."
 },
 "crowd.idle.9": {
 "f": "crowd/crowd.idle.9.mp3",
-"d": 4.78,
+"d": 4.84,
 "t": "Who took my ale? Somebody took my... oh. There it is."
 },
 "crowd.idle.10": {
 "f": "crowd/crowd.idle.10.mp3",
-"d": 3.28,
+"d": 11.72,
 "t": "Sing! Somebody sing!"
 },
 "crowd.idle.12": {
 "f": "crowd/crowd.idle.12.mp3",
-"d": 1.53,
+"d": 1.58,
 "t": "When do they fall off again?"
 },
 "crowd.idle.13": {
 "f": "crowd/crowd.idle.13.mp3",
-"d": 1.94,
+"d": 2.02,
 "t": "Can I be a knight? Can I?"
 },
 "crowd.idle.14": {
 "f": "crowd/crowd.idle.14.mp3",
-"d": 4.26,
+"d": 4.32,
 "t": "That one's married. That one's married. That one should be."
 },
 "crowd.idle.15": {
 "f": "crowd/crowd.idle.15.mp3",
-"d": 2.85,
+"d": 2.7,
 "t": "Look at the Queen's sleeves. Look at them."
 },
 "crowd.idle.16": {
 "f": "crowd/crowd.idle.16.mp3",
-"d": 4.88,
+"d": 5.05,
 "t": "My Tom rode at Smithfield. Fell off twice. Still talks about it."
 },
 "crowd.idle.17": {
 "f": "crowd/crowd.idle.17.mp3",
-"d": 1.39,
+"d": 1.52,
 "t": "Sit down at the front!"
 },
 "crowd.idle.18": {
 "f": "crowd/crowd.idle.18.mp3",
-"d": 2.09,
+"d": 2.24,
 "t": "Who's got the pies? Over here!"
 },
 "crowd.idle.19": {
 "f": "crowd/crowd.idle.19.mp3",
-"d": 1.3,
+"d": 1.28,
 "t": "Oi! Pie man!"
 },
 "crowd.idle.20": {
 "f": "crowd/crowd.idle.20.mp3",
-"d": 3.95,
+"d": 3.79,
 "t": "Brothers, a little more charity, and a little less ale."
 },
 "crowd.idle.21": {
 "f": "crowd/crowd.idle.21.mp3",
-"d": 3.61,
+"d": 3.82,
 "t": "They say the Duke paid for his horse with his wife's jewels."
 },
 "crowd.idle.22": {
 "f": "crowd/crowd.idle.22.mp3",
-"d": 2.8,
+"d": 2.83,
 "t": "I hear his squire owes everybody money."
 },
 "crowd.idle.23": {
 "f": "crowd/crowd.idle.23.mp3",
-"d": 3.47,
+"d": 3.87,
 "t": "Lances made of fir. Fir! Christmas wood."
 },
 "crowd.idle.26": {
@@ -1957,132 +1957,132 @@
 },
 "crowd.idle.27": {
 "f": "crowd/crowd.idle.27.mp3",
-"d": 1.87,
+"d": 1.92,
 "t": "Doggy! Here, doggy!"
 },
 "crowd.largesse.0": {
 "f": "crowd/crowd.largesse.0.mp3",
-"d": 2.29,
+"d": 2.31,
 "t": "Largesse! Largesse!"
 },
 "crowd.largesse.1": {
 "f": "crowd/crowd.largesse.1.mp3",
-"d": 1.52,
+"d": 2.4,
 "t": "Throw it here, my lord!"
 },
 "crowd.largesse.2": {
 "f": "crowd/crowd.largesse.2.mp3",
-"d": 2.68,
+"d": 5.29,
 "t": "A penny for the herald, and one for me!"
 },
 "crowd.cry.England.0": {
 "f": "crowd/crowd.cry.England.0.mp3",
-"d": 2.53,
+"d": 1.5,
 "t": "Saint George!"
 },
 "crowd.cry.England.1": {
 "f": "crowd/crowd.cry.England.1.mp3",
-"d": 2.71,
+"d": 2.88,
 "t": "Saint George! Saint George!"
 },
 "crowd.cry.England.2": {
 "f": "crowd/crowd.cry.England.2.mp3",
-"d": 3.3,
+"d": 4.87,
 "t": "For England and Saint George!"
 },
 "crowd.cry.France.0": {
 "f": "crowd/crowd.cry.France.0.mp3",
-"d": 2.89,
+"d": 2.28,
 "t": "Montjoie! Saint-Denis!"
 },
 "crowd.cry.France.1": {
 "f": "crowd/crowd.cry.France.1.mp3",
-"d": 2.66,
+"d": 2.17,
 "t": "Montjoie Saint-Denis!"
 },
 "crowd.cry.France.2": {
 "f": "crowd/crowd.cry.France.2.mp3",
-"d": 2.39,
+"d": 1.4,
 "t": "Montjoie!"
 },
 "crowd.cry.Burgundy.0": {
 "f": "crowd/crowd.cry.Burgundy.0.mp3",
-"d": 3.03,
+"d": 4.15,
 "t": "Montjoie Saint-Andrieu!"
 },
 "crowd.cry.Burgundy.1": {
 "f": "crowd/crowd.cry.Burgundy.1.mp3",
-"d": 3.5,
+"d": 2.5,
 "t": "Notre-Dame! Bourgogne!"
 },
 "crowd.cry.Burgundy.2": {
 "f": "crowd/crowd.cry.Burgundy.2.mp3",
-"d": 2.26,
+"d": 2.61,
 "t": "Bourgogne!"
 },
 "crowd.cry.Len.0": {
 "f": "crowd/crowd.cry.Len.0.mp3",
-"d": 2.27,
+"d": 1.4,
 "t": "Santiago!"
 },
 "crowd.cry.Len.1": {
 "f": "crowd/crowd.cry.Len.1.mp3",
-"d": 3.39,
+"d": 2.85,
 "t": "Santiago! Santiago!"
 },
 "crowd.cry.Len.2": {
 "f": "crowd/crowd.cry.Len.2.mp3",
-"d": 2.78,
+"d": 3.11,
 "t": "Santiago, y cierra, España!"
 },
 "crowd.cry.Empire.0": {
 "f": "crowd/crowd.cry.Empire.0.mp3",
-"d": 2.51,
+"d": 3.04,
 "t": "For the Emperor!"
 },
 "crowd.cry.Empire.1": {
 "f": "crowd/crowd.cry.Empire.1.mp3",
-"d": 2.82,
+"d": 3.94,
 "t": "Hoch! Hoch! Hoch!"
 },
 "crowd.cry.Empire.2": {
 "f": "crowd/crowd.cry.Empire.2.mp3",
-"d": 2.25,
+"d": 2.09,
 "t": "Austria! Austria!"
 },
 "crowd.cry.Styria.0": {
 "f": "crowd/crowd.cry.Styria.0.mp3",
-"d": 2.29,
+"d": 2.28,
 "t": "Styria! Styria!"
 },
 "crowd.cry.Styria.1": {
 "f": "crowd/crowd.cry.Styria.1.mp3",
-"d": 2.55,
+"d": 3.41,
 "t": "Hoch! Hoch!"
 },
 "crowd.cry.any.0": {
 "f": "crowd/crowd.cry.any.0.mp3",
-"d": 1.32,
+"d": 3.22,
 "t": "God and the right!"
 },
 "crowd.cry.any.1": {
 "f": "crowd/crowd.cry.any.1.mp3",
-"d": 2.55,
+"d": 1.6,
 "t": "God speed him!"
 },
 "crowd.honour.0": {
 "f": "crowd/crowd.honour.0.mp3",
-"d": 2.11,
+"d": 2.05,
 "t": "To the honour of the ladies!"
 },
 "crowd.honour.1": {
 "f": "crowd/crowd.honour.1.mp3",
-"d": 3.28,
+"d": 5.45,
 "t": "For the ladies! For the ladies!"
 },
 "crowd.honour.2": {
 "f": "crowd/crowd.honour.2.mp3",
-"d": 1.87,
+"d": 2.7,
 "t": "Honour! Honour!"
 }
 },
