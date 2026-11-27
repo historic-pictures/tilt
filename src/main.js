@@ -1046,6 +1046,7 @@ function refreshWorldWithScans() {
   const training = worldKey === -2; worldKey = -99; setVenue(venueIdx, training);
 }
 function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, courses = 0, bridge = null, onl = false, spec = null) {
+  if (R) { if (player) player.replaying = false; if (opp) opp.replaying = false; R = null; } S.hl = false; hideReplayUi();      // (a replay left running from the last match never follows you into this one)
   S.online = !!onl; document.body.classList.toggle('online', !!onl);      // onl: a joust against a friend (the opponent is NET.od, driven from his stream)
   initAudio(); G.physLog = [];
   attract.park();      // the menu joust's riders leave the scene (kept for when the menu returns)
@@ -3401,7 +3402,7 @@ function endMatch(keepLink = false) {
   if (S.spec) specClear();
   if (S.online && !keepLink) netLeave();
   if (world && world.setTilt) world.setTilt(true);
-  for (const id of ['card', 'hud', 'verdict', 'lesson', 'royalCap', 'replayTag', 'replayKeys', 'replayYou', 'replayHim']) $(id).classList.add('hidden');
+  for (const id of ['card', 'hud', 'verdict', 'lesson', 'royalCap', 'replayTag', 'replayKeys', 'replayYou', 'replayHim', 'rplCtl', 'hlBack']) $(id).classList.add('hidden');
   $('helmMask').style.display = 'none'; $('flashTxt').className = '';
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   voice.reset(); speech.hide(); $('ticker').classList.remove('on'); $('ticker').textContent = ''; strikeCall = null; S.yieldAsk = false; $('yieldAsk').classList.add('hidden');
@@ -4396,6 +4397,7 @@ function updateLesson() {
 }
 
 function updateReticle() {
+  if (!R && !$('rplCtl').classList.contains('hidden')) hideReplayUi();      // (no replay running: never leave its controls on screen)
   const ret = $('reticle'), cur = $('cursorDot');
   const show = M && C && (S.mode === 'charge' || S.mode === 'ready') && !C.pL.done && !C.cut && player.look < 0.3;
   ret.style.display = cur.style.display = show ? 'block' : 'none';
