@@ -1,0 +1,2052 @@
+{
+"version": 1,
+"pell": {
+"booth.welcome.3": {
+"f": "pell/booth.welcome.3.mp3",
+"d": 6.08,
+"t": "Good morrow, good people. If you have money on this, you are not alone. Nor wise."
+},
+"booth.welcome.8": {
+"f": "pell/booth.welcome.8.mp3",
+"d": 6.0,
+"t": "Every bench is taken. Some of them twice… By men who paid but once, by my faith."
+},
+"booth.venue.smithfield.2": {
+"f": "pell/booth.venue.smithfield.2.mp3",
+"d": 5.79,
+"t": "The knights rode out from the Tower this morning… Each led by a lady, on a silver chain."
+},
+"booth.venue.smithfield.5": {
+"f": "pell/booth.venue.smithfield.5.mp3",
+"d": 6.03,
+"t": "Smithfield is also where they burn men for heresy. The King bids you enjoy the jousting."
+},
+"booth.venue.inglevert.1": {
+"f": "pell/booth.venue.inglevert.1.mp3",
+"d": 7.87,
+"t": "At Saint-Inglevert a knight touches a shield to choose: the shield of peace… Or the shield of war."
+},
+"booth.venue.inglevert.3": {
+"f": "pell/booth.venue.inglevert.3.mp3",
+"d": 6.79,
+"t": "The holders are Boucicaut, de Roye and Sempy. They have pitched their pavilions… And mean to bide."
+},
+"booth.venue.leon.1": {
+"f": "pell/booth.venue.leon.1.mp3",
+"d": 7.64,
+"t": "Suero de Quiñones has sworn to break three hundred lances here, and wears an iron collar every Thursday for his lady."
+},
+"booth.venue.leon.4": {
+"f": "pell/booth.venue.leon.4.mp3",
+"d": 8.07,
+"t": "One knight at Órbigo took a point through the eye and died upon the field. Yet still they came. They kept coming."
+},
+"booth.venue.bruges.1": {
+"f": "pell/booth.venue.bruges.1.mp3",
+"d": 5.38,
+"t": "There is a dwarf with an hourglass. When the sand has run… The course is over."
+},
+"booth.venue.nuremberg.1": {
+"f": "pell/booth.venue.nuremberg.1.mp3",
+"d": 7.7,
+"t": "German harness for the Stechen: the helm bolted to the breastplate. A man sees out… Only by leaning forward."
+},
+"booth.mode.planken.0": {
+"f": "pell/booth.mode.planken.0.mp3",
+"d": 6.68,
+"t": "Hear the reckoning: a touch, one. A lance broken, two. Broken upon the helm… Three."
+},
+"booth.mode.tiptoft.1": {
+"f": "pell/booth.mode.tiptoft.1.mp3",
+"d": 7.07,
+"t": "By Tiptoft's rule, a spear broken on the body is one, on the helm two… And bearing your man down, three."
+},
+"booth.mode.tiptoft.3": {
+"f": "pell/booth.mode.tiptoft.3.mp3",
+"d": 6.16,
+"t": "Strike the horse under these rules, and the prize is forfeit. No appeal. No excuse."
+},
+"booth.mode.castile.1": {
+"f": "pell/booth.mode.castile.1.mp3",
+"d": 6.51,
+"t": "Four courses only. Only a lance splintered with the point shall count. Broken crosswise… Nothing."
+},
+"booth.mode.sudden.1": {
+"f": "pell/booth.mode.sudden.1.mp3",
+"d": 6.46,
+"t": "One clean break ends it. Touches count for nothing. Nerves count for everything."
+},
+"booth.mode.judged.1": {
+"f": "pell/booth.mode.judged.1.mp3",
+"d": 6.31,
+"t": "A point for a steady lance, a point for raising it in good time, and one taken off for leaving it low."
+},
+"booth.mode.bridge.1": {
+"f": "pell/booth.mode.bridge.1.mp3",
+"d": 6.35,
+"t": "Win two bouts and the bridge is held. The horse is granted no fresh pair of legs for the second."
+},
+"booth.mode.gestech.1": {
+"f": "pell/booth.mode.gestech.1.mp3",
+"d": 4.44,
+"t": "Break the lance, or bear the man down. That is the whole of the Gestech."
+},
+"booth.mode.rennen.1": {
+"f": "pell/booth.mode.rennen.1.mp3",
+"d": 7.2,
+"t": "The mark is the tall shield upon the breast. Strike it square, and it springs away. Nothing else counts."
+},
+"booth.knight.clifford.0": {
+"f": "pell/booth.knight.clifford.0.mp3",
+"d": 6.24,
+"t": "Sir Thomas Clifford, an English knight of the old school. Mail… And opinions."
+},
+"booth.knight.renaud.0": {
+"f": "pell/booth.knight.renaud.0.mp3",
+"d": 6.57,
+"t": "Renaud de Roye, one of the three holders at Saint-Inglevert. Swift… And he knows it well."
+},
+"booth.knight.boucicaut.1": {
+"f": "pell/booth.knight.boucicaut.1.mp3",
+"d": 6.87,
+"t": "Boucicaut. Marshal of France one day, if no man kills him first. No man has managed it."
+},
+"booth.knight.lalaing.1": {
+"f": "pell/booth.knight.lalaing.1.mp3",
+"d": 7.41,
+"t": "Lalaing held a pavilion by a fountain at Chalon a twelvemonth, against all comers. The Fountain of Tears."
+},
+"booth.knight.quinones.1": {
+"f": "pell/booth.knight.quinones.1.mp3",
+"d": 5.2,
+"t": "Three hundred lances, he swore. He is counting. So are the carpenters."
+},
+"booth.knight.freydal.1": {
+"f": "pell/booth.knight.freydal.1.mp3",
+"d": 6.82,
+"t": "Freydal, in German harness — the Stechzeug. Bolted, doubled… Near enough a wall."
+},
+"booth.knight.palman.0": {
+"f": "pell/booth.knight.palman.0.mp3",
+"d": 7.08,
+"t": "Palman of Styria. He captained the German men for the King of Serbia. He does not joust for sport."
+},
+"booth.knight.ulrich.1": {
+"f": "pell/booth.knight.ulrich.1.mp3",
+"d": 6.78,
+"t": "They say Ulrich cut off his own finger and sent it to his lady. She was not so moved as he had hoped."
+},
+"booth.knight.blackprince.1": {
+"f": "pell/booth.knight.blackprince.1.mp3",
+"d": 6.74,
+"t": "The Prince has the finest seat in Christendom… And the worst temper. Both will be on show."
+},
+"booth.knight.field.0": {
+"f": "pell/booth.knight.field.0.mp3",
+"d": 3.29,
+"t": "A new man upon the roll. New to most of us."
+},
+"booth.knight.field.3": {
+"f": "pell/booth.knight.field.3.mp3",
+"d": 5.19,
+"t": "Not old arms, his. Bought, some say."
+},
+"booth.you.new.1": {
+"f": "pell/booth.you.new.1.mp3",
+"d": 5.1,
+"t": "First time in the lists for this one. Mark the lance… It shakes a little."
+},
+"booth.you.new.3": {
+"f": "pell/booth.you.new.3.mp3",
+"d": 5.54,
+"t": "No record, no name, no debts as yet. Give it an afternoon."
+},
+"booth.you.rising.0": {
+"f": "pell/booth.you.rising.0.mp3",
+"d": 5.44,
+"t": "This one begins to be talked of. In taverns. Favourably, for the most part."
+},
+"booth.you.known.0": {
+"f": "pell/booth.you.known.0.mp3",
+"d": 3.88,
+"t": "A knight whose name the heralds no longer have to spell."
+},
+"booth.you.champion.1": {
+"f": "pell/booth.you.champion.1.mp3",
+"d": 7.17,
+"t": "Honours on the roll, and the King knows the name. That is a perilous thing… To be known to the King."
+},
+"booth.grudge.1": {
+"f": "pell/booth.grudge.1.mp3",
+"d": 6.43,
+"t": "There is old quarrel here. The last meeting went the other way… And no man has forgotten it."
+},
+"booth.revenge.0": {
+"f": "pell/booth.revenge.0.mp3",
+"d": 5.29,
+"t": "Our man won the last time they met. The other has not ceased to speak of it."
+},
+"booth.arms.0": {
+"f": "pell/booth.arms.0.mp3",
+"d": 3.86,
+"t": "Mark the arms upon the shield, plain enough to read at a gallop."
+},
+"booth.arms.3": {
+"f": "pell/booth.arms.3.mp3",
+"d": 5.2,
+"t": "The heralds will be painting both shields upon the roll tonight… One way or the other."
+},
+"booth.horse.destrier.2": {
+"f": "pell/booth.horse.destrier.2.mp3",
+"d": 6.82,
+"t": "The destrier is heavy in the shock. The lance goes where the horse goes… And the horse goes through."
+},
+"booth.horse.courser.2": {
+"f": "pell/booth.horse.courser.2.mp3",
+"d": 5.4,
+"t": "A courser brings speed to the stroke. Whether the rider can keep pace is another matter."
+},
+"booth.horse.rouncey.2": {
+"f": "pell/booth.horse.rouncey.2.mp3",
+"d": 5.49,
+"t": "Light in the shock, the rouncey… But it never tires, and it never takes fright."
+},
+"booth.stakes.final.1": {
+"f": "pell/booth.stakes.final.1.mp3",
+"d": 6.24,
+"t": "The last day of the event. Win here, and the heralds cry your name in the hall tonight."
+},
+"booth.stakes.first.0": {
+"f": "pell/booth.stakes.first.0.mp3",
+"d": 5.6,
+"t": "The first day of a first season. Some man in this field is about to learn something."
+},
+"booth.stakes.early.0": {
+"f": "pell/booth.stakes.early.0.mp3",
+"d": 5.36,
+"t": "An early round. Lose here… And you are a spectator with an excellent seat."
+},
+"booth.ready.0": {
+"f": "pell/booth.ready.0.mp3",
+"d": 4.9,
+"t": "Lances up. Visors down. This is the quiet hour."
+},
+"booth.ready.2": {
+"f": "pell/booth.ready.2.mp3",
+"d": 3.6,
+"t": "Both at their marks. The squires stand back."
+},
+"booth.ready.4": {
+"f": "pell/booth.ready.4.mp3",
+"d": 4.16,
+"t": "The commons hush. Even the pie man holds his tongue."
+},
+"booth.ready.6": {
+"f": "pell/booth.ready.6.mp3",
+"d": 4.27,
+"t": "The flag is raised. Both knights… Waiting on it."
+},
+"booth.away.0": {
+"f": "pell/booth.away.0.mp3",
+"d": 1.9,
+"t": "And they are… Away!"
+},
+"booth.away.1": {
+"f": "pell/booth.away.1.mp3",
+"d": 1.72,
+"t": "Ho! Away they go!"
+},
+"booth.away.2": {
+"f": "pell/booth.away.2.mp3",
+"d": 2.55,
+"t": "Spurs in… Here they come!"
+},
+"booth.away.3": {
+"f": "pell/booth.away.3.mp3",
+"d": 1.76,
+"t": "The flag falls. They go!"
+},
+"booth.away.4": {
+"f": "pell/booth.away.4.mp3",
+"d": 1.97,
+"t": "Off they go, down the lists!"
+},
+"booth.away.6": {
+"f": "pell/booth.away.6.mp3",
+"d": 1.96,
+"t": "They are off. Mark the points!"
+},
+"booth.away.7": {
+"f": "pell/booth.away.7.mp3",
+"d": 2.34,
+"t": "Away… And the stands are up!"
+},
+"booth.away.8": {
+"f": "pell/booth.away.8.mp3",
+"d": 2.13,
+"t": "Away together, by my faith!"
+},
+"booth.charge.fast.0": {
+"f": "pell/booth.charge.fast.0.mp3",
+"d": 2.26,
+"t": "Full gallop. A goodly pace!"
+},
+"booth.charge.fast.2": {
+"f": "pell/booth.charge.fast.2.mp3",
+"d": 1.33,
+"t": "He has the pace up."
+},
+"booth.charge.fast.4": {
+"f": "pell/booth.charge.fast.4.mp3",
+"d": 1.3,
+"t": "Coming on hard!"
+},
+"booth.charge.fast.5": {
+"f": "pell/booth.charge.fast.5.mp3",
+"d": 2.72,
+"t": "Thunder… Upon the sand."
+},
+"booth.charge.slow.1": {
+"f": "pell/booth.charge.slow.1.mp3",
+"d": 2.35,
+"t": "Little pace in that."
+},
+"booth.charge.slow.3": {
+"f": "pell/booth.charge.slow.3.mp3",
+"d": 1.96,
+"t": "A cautious approach."
+},
+"booth.charge.couch.0": {
+"f": "pell/booth.charge.couch.0.mp3",
+"d": 1.19,
+"t": "Lance in the rest."
+},
+"booth.charge.couch.1": {
+"f": "pell/booth.charge.couch.1.mp3",
+"d": 1.69,
+"t": "The lance comes down."
+},
+"booth.charge.couch.2": {
+"f": "pell/booth.charge.couch.2.mp3",
+"d": 2.1,
+"t": "Couched… And steady."
+},
+"booth.charge.couch.5": {
+"f": "pell/booth.charge.couch.5.mp3",
+"d": 1.37,
+"t": "He sets the lance."
+},
+"booth.charge.couch.6": {
+"f": "pell/booth.charge.couch.6.mp3",
+"d": 1.42,
+"t": "Lances level now."
+},
+"booth.charge.aim.0": {
+"f": "pell/booth.charge.aim.0.mp3",
+"d": 1.72,
+"t": "He has his eye upon the helm."
+},
+"booth.charge.aim.2": {
+"f": "pell/booth.charge.aim.2.mp3",
+"d": 1.88,
+"t": "Low and true at the shield."
+},
+"booth.charge.aim.4": {
+"f": "pell/booth.charge.aim.4.mp3",
+"d": 1.92,
+"t": "The point… Wanders."
+},
+"booth.exclaim.big.0": {
+"f": "pell/booth.exclaim.big.0.mp3",
+"d": 2.08,
+"t": "Oh — shattered!"
+},
+"booth.exclaim.big.2": {
+"f": "pell/booth.exclaim.big.2.mp3",
+"d": 2.74,
+"t": "Broken! A goodly break!"
+},
+"booth.exclaim.big.4": {
+"f": "pell/booth.exclaim.big.4.mp3",
+"d": 1.38,
+"t": "Splinters!"
+},
+"booth.exclaim.big.6": {
+"f": "pell/booth.exclaim.big.6.mp3",
+"d": 1.7,
+"t": "Smartly struck!"
+},
+"booth.exclaim.big.8": {
+"f": "pell/booth.exclaim.big.8.mp3",
+"d": 2.42,
+"t": "Ho! What a stroke!"
+},
+"booth.exclaim.helm.0": {
+"f": "pell/booth.exclaim.helm.0.mp3",
+"d": 1.25,
+"t": "Upon the helm!"
+},
+"booth.exclaim.helm.2": {
+"f": "pell/booth.exclaim.helm.2.mp3",
+"d": 1.9,
+"t": "The helm! The helm!"
+},
+"booth.exclaim.small.0": {
+"f": "pell/booth.exclaim.small.0.mp3",
+"d": 0.73,
+"t": "A touch."
+},
+"booth.exclaim.small.2": {
+"f": "pell/booth.exclaim.small.2.mp3",
+"d": 0.97,
+"t": "Glanced off."
+},
+"booth.exclaim.small.4": {
+"f": "pell/booth.exclaim.small.4.mp3",
+"d": 1.22,
+"t": "Turned aside."
+},
+"booth.exclaim.miss.0": {
+"f": "pell/booth.exclaim.miss.0.mp3",
+"d": 0.95,
+"t": "Nothing!"
+},
+"booth.exclaim.miss.2": {
+"f": "pell/booth.exclaim.miss.2.mp3",
+"d": 0.79,
+"t": "Missed."
+},
+"booth.exclaim.miss.4": {
+"f": "pell/booth.exclaim.miss.4.mp3",
+"d": 1.91,
+"t": "Wide!"
+},
+"booth.exclaim.fall.0": {
+"f": "pell/booth.exclaim.fall.0.mp3",
+"d": 1.74,
+"t": "He is unhorsed!"
+},
+"booth.exclaim.fall.2": {
+"f": "pell/booth.exclaim.fall.2.mp3",
+"d": 1.36,
+"t": "Out of the saddle!"
+},
+"booth.exclaim.fall.4": {
+"f": "pell/booth.exclaim.fall.4.mp3",
+"d": 1.85,
+"t": "Down! Down!"
+},
+"booth.exclaim.foul.0": {
+"f": "pell/booth.exclaim.foul.0.mp3",
+"d": 1.73,
+"t": "The horse! Foul!"
+},
+"booth.exclaim.foul.2": {
+"f": "pell/booth.exclaim.foul.2.mp3",
+"d": 1.57,
+"t": "That is a foul."
+},
+"booth.exclaim.tilt.0": {
+"f": "pell/booth.exclaim.tilt.0.mp3",
+"d": 1.37,
+"t": "Into the barrier!"
+},
+"booth.exclaim.tilt.2": {
+"f": "pell/booth.exclaim.tilt.2.mp3",
+"d": 2.58,
+"t": "Timber! The barrier."
+},
+"booth.after.breakYou.1": {
+"f": "pell/booth.after.breakYou.1.mp3",
+"d": 1.78,
+"t": "Two to the cheque, there."
+},
+"booth.after.breakYou.3": {
+"f": "pell/booth.after.breakYou.3.mp3",
+"d": 3.76,
+"t": "A clean break for our man. Square upon the shield."
+},
+"booth.after.breakYou.7": {
+"f": "pell/booth.after.breakYou.7.mp3",
+"d": 5.47,
+"t": "Splinters to the rail. That one will be picked out of the commons for a week."
+},
+"booth.after.breakYou.9": {
+"f": "pell/booth.after.breakYou.9.mp3",
+"d": 3.96,
+"t": "Two to the cheque, or near enough. The heralds are writing."
+},
+"booth.after.breakHim.1": {
+"f": "pell/booth.after.breakHim.1.mp3",
+"d": 1.78,
+"t": "A good stroke against."
+},
+"booth.after.breakHim.3": {
+"f": "pell/booth.after.breakHim.3.mp3",
+"d": 4.04,
+"t": "He breaks his lance. A good, honest stroke."
+},
+"booth.after.breakHim.6": {
+"f": "pell/booth.after.breakHim.6.mp3",
+"d": 4.8,
+"t": "A broken lance against. The stands go quiet upon this side."
+},
+"booth.after.bothBreak.1": {
+"f": "pell/booth.after.bothBreak.1.mp3",
+"d": 2.22,
+"t": "Two lances, two cheers."
+},
+"booth.after.bothBreak.3": {
+"f": "pell/booth.after.bothBreak.3.mp3",
+"d": 4.8,
+"t": "Two lances in pieces. The carpenters will be busy tonight."
+},
+"booth.after.bothBreak.6": {
+"f": "pell/booth.after.bothBreak.6.mp3",
+"d": 4.71,
+"t": "Splinters everywhere. The heralds will need a second roll."
+},
+"booth.after.helmYou.1": {
+"f": "pell/booth.after.helmYou.1.mp3",
+"d": 2.16,
+"t": "The hardest mark of all."
+},
+"booth.after.helmYou.4": {
+"f": "pell/booth.after.helmYou.4.mp3",
+"d": 5.08,
+"t": "The helm rang like a church bell. A lady in the gallery crossed herself."
+},
+"booth.after.helmYou.6": {
+"f": "pell/booth.after.helmYou.6.mp3",
+"d": 4.85,
+"t": "A stroke for the roll of arms. The heralds will be dining out on that one."
+},
+"booth.after.helmHim.1": {
+"f": "pell/booth.after.helmHim.1.mp3",
+"d": 2.31,
+"t": "Upon the helm… Against."
+},
+"booth.after.helmHim.2": {
+"f": "pell/booth.after.helmHim.2.mp3",
+"d": 4.76,
+"t": "Upon the helm, against. That will have been loud within."
+},
+"booth.after.helmHim.5": {
+"f": "pell/booth.after.helmHim.5.mp3",
+"d": 6.59,
+"t": "A blow upon the helm… And our man still in the saddle. That is iron and stubbornness."
+},
+"booth.after.glanceYou.1": {
+"f": "pell/booth.after.glanceYou.1.mp3",
+"d": 1.76,
+"t": "Too flat at the meeting."
+},
+"booth.after.glanceYou.2": {
+"f": "pell/booth.after.glanceYou.2.mp3",
+"d": 4.25,
+"t": "A touch, and it skids away. Too flat at the meeting."
+},
+"booth.after.glanceYou.5": {
+"f": "pell/booth.after.glanceYou.5.mp3",
+"d": 4.59,
+"t": "The point met the shield and slid. An attaint… No more."
+},
+"booth.after.glanceHim.1": {
+"f": "pell/booth.after.glanceHim.1.mp3",
+"d": 1.62,
+"t": "Good shield work, that."
+},
+"booth.after.glanceHim.2": {
+"f": "pell/booth.after.glanceHim.2.mp3",
+"d": 3.22,
+"t": "His point glances away. Good shield work."
+},
+"booth.after.attaint.1": {
+"f": "pell/booth.after.attaint.1.mp3",
+"d": 2.74,
+"t": "The lance held. A touch."
+},
+"booth.after.attaint.2": {
+"f": "pell/booth.after.attaint.2.mp3",
+"d": 3.44,
+"t": "A touch that holds. The lance did not break."
+},
+"booth.after.attaint.5": {
+"f": "pell/booth.after.attaint.5.mp3",
+"d": 5.11,
+"t": "An attaint. The judges hold the flag level. A touch… No more."
+},
+"booth.after.missYou.1": {
+"f": "pell/booth.after.missYou.1.mp3",
+"d": 1.7,
+"t": "A yard of air."
+},
+"booth.after.missYou.2": {
+"f": "pell/booth.after.missYou.2.mp3",
+"d": 3.17,
+"t": "Nothing for our man. The point went by."
+},
+"booth.after.missYou.5": {
+"f": "pell/booth.after.missYou.5.mp3",
+"d": 4.72,
+"t": "Wide. A good yard of air. The commons let him know it."
+},
+"booth.after.missHim.1": {
+"f": "pell/booth.after.missHim.1.mp3",
+"d": 1.26,
+"t": "Nothing from him."
+},
+"booth.after.missHim.2": {
+"f": "pell/booth.after.missHim.2.mp3",
+"d": 3.35,
+"t": "He misses. A clean pass… And nothing to show."
+},
+"booth.after.missHim.5": {
+"f": "pell/booth.after.missHim.5.mp3",
+"d": 5.65,
+"t": "A miss against. That costs him nothing on the cheque… And a great deal in the stands."
+},
+"booth.after.bothMiss.1": {
+"f": "pell/booth.after.bothMiss.1.mp3",
+"d": 1.98,
+"t": "Strangers in a cloister."
+},
+"booth.after.bothMiss.3": {
+"f": "pell/booth.after.bothMiss.3.mp3",
+"d": 3.05,
+"t": "They passed each other like strangers in a cloister."
+},
+"booth.after.bothMiss.6": {
+"f": "pell/booth.after.bothMiss.6.mp3",
+"d": 5.19,
+"t": "The commons are whistling. They did not pay to watch two men go for a canter."
+},
+"booth.after.unhorseYou.1": {
+"f": "pell/booth.after.unhorseYou.1.mp3",
+"d": 1.99,
+"t": "Borne to the ground!"
+},
+"booth.after.unhorseYou.3": {
+"f": "pell/booth.after.unhorseYou.3.mp3",
+"d": 4.74,
+"t": "Borne to the ground. Over the cantle… And the horse runs on without him."
+},
+"booth.after.unhorseYou.6": {
+"f": "pell/booth.after.unhorseYou.6.mp3",
+"d": 5.07,
+"t": "The squires are running. The marshal's men are running. He is going nowhere."
+},
+"booth.after.unhorseHim.1": {
+"f": "pell/booth.after.unhorseHim.1.mp3",
+"d": 1.74,
+"t": "Our man is upon the sand."
+},
+"booth.after.unhorseHim.3": {
+"f": "pell/booth.after.unhorseHim.3.mp3",
+"d": 5.95,
+"t": "Borne down. A great stroke against… And the stands have gone very quiet."
+},
+"booth.after.tilt.1": {
+"f": "pell/booth.after.tilt.1.mp3",
+"d": 1.38,
+"t": "Points off for that."
+},
+"booth.after.tilt.3": {
+"f": "pell/booth.after.tilt.3.mp3",
+"d": 5.25,
+"t": "He struck the tilt. Points off… And a carpenter somewhere sighs."
+},
+"booth.after.foul.1": {
+"f": "pell/booth.after.foul.1.mp3",
+"d": 1.89,
+"t": "The red flag goes up."
+},
+"booth.after.foul.3": {
+"f": "pell/booth.after.foul.3.mp3",
+"d": 6.33,
+"t": "A stroke upon the horse. The judges raise the red flag. The King's grace likes it not."
+},
+"booth.after.injuryYou.1": {
+"f": "pell/booth.after.injuryYou.1.mp3",
+"d": 3.84,
+"t": "The surgeon is watching closely. He has his bag open."
+},
+"booth.after.injuryHim.1": {
+"f": "pell/booth.after.injuryHim.1.mp3",
+"d": 4.03,
+"t": "His squires hold him in the saddle. That is no good sign."
+},
+"booth.score.planken.0": {
+"f": "pell/booth.score.planken.0.mp3",
+"d": 3.65,
+"t": "The heralds have their sums. The cheque is close."
+},
+"booth.score.planken.2": {
+"f": "pell/booth.score.planken.2.mp3",
+"d": 4.37,
+"t": "Every line on that cheque is a lance some man did not wish to lose."
+},
+"booth.score.tiptoft.0": {
+"f": "pell/booth.score.tiptoft.0.mp3",
+"d": 6.41,
+"t": "Under Tiptoft that is one for the body. Nothing for a touch. The Earl was not sentimental."
+},
+"booth.score.tiptoft.2": {
+"f": "pell/booth.score.tiptoft.2.mp3",
+"d": 6.2,
+"t": "Watch the sight of the helm. Three strokes there take the prize under Tiptoft… Whatever the count."
+},
+"booth.score.judged.0": {
+"f": "pell/booth.score.judged.0.mp3",
+"d": 5.27,
+"t": "The judges add their marks: a steady lance, and the lance raised in good time."
+},
+"booth.score.sudden.0": {
+"f": "pell/booth.score.sudden.0.mp3",
+"d": 6.29,
+"t": "Still no lance broken, so still no winner. Sudden death… Waits."
+},
+"booth.score.castile.0": {
+"f": "pell/booth.score.castile.0.mp3",
+"d": 5.49,
+"t": "Only a splintered lance counts under the Statutes. A crosswise break is nothing."
+},
+"booth.score.gestech.0": {
+"f": "pell/booth.score.gestech.0.mp3",
+"d": 5.19,
+"t": "In the Gestech, the break is what counts… And the fall counts most."
+},
+"booth.score.rennen.0": {
+"f": "pell/booth.score.rennen.0.mp3",
+"d": 5.36,
+"t": "Only the shield counts in the Rennen. Strike it square… And up it springs."
+},
+"booth.score.bridge.0": {
+"f": "pell/booth.score.bridge.0.mp3",
+"d": 4.01,
+"t": "The bridge keeps its own tally. Bouts won… Bouts lost."
+},
+"booth.momentum.leadYou.0": {
+"f": "pell/booth.momentum.leadYou.0.mp3",
+"d": 1.4,
+"t": "Our man leads."
+},
+"booth.momentum.leadHim.0": {
+"f": "pell/booth.momentum.leadHim.0.mp3",
+"d": 1.01,
+"t": "He leads."
+},
+"booth.momentum.level.0": {
+"f": "pell/booth.momentum.level.0.mp3",
+"d": 2.33,
+"t": "Level. All to do."
+},
+"booth.momentum.comeback.1": {
+"f": "pell/booth.momentum.comeback.1.mp3",
+"d": 5.07,
+"t": "What a turn! An hour since, the bookmakers were laughing."
+},
+"booth.momentum.comeback.3": {
+"f": "pell/booth.momentum.comeback.3.mp3",
+"d": 3.01,
+"t": "The stands have changed sides. Hark to them."
+},
+"booth.momentum.collapse.0": {
+"f": "pell/booth.momentum.collapse.0.mp3",
+"d": 4.33,
+"t": "He had it… And now it slips. The lead is gone."
+},
+"booth.momentum.streakYou.0": {
+"f": "pell/booth.momentum.streakYou.0.mp3",
+"d": 3.07,
+"t": "Another! That is three courses running."
+},
+"booth.momentum.streakHim.0": {
+"f": "pell/booth.momentum.streakHim.0.mp3",
+"d": 2.97,
+"t": "Him again. He has the measure of it."
+},
+"booth.momentum.lastCourse.0": {
+"f": "pell/booth.momentum.lastCourse.0.mp3",
+"d": 3.15,
+"t": "The last course. Everything upon it."
+},
+"booth.momentum.lastCourse.3": {
+"f": "pell/booth.momentum.lastCourse.3.mp3",
+"d": 5.38,
+"t": "One more course and it is decided… Unless God or the barrier has a say."
+},
+"booth.momentum.lastCourse.4": {
+"f": "pell/booth.momentum.lastCourse.4.mp3",
+"d": 3.75,
+"t": "The final course of the match. Hark to the stands."
+},
+"booth.momentum.extra.0": {
+"f": "pell/booth.momentum.extra.0.mp3",
+"d": 3.97,
+"t": "Level after the courses. One more… To settle it."
+},
+"booth.momentum.runawayYou.0": {
+"f": "pell/booth.momentum.runawayYou.0.mp3",
+"d": 1.98,
+"t": "This is become a lesson."
+},
+"booth.momentum.runawayHim.0": {
+"f": "pell/booth.momentum.runawayHim.0.mp3",
+"d": 1.72,
+"t": "He is running away with it."
+},
+"booth.result.win.1": {
+"f": "pell/booth.result.win.1.mp3",
+"d": 7.15,
+"t": "The judges agree, the stands agree, and the King's grace is applauding. That is a win, by my faith."
+},
+"booth.result.win.4": {
+"f": "pell/booth.result.win.4.mp3",
+"d": 5.91,
+"t": "Favours from the gallery, caps in the air… And some man's purse much lighter."
+},
+"booth.result.win.6": {
+"f": "pell/booth.result.win.6.mp3",
+"d": 5.43,
+"t": "The heralds will cry that name in the hall tonight, and the ladies will pretend not to listen."
+},
+"booth.result.loss.1": {
+"f": "pell/booth.result.loss.1.mp3",
+"d": 4.81,
+"t": "A loss… But a brave one. The stands are kinder than the cheque."
+},
+"booth.result.loss.4": {
+"f": "pell/booth.result.loss.4.mp3",
+"d": 5.68,
+"t": "He rides off with his head up. That is worth something. Not a purse. Something."
+},
+"booth.result.draw.1": {
+"f": "pell/booth.result.draw.1.mp3",
+"d": 3.85,
+"t": "Neither man beaten. Both will claim it in the tavern."
+},
+"booth.result.firstWin.1": {
+"f": "pell/booth.result.firstWin.1.mp3",
+"d": 4.78,
+"t": "Remember the day. Some man will carve it upon a tomb one day."
+},
+"booth.result.rankUp.0": {
+"f": "pell/booth.result.rankUp.0.mp3",
+"d": 4.03,
+"t": "The heralds will raise him upon the roll for that. A rank higher."
+},
+"booth.result.champion.1": {
+"f": "pell/booth.result.champion.1.mp3",
+"d": 5.88,
+"t": "A champion. The King's grace will want a word. Let us hope it is a kind one."
+},
+"booth.celebrate.stump.0": {
+"f": "pell/booth.celebrate.stump.0.mp3",
+"d": 2.87,
+"t": "He holds the broken stump up to the stands."
+},
+"booth.celebrate.salute.0": {
+"f": "pell/booth.celebrate.salute.0.mp3",
+"d": 3.35,
+"t": "A bow, and the lance raised to the royal box."
+},
+"booth.celebrate.fists.0": {
+"f": "pell/booth.celebrate.fists.0.mp3",
+"d": 2.92,
+"t": "Up in the stirrups, both fists in the air!"
+},
+"booth.celebrate.helm.0": {
+"f": "pell/booth.celebrate.helm.0.mp3",
+"d": 2.97,
+"t": "The helm comes off… And he waves it."
+},
+"booth.celebrate.point.0": {
+"f": "pell/booth.celebrate.point.0.mp3",
+"d": 2.97,
+"t": "He points at the commons… And cups an ear."
+},
+"booth.celebrate.rear.0": {
+"f": "pell/booth.celebrate.rear.0.mp3",
+"d": 2.43,
+"t": "The horse goes up! A pesade!"
+},
+"booth.celebrate.gallery.0": {
+"f": "pell/booth.celebrate.gallery.0.mp3",
+"d": 3.99,
+"t": "A slow ride along the gallery, arm raised to the ladies."
+},
+"booth.celebrate.favour.0": {
+"f": "pell/booth.celebrate.favour.0.mp3",
+"d": 3.72,
+"t": "A bow to a lady… And she throws him her ribbon."
+},
+"booth.celebrate.chest.0": {
+"f": "pell/booth.celebrate.chest.0.mp3",
+"d": 2.08,
+"t": "He beats upon his breastplate."
+},
+"booth.celebrate.nod.0": {
+"f": "pell/booth.celebrate.nod.0.mp3",
+"d": 2.47,
+"t": "A nod of the head… To the better man."
+},
+"booth.celebrate.slap.0": {
+"f": "pell/booth.celebrate.slap.0.mp3",
+"d": 4.57,
+"t": "He slaps his own helm. He is ill pleased with himself."
+},
+"booth.aftermath.down.0": {
+"f": "pell/booth.aftermath.down.0.mp3",
+"d": 3.5,
+"t": "He is not rising. The surgeon is running out."
+},
+"booth.aftermath.up.0": {
+"f": "pell/booth.aftermath.up.0.mp3",
+"d": 5.01,
+"t": "He is on his feet. A hand from the squire… And he stands."
+},
+"booth.aftermath.carried.0": {
+"f": "pell/booth.aftermath.carried.0.mp3",
+"d": 1.75,
+"t": "They bear him from the field."
+},
+"booth.filler.4": {
+"f": "pell/booth.filler.4.mp3",
+"d": 7.19,
+"t": "A word upon the coronel. Three blunt prongs, to catch upon the shield and break the lance… Not the man."
+},
+"booth.filler.6": {
+"f": "pell/booth.filler.6.mp3",
+"d": 7.61,
+"t": "The vamplate is the steel disc on the lance that guards the hand. Without it you joust with nine fingers. Briefly."
+},
+"booth.filler.11": {
+"f": "pell/booth.filler.11.mp3",
+"d": 7.03,
+"t": "For those just arriving: the lists are open, the ale is warm, and the King has not yet had any man arrested."
+},
+"booth.filler.13": {
+"f": "pell/booth.filler.13.mp3",
+"d": 8.02,
+"t": "The heralds keep the cheque, a column of marks for each rider. No man argues with the cheque. They argue with heralds."
+},
+"booth.filler.17": {
+"f": "pell/booth.filler.17.mp3",
+"d": 4.95,
+"t": "The squires do most of the work and get none of the credit. Like heralds."
+},
+"booth.filler.19": {
+"f": "pell/booth.filler.19.mp3",
+"d": 6.32,
+"t": "The marshal's word is law in the lists. Outside the lists, the marshal owes me two shillings."
+},
+"booth.filler.23": {
+"f": "pell/booth.filler.23.mp3",
+"d": 7.42,
+"t": "The barrier is called the tilt, which is why the whole sport is called tilting, which is why I have a place."
+},
+"booth.filler.25": {
+"f": "pell/booth.filler.25.mp3",
+"d": 6.72,
+"t": "The French call this the joust of peace. The French have a sense of humour. It is hard to find."
+},
+"booth.filler.29": {
+"f": "pell/booth.filler.29.mp3",
+"d": 7.45,
+"t": "A word to the commons: casting things at the knights is forbidden. Casting things at the heralds is merely discouraged."
+},
+"booth.filler.33": {
+"f": "pell/booth.filler.33.mp3",
+"d": 6.44,
+"t": "The squire hands up a fresh lance. Fourteen feet of painted fir… And every man's hopes."
+},
+"booth.filler.36": {
+"f": "pell/booth.filler.36.mp3",
+"d": 6.95,
+"t": "The judges confer. Three old men, one table… And the whole afternoon written on their faces."
+},
+"booth.filler.38": {
+"f": "pell/booth.filler.38.mp3",
+"d": 5.19,
+"t": "The wind sits in the west, which matters to the archers… And to nobody else."
+},
+"booth.history.0": {
+"f": "pell/booth.history.0.mp3",
+"d": 7.35,
+"t": "At Smithfield in 1390, King Richard gave out his white hart badge. It was the first time it was seen."
+},
+"booth.history.1": {
+"f": "pell/booth.history.1.mp3",
+"d": 6.19,
+"t": "Sixty ladies led sixty knights through London on chains… To the Smithfield jousts."
+},
+"booth.history.2": {
+"f": "pell/booth.history.2.mp3",
+"d": 8.15,
+"t": "At Saint-Inglevert the holders hung two shields at their pavilions. Touch the shield of war… And the points were sharp."
+},
+"booth.history.3": {
+"f": "pell/booth.history.3.mp3",
+"d": 6.5,
+"t": "At the Passo Honroso, a hundred and sixty-six combats were fought before the vow was held complete."
+},
+"booth.history.4": {
+"f": "pell/booth.history.4.mp3",
+"d": 7.87,
+"t": "At the pas of the Golden Tree, the challengers came one by one, twenty-six of them, to face the Bastard of Burgundy."
+},
+"booth.history.5": {
+"f": "pell/booth.history.5.mp3",
+"d": 6.17,
+"t": "The Bastard of Burgundy was kicked by a horse at his own pas. The horse was not punished."
+},
+"booth.history.6": {
+"f": "pell/booth.history.6.mp3",
+"d": 7.19,
+"t": "Jacques de Lalaing kept the Fountain of Tears at Chalon a full twelvemonth, a challenge on the first of every month."
+},
+"booth.history.7": {
+"f": "pell/booth.history.7.mp3",
+"d": 6.67,
+"t": "Tiptoft's ordinances were set down at Windsor in May of 1466… For the King's jousts."
+},
+"booth.history.8": {
+"f": "pell/booth.history.8.mp3",
+"d": 8.02,
+"t": "At the Gesellenstechen it was the young men of the patrician houses who rode. The country nobility stayed at home… And sniffed."
+},
+"booth.history.9": {
+"f": "pell/booth.history.9.mp3",
+"d": 7.95,
+"t": "The German tournament societies barred men by ancestry. Four noble grandparents… Or you watched from the rail."
+},
+"booth.history.10": {
+"f": "pell/booth.history.10.mp3",
+"d": 8.47,
+"t": "Under the Bamberg rules of 1478, a cheat might lose his horse and harness… And be shamed before the ladies."
+},
+"booth.history.11": {
+"f": "pell/booth.history.11.mp3",
+"d": 7.49,
+"t": "At a pas d'armes, a knight who would not fight left his spurs. A lady without an escort left a glove."
+},
+"booth.history.12": {
+"f": "pell/booth.history.12.mp3",
+"d": 6.63,
+"t": "King René's book of the tournament: the king of arms cries three times… Before the ropes are cut."
+},
+"booth.history.13": {
+"f": "pell/booth.history.13.mp3",
+"d": 5.39,
+"t": "At the end of a tourney the ladies choose the knight of honour. The judges merely count."
+},
+"booth.history.14": {
+"f": "pell/booth.history.14.mp3",
+"d": 6.56,
+"t": "In the Rennen the shield is built to spring off when it is struck square. The crowd loves the sound."
+}
+},
+"squire": {
+"squire.cheer.start.0": {
+"f": "squire/squire.cheer.start.0.mp3",
+"d": 2.9,
+"t": "The lance is true, my lord. Ride well."
+},
+"squire.cheer.start.1": {
+"f": "squire/squire.cheer.start.1.mp3",
+"d": 3.1,
+"t": "Gauntlets laced, my lord. Good luck."
+},
+"squire.cheer.start.2": {
+"f": "squire/squire.cheer.start.2.mp3",
+"d": 3.96,
+"t": "All is ready, my lord. Go and spoil his afternoon."
+},
+"squire.cheer.start.3": {
+"f": "squire/squire.cheer.start.3.mp3",
+"d": 4.29,
+"t": "Visor down, my lord. Your face is frightening the horse."
+},
+"squire.cheer.miss.0": {
+"f": "squire/squire.cheer.miss.0.mp3",
+"d": 2.63,
+"t": "He was quick, my lord. Next time."
+},
+"squire.cheer.miss.1": {
+"f": "squire/squire.cheer.miss.1.mp3",
+"d": 3.72,
+"t": "Air, my lord. It happens to the best of men."
+},
+"squire.cheer.miss.2": {
+"f": "squire/squire.cheer.miss.2.mp3",
+"d": 5.72,
+"t": "No matter, my lord. Nobody saw. Everybody saw. No matter."
+},
+"squire.cheer.miss.3": {
+"f": "squire/squire.cheer.miss.3.mp3",
+"d": 3.28,
+"t": "You were looking at his helm. I saw your head go up."
+},
+"squire.cheer.behind.0": {
+"f": "squire/squire.cheer.behind.0.mp3",
+"d": 3.37,
+"t": "We are behind, my lord, but only by a lance."
+},
+"squire.cheer.behind.1": {
+"f": "squire/squire.cheer.behind.1.mp3",
+"d": 2.45,
+"t": "One good course turns it, my lord."
+},
+"squire.cheer.behind.2": {
+"f": "squire/squire.cheer.behind.2.mp3",
+"d": 6.71,
+"t": "Behind, my lord. My father said behind is where the brave live. He was usually behind."
+},
+"squire.cheer.leading.0": {
+"f": "squire/squire.cheer.leading.0.mp3",
+"d": 3.69,
+"t": "You lead, my lord! The stands are with you."
+},
+"squire.cheer.leading.1": {
+"f": "squire/squire.cheer.leading.1.mp3",
+"d": 3.55,
+"t": "Ahead on points, my lord. I could shout!"
+},
+"squire.cheer.leading.2": {
+"f": "squire/squire.cheer.leading.2.mp3",
+"d": 3.7,
+"t": "Don't smile yet, my lord. Smile at supper."
+}
+},
+"crowd": {
+"crowd.start.0": {
+"f": "crowd/crowd.start.0.mp3",
+"d": 1.06,
+"t": "Here they come!"
+},
+"crowd.start.1": {
+"f": "crowd/crowd.start.1.mp3",
+"d": 1.18,
+"t": "About time!"
+},
+"crowd.start.2": {
+"f": "crowd/crowd.start.2.mp3",
+"d": 2.55,
+"t": "Look at the horses! Oh, look!"
+},
+"crowd.start.3": {
+"f": "crowd/crowd.start.3.mp3",
+"d": 2.4,
+"t": "Is that the King? Is that the King?"
+},
+"crowd.start.4": {
+"f": "crowd/crowd.start.4.mp3",
+"d": 2.53,
+"t": "Get your hat off, I cannot see!"
+},
+"crowd.start.5": {
+"f": "crowd/crowd.start.5.mp3",
+"d": 3.06,
+"t": "Lances! Lances for everyone!"
+},
+"crowd.start.6": {
+"f": "crowd/crowd.start.6.mp3",
+"d": 1.98,
+"t": "Two to one the blue! Two to one!"
+},
+"crowd.start.7": {
+"f": "crowd/crowd.start.7.mp3",
+"d": 3.56,
+"t": "Not like the old days. Look at them. Babies."
+},
+"crowd.start.8": {
+"f": "crowd/crowd.start.8.mp3",
+"d": 2.06,
+"t": "Ten crowns on the home man."
+},
+"crowd.start.9": {
+"f": "crowd/crowd.start.9.mp3",
+"d": 2.12,
+"t": "Which is he? The one with the feathers?"
+},
+"crowd.ready.0": {
+"f": "crowd/crowd.ready.0.mp3",
+"d": 2.0,
+"t": "Come on! Come on!"
+},
+"crowd.ready.1": {
+"f": "crowd/crowd.ready.1.mp3",
+"d": 1.33,
+"t": "Get on with it!"
+},
+"crowd.ready.2": {
+"f": "crowd/crowd.ready.2.mp3",
+"d": 2.75,
+"t": "Quiet, you, he is about to go!"
+},
+"crowd.ready.3": {
+"f": "crowd/crowd.ready.3.mp3",
+"d": 2.07,
+"t": "Mother, I cannot see!"
+},
+"crowd.ready.4": {
+"f": "crowd/crowd.ready.4.mp3",
+"d": 1.61,
+"t": "Sit down at the front!"
+},
+"crowd.ready.5": {
+"f": "crowd/crowd.ready.5.mp3",
+"d": 4.26,
+"t": "Lower the flag! Lower it! Lower... the flag."
+},
+"crowd.ready.6": {
+"f": "crowd/crowd.ready.6.mp3",
+"d": 2.32,
+"t": "Last bets! Last bets on the course!"
+},
+"crowd.ready.7": {
+"f": "crowd/crowd.ready.7.mp3",
+"d": 2.41,
+"t": "Shh! Shh!"
+},
+"crowd.ready.8": {
+"f": "crowd/crowd.ready.8.mp3",
+"d": 2.83,
+"t": "Lord, have mercy on the both of them."
+},
+"crowd.ready.9": {
+"f": "crowd/crowd.ready.9.mp3",
+"d": 2.06,
+"t": "I cannot look. Tell me when."
+},
+"crowd.away.0": {
+"f": "crowd/crowd.away.0.mp3",
+"d": 1.04,
+"t": "Go on!"
+},
+"crowd.away.1": {
+"f": "crowd/crowd.away.1.mp3",
+"d": 1.75,
+"t": "Ride! Ride!"
+},
+"crowd.away.2": {
+"f": "crowd/crowd.away.2.mp3",
+"d": 1.37,
+"t": "Go on, then!"
+},
+"crowd.away.3": {
+"f": "crowd/crowd.away.3.mp3",
+"d": 1.64,
+"t": "Now! Now!"
+},
+"crowd.away.4": {
+"f": "crowd/crowd.away.4.mp3",
+"d": 2.22,
+"t": "Go! Go! Go!"
+},
+"crowd.away.5": {
+"f": "crowd/crowd.away.5.mp3",
+"d": 3.59,
+"t": "Faster! Fast... faster!"
+},
+"crowd.away.6": {
+"f": "crowd/crowd.away.6.mp3",
+"d": 2.67,
+"t": "Point down, boy! Point down!"
+},
+"crowd.away.7": {
+"f": "crowd/crowd.away.7.mp3",
+"d": 2.11,
+"t": "Lower, man, lower!"
+},
+"crowd.break.0": {
+"f": "crowd/crowd.break.0.mp3",
+"d": 1.1,
+"t": "Broken!"
+},
+"crowd.break.1": {
+"f": "crowd/crowd.break.1.mp3",
+"d": 2.09,
+"t": "Did you see that? Did you see it?"
+},
+"crowd.break.2": {
+"f": "crowd/crowd.break.2.mp3",
+"d": 2.14,
+"t": "Oh, well struck!"
+},
+"crowd.break.3": {
+"f": "crowd/crowd.break.3.mp3",
+"d": 1.68,
+"t": "Splinters! Ha!"
+},
+"crowd.break.4": {
+"f": "crowd/crowd.break.4.mp3",
+"d": 2.28,
+"t": "That is how it is done!"
+},
+"crowd.break.5": {
+"f": "crowd/crowd.break.5.mp3",
+"d": 2.1,
+"t": "It broke! It broke!"
+},
+"crowd.break.6": {
+"f": "crowd/crowd.break.6.mp3",
+"d": 2.27,
+"t": "Again! Do it again!"
+},
+"crowd.break.7": {
+"f": "crowd/crowd.break.7.mp3",
+"d": 2.15,
+"t": "That is my money, that is!"
+},
+"crowd.break.8": {
+"f": "crowd/crowd.break.8.mp3",
+"d": 1.95,
+"t": "Bravely struck, sir!"
+},
+"crowd.break.9": {
+"f": "crowd/crowd.break.9.mp3",
+"d": 3.13,
+"t": "Mind the wood! There is wood coming!"
+},
+"crowd.break.10": {
+"f": "crowd/crowd.break.10.mp3",
+"d": 2.06,
+"t": "Another lance! Another!"
+},
+"crowd.break.11": {
+"f": "crowd/crowd.break.11.mp3",
+"d": 1.54,
+"t": "Smashed it!"
+},
+"crowd.helm.0": {
+"f": "crowd/crowd.helm.0.mp3",
+"d": 1.41,
+"t": "On the helm!"
+},
+"crowd.helm.1": {
+"f": "crowd/crowd.helm.1.mp3",
+"d": 2.16,
+"t": "Rang him like a bell!"
+},
+"crowd.helm.2": {
+"f": "crowd/crowd.helm.2.mp3",
+"d": 1.9,
+"t": "Right in the face! Ha!"
+},
+"crowd.helm.3": {
+"f": "crowd/crowd.helm.3.mp3",
+"d": 2.46,
+"t": "Oh, the poor man's head!"
+},
+"crowd.helm.4": {
+"f": "crowd/crowd.helm.4.mp3",
+"d": 1.92,
+"t": "Is he dead? Is he dead?"
+},
+"crowd.helm.5": {
+"f": "crowd/crowd.helm.5.mp3",
+"d": 3.01,
+"t": "Ding! Ding!"
+},
+"crowd.helm.6": {
+"f": "crowd/crowd.helm.6.mp3",
+"d": 2.66,
+"t": "The sight! Right in the sight!"
+},
+"crowd.helm.7": {
+"f": "crowd/crowd.helm.7.mp3",
+"d": 3.56,
+"t": "Oh! Oh, I cannot bear it!"
+},
+"crowd.glance.0": {
+"f": "crowd/crowd.glance.0.mp3",
+"d": 2.0,
+"t": "Ohhh!"
+},
+"crowd.glance.1": {
+"f": "crowd/crowd.glance.1.mp3",
+"d": 2.46,
+"t": "So close!"
+},
+"crowd.glance.2": {
+"f": "crowd/crowd.glance.2.mp3",
+"d": 3.4,
+"t": "Square, man! Hit it square!"
+},
+"crowd.glance.3": {
+"f": "crowd/crowd.glance.3.mp3",
+"d": 2.3,
+"t": "Skidded off!"
+},
+"crowd.glance.4": {
+"f": "crowd/crowd.glance.4.mp3",
+"d": 4.23,
+"t": "Too gentle! You're not courting her!"
+},
+"crowd.glance.5": {
+"f": "crowd/crowd.glance.5.mp3",
+"d": 2.96,
+"t": "That counts? Does that count?"
+},
+"crowd.attaint.0": {
+"f": "crowd/crowd.attaint.0.mp3",
+"d": 2.02,
+"t": "A touch! Only a touch!"
+},
+"crowd.attaint.1": {
+"f": "crowd/crowd.attaint.1.mp3",
+"d": 3.09,
+"t": "Should have broken. That should have broken."
+},
+"crowd.attaint.2": {
+"f": "crowd/crowd.attaint.2.mp3",
+"d": 1.99,
+"t": "Break it! Break it next time!"
+},
+"crowd.attaint.3": {
+"f": "crowd/crowd.attaint.3.mp3",
+"d": 3.2,
+"t": "One point. One miserable point."
+},
+"crowd.miss.0": {
+"f": "crowd/crowd.miss.0.mp3",
+"d": 2.52,
+"t": "Missed! Missed by a mile!"
+},
+"crowd.miss.1": {
+"f": "crowd/crowd.miss.1.mp3",
+"d": 2.18,
+"t": "My grandmother rides straighter!"
+},
+"crowd.miss.2": {
+"f": "crowd/crowd.miss.2.mp3",
+"d": 2.07,
+"t": "Open your eyes, sir!"
+},
+"crowd.miss.3": {
+"f": "crowd/crowd.miss.3.mp3",
+"d": 2.12,
+"t": "Where's the other one gone?"
+},
+"crowd.miss.4": {
+"f": "crowd/crowd.miss.4.mp3",
+"d": 2.26,
+"t": "Boo!"
+},
+"crowd.miss.5": {
+"f": "crowd/crowd.miss.5.mp3",
+"d": 1.89,
+"t": "Hit something! Anything!"
+},
+"crowd.miss.6": {
+"f": "crowd/crowd.miss.6.mp3",
+"d": 1.78,
+"t": "I paid good money for that!"
+},
+"crowd.miss.7": {
+"f": "crowd/crowd.miss.7.mp3",
+"d": 3.78,
+"t": "Lowered too soon. Always too soon."
+},
+"crowd.miss.8": {
+"f": "crowd/crowd.miss.8.mp3",
+"d": 1.33,
+"t": "He missed!"
+},
+"crowd.miss.9": {
+"f": "crowd/crowd.miss.9.mp3",
+"d": 1.86,
+"t": "Oh, for shame."
+},
+"crowd.bothMiss.0": {
+"f": "crowd/crowd.bothMiss.0.mp3",
+"d": 1.44,
+"t": "Are they courting?"
+},
+"crowd.bothMiss.1": {
+"f": "crowd/crowd.bothMiss.1.mp3",
+"d": 1.65,
+"t": "Kiss him next time!"
+},
+"crowd.bothMiss.2": {
+"f": "crowd/crowd.bothMiss.2.mp3",
+"d": 3.61,
+"t": "They're friends! Look! They're friends!"
+},
+"crowd.bothMiss.3": {
+"f": "crowd/crowd.bothMiss.3.mp3",
+"d": 2.34,
+"t": "I could do better with a broom!"
+},
+"crowd.bothMiss.4": {
+"f": "crowd/crowd.bothMiss.4.mp3",
+"d": 1.41,
+"t": "Whistle them off!"
+},
+"crowd.bothMiss.5": {
+"f": "crowd/crowd.bothMiss.5.mp3",
+"d": 2.85,
+"t": "Nobody wins that! Nobody!"
+},
+"crowd.near.0": {
+"f": "crowd/crowd.near.0.mp3",
+"d": 2.42,
+"t": "Oh! Oh, that was close!"
+},
+"crowd.near.1": {
+"f": "crowd/crowd.near.1.mp3",
+"d": 1.75,
+"t": "By his ear!"
+},
+"crowd.near.2": {
+"f": "crowd/crowd.near.2.mp3",
+"d": 2.2,
+"t": "Saints preserve him!"
+},
+"crowd.near.3": {
+"f": "crowd/crowd.near.3.mp3",
+"d": 2.46,
+"t": "An inch! An inch!"
+},
+"crowd.tilt.0": {
+"f": "crowd/crowd.tilt.0.mp3",
+"d": 1.56,
+"t": "Mind the barrier!"
+},
+"crowd.tilt.1": {
+"f": "crowd/crowd.tilt.1.mp3",
+"d": 1.86,
+"t": "He's hit the fence! Ha!"
+},
+"crowd.tilt.2": {
+"f": "crowd/crowd.tilt.2.mp3",
+"d": 2.8,
+"t": "Into the tilt. Disgraceful."
+},
+"crowd.tilt.3": {
+"f": "crowd/crowd.tilt.3.mp3",
+"d": 2.09,
+"t": "Somebody's paying for that!"
+},
+"crowd.foul.0": {
+"f": "crowd/crowd.foul.0.mp3",
+"d": 2.01,
+"t": "Foul! Foul!"
+},
+"crowd.foul.1": {
+"f": "crowd/crowd.foul.1.mp3",
+"d": 2.62,
+"t": "The horse! The poor horse!"
+},
+"crowd.foul.2": {
+"f": "crowd/crowd.foul.2.mp3",
+"d": 2.28,
+"t": "Shame! For shame!"
+},
+"crowd.foul.3": {
+"f": "crowd/crowd.foul.3.mp3",
+"d": 1.71,
+"t": "Off! Get him off!"
+},
+"crowd.foul.4": {
+"f": "crowd/crowd.foul.4.mp3",
+"d": 1.72,
+"t": "He hurt the horse!"
+},
+"crowd.foul.5": {
+"f": "crowd/crowd.foul.5.mp3",
+"d": 1.56,
+"t": "God forgive him."
+},
+"crowd.foul.6": {
+"f": "crowd/crowd.foul.6.mp3",
+"d": 1.72,
+"t": "Shame on you, sir!"
+},
+"crowd.unhorse.0": {
+"f": "crowd/crowd.unhorse.0.mp3",
+"d": 2.11,
+"t": "He's down! He's down!"
+},
+"crowd.unhorse.1": {
+"f": "crowd/crowd.unhorse.1.mp3",
+"d": 1.54,
+"t": "Oh, Jesu!"
+},
+"crowd.unhorse.2": {
+"f": "crowd/crowd.unhorse.2.mp3",
+"d": 1.18,
+"t": "Off he goes!"
+},
+"crowd.unhorse.3": {
+"f": "crowd/crowd.unhorse.3.mp3",
+"d": 2.03,
+"t": "Like a sack of turnips!"
+},
+"crowd.unhorse.4": {
+"f": "crowd/crowd.unhorse.4.mp3",
+"d": 2.22,
+"t": "He fell off! He fell off!"
+},
+"crowd.unhorse.5": {
+"f": "crowd/crowd.unhorse.5.mp3",
+"d": 2.55,
+"t": "Get up! Get up and fight him!"
+},
+"crowd.unhorse.6": {
+"f": "crowd/crowd.unhorse.6.mp3",
+"d": 1.59,
+"t": "Pay me! Pay me!"
+},
+"crowd.unhorse.7": {
+"f": "crowd/crowd.unhorse.7.mp3",
+"d": 2.21,
+"t": "Is he hurt? Somebody look!"
+},
+"crowd.unhorse.8": {
+"f": "crowd/crowd.unhorse.8.mp3",
+"d": 2.12,
+"t": "Lord have mercy."
+},
+"crowd.unhorse.9": {
+"f": "crowd/crowd.unhorse.9.mp3",
+"d": 3.19,
+"t": "Over the cantle. Seen it a hundred times."
+},
+"crowd.unhorse.10": {
+"f": "crowd/crowd.unhorse.10.mp3",
+"d": 2.25,
+"t": "Ho! Ho! A man down!"
+},
+"crowd.unhorse.11": {
+"f": "crowd/crowd.unhorse.11.mp3",
+"d": 2.19,
+"t": "Unhorsed, by God!"
+},
+"crowd.win.0": {
+"f": "crowd/crowd.win.0.mp3",
+"d": 3.06,
+"t": "Huzzah! Huzzah!"
+},
+"crowd.win.1": {
+"f": "crowd/crowd.win.1.mp3",
+"d": 2.19,
+"t": "God bless him!"
+},
+"crowd.win.2": {
+"f": "crowd/crowd.win.2.mp3",
+"d": 2.12,
+"t": "Champion! Champion!"
+},
+"crowd.win.3": {
+"f": "crowd/crowd.win.3.mp3",
+"d": 2.06,
+"t": "He won! He won!"
+},
+"crowd.win.4": {
+"f": "crowd/crowd.win.4.mp3",
+"d": 3.57,
+"t": "Well ridden, sir. Well ridden."
+},
+"crowd.win.5": {
+"f": "crowd/crowd.win.5.mp3",
+"d": 2.95,
+"t": "Drink! Everybody drink!"
+},
+"crowd.win.6": {
+"f": "crowd/crowd.win.6.mp3",
+"d": 2.74,
+"t": "Pay up! Pay up, the lot of you!"
+},
+"crowd.win.7": {
+"f": "crowd/crowd.win.7.mp3",
+"d": 2.94,
+"t": "Bravo! Oh, bravo!"
+},
+"crowd.win.8": {
+"f": "crowd/crowd.win.8.mp3",
+"d": 3.44,
+"t": "Largesse! Largesse!"
+},
+"crowd.win.9": {
+"f": "crowd/crowd.win.9.mp3",
+"d": 3.55,
+"t": "Largesse, my lord! Largesse!"
+},
+"crowd.loss.0": {
+"f": "crowd/crowd.loss.0.mp3",
+"d": 1.41,
+"t": "Bad luck, sir!"
+},
+"crowd.loss.1": {
+"f": "crowd/crowd.loss.1.mp3",
+"d": 2.44,
+"t": "There, there. Next time."
+},
+"crowd.loss.2": {
+"f": "crowd/crowd.loss.2.mp3",
+"d": 1.59,
+"t": "He rode well enough."
+},
+"crowd.loss.3": {
+"f": "crowd/crowd.loss.3.mp3",
+"d": 1.38,
+"t": "There goes the rent."
+},
+"crowd.loss.4": {
+"f": "crowd/crowd.loss.4.mp3",
+"d": 1.85,
+"t": "Rubbish! Rubbish!"
+},
+"crowd.loss.5": {
+"f": "crowd/crowd.loss.5.mp3",
+"d": 3.62,
+"t": "I knew it. I knew it all along."
+},
+"crowd.gallery.0": {
+"f": "crowd/crowd.gallery.0.mp3",
+"d": 2.12,
+"t": "Oh, well struck, sir!"
+},
+"crowd.gallery.1": {
+"f": "crowd/crowd.gallery.1.mp3",
+"d": 2.56,
+"t": "Sir knight! Sir knight, here!"
+},
+"crowd.gallery.2": {
+"f": "crowd/crowd.gallery.2.mp3",
+"d": 1.41,
+"t": "Look this way, sir!"
+},
+"crowd.gallery.3": {
+"f": "crowd/crowd.gallery.3.mp3",
+"d": 2.5,
+"t": "My lady says you ride very well!"
+},
+"crowd.gallery.4": {
+"f": "crowd/crowd.gallery.4.mp3",
+"d": 2.23,
+"t": "I'll have him! I'll have that one!"
+},
+"crowd.gallery.5": {
+"f": "crowd/crowd.gallery.5.mp3",
+"d": 2.8,
+"t": "Leave him alone, he's spoken for!"
+},
+"crowd.gallery.6": {
+"f": "crowd/crowd.gallery.6.mp3",
+"d": 1.9,
+"t": "For you, sir! Catch!"
+},
+"crowd.gallery.7": {
+"f": "crowd/crowd.gallery.7.mp3",
+"d": 2.52,
+"t": "Marry me! Marry me after!"
+},
+"crowd.idle.0": {
+"f": "crowd/crowd.idle.0.mp3",
+"d": 2.99,
+"t": "Three to one the stranger! Who'll take three to one?"
+},
+"crowd.idle.1": {
+"f": "crowd/crowd.idle.1.mp3",
+"d": 2.24,
+"t": "Evens, evens on the next course!"
+},
+"crowd.idle.2": {
+"f": "crowd/crowd.idle.2.mp3",
+"d": 2.16,
+"t": "A penny says he falls. A penny!"
+},
+"crowd.idle.3": {
+"f": "crowd/crowd.idle.3.mp3",
+"d": 2.49,
+"t": "Who had money on the blue? Hard luck."
+},
+"crowd.idle.4": {
+"f": "crowd/crowd.idle.4.mp3",
+"d": 2.15,
+"t": "Oi! Herald! What's the score?"
+},
+"crowd.idle.5": {
+"f": "crowd/crowd.idle.5.mp3",
+"d": 3.09,
+"t": "Get on with it! We're dying of age up here!"
+},
+"crowd.idle.6": {
+"f": "crowd/crowd.idle.6.mp3",
+"d": 2.37,
+"t": "In my day they had proper lances."
+},
+"crowd.idle.7": {
+"f": "crowd/crowd.idle.7.mp3",
+"d": 2.31,
+"t": "Take your elbow out of my pie."
+},
+"crowd.idle.8": {
+"f": "crowd/crowd.idle.8.mp3",
+"d": 3.34,
+"t": "I could do that. I could. Give me a horse."
+},
+"crowd.idle.9": {
+"f": "crowd/crowd.idle.9.mp3",
+"d": 4.78,
+"t": "Who took my ale? Somebody took my... oh. There it is."
+},
+"crowd.idle.10": {
+"f": "crowd/crowd.idle.10.mp3",
+"d": 3.28,
+"t": "Sing! Somebody sing!"
+},
+"crowd.idle.12": {
+"f": "crowd/crowd.idle.12.mp3",
+"d": 1.53,
+"t": "When do they fall off again?"
+},
+"crowd.idle.13": {
+"f": "crowd/crowd.idle.13.mp3",
+"d": 1.94,
+"t": "Can I be a knight? Can I?"
+},
+"crowd.idle.14": {
+"f": "crowd/crowd.idle.14.mp3",
+"d": 4.26,
+"t": "That one's married. That one's married. That one should be."
+},
+"crowd.idle.15": {
+"f": "crowd/crowd.idle.15.mp3",
+"d": 2.85,
+"t": "Look at the Queen's sleeves. Look at them."
+},
+"crowd.idle.16": {
+"f": "crowd/crowd.idle.16.mp3",
+"d": 4.88,
+"t": "My Tom rode at Smithfield. Fell off twice. Still talks about it."
+},
+"crowd.idle.17": {
+"f": "crowd/crowd.idle.17.mp3",
+"d": 1.39,
+"t": "Sit down at the front!"
+},
+"crowd.idle.18": {
+"f": "crowd/crowd.idle.18.mp3",
+"d": 2.09,
+"t": "Who's got the pies? Over here!"
+},
+"crowd.idle.19": {
+"f": "crowd/crowd.idle.19.mp3",
+"d": 1.3,
+"t": "Oi! Pie man!"
+},
+"crowd.idle.20": {
+"f": "crowd/crowd.idle.20.mp3",
+"d": 3.95,
+"t": "Brothers, a little more charity, and a little less ale."
+},
+"crowd.idle.21": {
+"f": "crowd/crowd.idle.21.mp3",
+"d": 3.61,
+"t": "They say the Duke paid for his horse with his wife's jewels."
+},
+"crowd.idle.22": {
+"f": "crowd/crowd.idle.22.mp3",
+"d": 2.8,
+"t": "I hear his squire owes everybody money."
+},
+"crowd.idle.23": {
+"f": "crowd/crowd.idle.23.mp3",
+"d": 3.47,
+"t": "Lances made of fir. Fir! Christmas wood."
+},
+"crowd.idle.26": {
+"f": "crowd/crowd.idle.26.mp3",
+"d": 2.58,
+"t": "Whose dog is this? Get it off the sand!"
+},
+"crowd.idle.27": {
+"f": "crowd/crowd.idle.27.mp3",
+"d": 1.87,
+"t": "Doggy! Here, doggy!"
+},
+"crowd.largesse.0": {
+"f": "crowd/crowd.largesse.0.mp3",
+"d": 2.29,
+"t": "Largesse! Largesse!"
+},
+"crowd.largesse.1": {
+"f": "crowd/crowd.largesse.1.mp3",
+"d": 1.52,
+"t": "Throw it here, my lord!"
+},
+"crowd.largesse.2": {
+"f": "crowd/crowd.largesse.2.mp3",
+"d": 2.68,
+"t": "A penny for the herald, and one for me!"
+},
+"crowd.cry.England.0": {
+"f": "crowd/crowd.cry.England.0.mp3",
+"d": 2.53,
+"t": "Saint George!"
+},
+"crowd.cry.England.1": {
+"f": "crowd/crowd.cry.England.1.mp3",
+"d": 2.71,
+"t": "Saint George! Saint George!"
+},
+"crowd.cry.England.2": {
+"f": "crowd/crowd.cry.England.2.mp3",
+"d": 3.3,
+"t": "For England and Saint George!"
+},
+"crowd.cry.France.0": {
+"f": "crowd/crowd.cry.France.0.mp3",
+"d": 2.89,
+"t": "Montjoie! Saint-Denis!"
+},
+"crowd.cry.France.1": {
+"f": "crowd/crowd.cry.France.1.mp3",
+"d": 2.66,
+"t": "Montjoie Saint-Denis!"
+},
+"crowd.cry.France.2": {
+"f": "crowd/crowd.cry.France.2.mp3",
+"d": 2.39,
+"t": "Montjoie!"
+},
+"crowd.cry.Burgundy.0": {
+"f": "crowd/crowd.cry.Burgundy.0.mp3",
+"d": 3.03,
+"t": "Montjoie Saint-Andrieu!"
+},
+"crowd.cry.Burgundy.1": {
+"f": "crowd/crowd.cry.Burgundy.1.mp3",
+"d": 3.5,
+"t": "Notre-Dame! Bourgogne!"
+},
+"crowd.cry.Burgundy.2": {
+"f": "crowd/crowd.cry.Burgundy.2.mp3",
+"d": 2.26,
+"t": "Bourgogne!"
+},
+"crowd.cry.Len.0": {
+"f": "crowd/crowd.cry.Len.0.mp3",
+"d": 2.27,
+"t": "Santiago!"
+},
+"crowd.cry.Len.1": {
+"f": "crowd/crowd.cry.Len.1.mp3",
+"d": 3.39,
+"t": "Santiago! Santiago!"
+},
+"crowd.cry.Len.2": {
+"f": "crowd/crowd.cry.Len.2.mp3",
+"d": 2.78,
+"t": "Santiago, y cierra, España!"
+},
+"crowd.cry.Empire.0": {
+"f": "crowd/crowd.cry.Empire.0.mp3",
+"d": 2.51,
+"t": "For the Emperor!"
+},
+"crowd.cry.Empire.1": {
+"f": "crowd/crowd.cry.Empire.1.mp3",
+"d": 2.82,
+"t": "Hoch! Hoch! Hoch!"
+},
+"crowd.cry.Empire.2": {
+"f": "crowd/crowd.cry.Empire.2.mp3",
+"d": 2.25,
+"t": "Austria! Austria!"
+},
+"crowd.cry.Styria.0": {
+"f": "crowd/crowd.cry.Styria.0.mp3",
+"d": 2.29,
+"t": "Styria! Styria!"
+},
+"crowd.cry.Styria.1": {
+"f": "crowd/crowd.cry.Styria.1.mp3",
+"d": 2.55,
+"t": "Hoch! Hoch!"
+},
+"crowd.cry.any.0": {
+"f": "crowd/crowd.cry.any.0.mp3",
+"d": 1.32,
+"t": "God and the right!"
+},
+"crowd.cry.any.1": {
+"f": "crowd/crowd.cry.any.1.mp3",
+"d": 2.55,
+"t": "God speed him!"
+},
+"crowd.honour.0": {
+"f": "crowd/crowd.honour.0.mp3",
+"d": 2.11,
+"t": "To the honour of the ladies!"
+},
+"crowd.honour.1": {
+"f": "crowd/crowd.honour.1.mp3",
+"d": 3.28,
+"t": "For the ladies! For the ladies!"
+},
+"crowd.honour.2": {
+"f": "crowd/crowd.honour.2.mp3",
+"d": 1.87,
+"t": "Honour! Honour!"
+}
+},
+"beds": {
+"bed_murmur": {
+"f": "beds/bed_murmur.mp3",
+"d": 20.0,
+"cat": "crowd_murmur",
+"loop": true
+},
+"bed_roar": {
+"f": "beds/bed_roar.mp3",
+"d": 9.0,
+"cat": "cheer_group",
+"loop": false
+},
+"bed_gasp": {
+"f": "beds/bed_gasp.mp3",
+"d": 5.0,
+"cat": "crowd_gasp",
+"loop": false
+},
+"bed_groan": {
+"f": "beds/bed_groan.mp3",
+"d": 6.0,
+"cat": "crowd_groan",
+"loop": false
+},
+"bed_applause": {
+"f": "beds/bed_applause.mp3",
+"d": 9.0,
+"cat": "crowd_applause",
+"loop": false
+},
+"bed_chant_stgeorge": {
+"f": "beds/bed_chant_stgeorge.mp3",
+"d": 10.0,
+"cat": "crowd_chant_bed",
+"loop": false
+},
+"bed_charge": {
+"f": "beds/bed_charge.mp3",
+"d": 10.0,
+"cat": "crowd_charge",
+"loop": false
+},
+"bed_boo": {
+"f": "beds/bed_boo.mp3",
+"d": 6.0,
+"cat": "crowd_boo",
+"loop": false
+}
+},
+"pell_text": "period",
+"pell_voice": "George",
+"squire_voice": "Callum"
+}

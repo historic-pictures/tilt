@@ -92,13 +92,13 @@ export function createCrowdVoices(camera, host) {
     return f(e[1]) ?? (e[2] ? f(e[2]) : null);
   }
   /** A voice of type `type` speaks `text` from the stands (side: +1 / -1 / 0 any). */
-  function voice(type, text, side = 0, style = '', delay = 0, gain = gainNow()) {
+  function voice(type, text, side = 0, style = '', delay = 0, gain = gainNow(), alt = null) {
     const chantNow = CV._chant;      // (captured now: a delayed shout is still part of the chant that asked for it)
-    if (!chantNow) return;      // only chants / war cries get a label
+    if (!chantNow && !host.play) return;      // only chants / war cries get a label (every shout is also played as a recorded clip when there is one)
     const T = CROWD_VOICES[type] || CROWD_VOICES.man, sp = host.spot(T.cls, type === 'dog' ? -1 : T.kind, side, host.focusZ());
     if (!sp) return;
     const pos = new THREE.Vector3(sp.x, sp.y + (type === 'dog' ? -1.0 : 0), sp.z);
-    const go = () => { label(text, T.tag, pos, style, gain); if (host.play) host.play(`crowd.${type}`, pos, gain); };
+    const go = () => { if (chantNow) label(text, T.tag, pos, style, gain); if (host.play) host.play(text, alt, pos, gain); };      // alt: the name-free words of a templated shout (that is what is recorded)
     if (delay > 0) CV.queue.push({ at: CV.t + delay, go }); else go();
   }
   CV.voice = voice;
@@ -112,7 +112,7 @@ export function createCrowdVoices(camera, host) {
     for (let k = 0; k < n; k++) {
       const e = pickShout(pool); if (!e) break;
       const text = fillShout(e, by || 1); if (!text) continue;
-      voice(e[0], text, 0, e[0] === 'lady' ? 'lady' : '', k === 0 ? rnd(0.05, 0.25) : rnd(0.3, 1.3));
+      voice(e[0], text, 0, e[0] === 'lady' ? 'lady' : '', k === 0 ? rnd(0.05, 0.25) : rnd(0.3, 1.3), undefined, e[2]);
     }
     if ((kind === 'break' || kind === 'helm') && by > 0 && Math.random() < 0.45) { const g = pickShout('gallery'); if (g) voice(g[0], fillShout(g, 1) || g[1], 0, 'lady', rnd(1.0, 1.8)); }
     if ((kind === 'break' || kind === 'helm' || kind === 'unhorse') && by !== 0 && Math.random() < 0.5) CV.chant(by, 1, rnd(1.6, 2.6));
@@ -125,7 +125,7 @@ export function createCrowdVoices(camera, host) {
   };
   function chantInner(side, n, delay) {
     const P = side < 0 ? CHANT.him : CHANT.you;
-    for (let k = 0; k < n; k++) { const e = pickA(P), text = fillShout(e, side); if (text) voice(e[0], text, 0, '', delay + k * rnd(0.3, 0.7)); }
+    for (let k = 0; k < n; k++) { const e = pickA(P), text = fillShout(e, side); if (text) voice(e[0], text, 0, '', delay + k * rnd(0.3, 0.7), undefined, e[2]); }
     if (Math.random() < 0.25) { const e = pickA(CHANT.honour); voice(e[0], e[1], 0, 'lady', delay + 0.8); }
   };
   /** A man of the lists calls (the marshal's "Ho!", the judges): text at a world position. */
@@ -151,7 +151,7 @@ export function createCrowdVoices(camera, host) {
     if (r < 0.15) { const fav = host.vars().favour; CV.chant(fav >= 0 ? 1 : -1, 1); return; }
     if (r < 0.28) { const k = pickA(['ale', 'nuts', 'wafers']), sp = host.spot([0, 1], 1, 0, host.focusZ()); if (sp && TEXT.vendors) label(pickA(VENDOR[k]), { ale: 'AN ALE-WIFE', nuts: 'A NUT-SELLER', wafers: 'A WAFERER' }[k], new THREE.Vector3(sp.x, sp.y, sp.z), 'vendor', 0.5); return; }
     const e = pickShout(P === 'ready' && Math.random() < 0.45 ? 'ready' : P === 'intro' && Math.random() < 0.5 ? 'start' : 'idle'); if (!e) return;
-    const text = fillShout(e, 1); if (text) voice(e[0], text, 0, e[0] === 'lady' ? 'lady' : '');
+    const text = fillShout(e, 1); if (text) voice(e[0], text, 0, e[0] === 'lady' ? 'lady' : '', 0, undefined, e[2]);
   }
 
   CV.update = function update(dt) {

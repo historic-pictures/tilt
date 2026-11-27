@@ -40,6 +40,7 @@ const STEMS = {
   air:    { db: 0, cap: 8 },
   music:  { db: 0, cap: 3 },
   ui:     { db: -14, cap: 4 },
+  voice:  { db: 2, cap: 6 },      // recorded voice clips (src/voice_clips.js): the booth, the squire, the stands' shouts
 };
 const MASTER_DB = -9;
 /** The menu joust's whole effects bus (crowd bed, hooves, cheers, lance impacts) sits this far under a match's level, so the menu music stays on top. */
@@ -242,8 +243,49 @@ export class GameAudio {
       this.revIn.connect(conv); conv.connect(revLP); revLP.connect(revOut); revOut.connect(this.sfxBus);
       this._ready = true;
       this.music._attach();
-      this.loaded = this._load().then(() => { this._startBeds(); return true; }).catch(() => false);
+      this.loaded = this._load().then(() => { this._startBeds(); this._loadVoiceBeds(); return true; }).catch(() => false);
     } catch (e) { this.ctx = null; this._ready = false; }
+  }
+
+
+  /** Recorded crowd beds (assets/audio/voice/manifest.json "beds", made with ElevenLabs Sound Effects, tools/voice/gen_voices.py): joined to the sample categories above
+   *  (crowd_gasp, crowd_groan, cheer_group, crowd_applause, crowd_chant_bed, crowd_charge, crowd_murmur). Optional: no manifest, no beds, everything else is unchanged. */
+  async _loadVoiceBeds() {
+    try {
+      const r = await fetch('assets/audio/voice/manifest.json'); if (!r.ok) return;
+      const man = await r.json(), beds = man.beds || {};
+      await Promise.all(Object.keys(beds).map(async (id) => {
+        const b = beds[id]; if (!b.cat) return;
+        try {
+          const buf = await this.ctx.decodeAudioData(await (await fetch('assets/audio/voice/' + b.f)).arrayBuffer());
+          const e = this.cat[b.cat] || (this.cat[b.cat] = { buffers: [], db: 0, vr: [-2, 0], pr: [-60, 60], att: null, loop: false, seq: 0 });
+          e.buffers.push({ buf, db: b.db || 0, s: buf.duration }); e.buffers.sort((x, y) => x.s - y.s);
+        } catch (err) { /* a bed that will not decode is skipped */ }
+      }));
+      const m = this.cat.crowd_murmur, bed = this.beds.crowd;      // the recorded idle murmur joins the looping crowd bed as a fourth layer
+      if (m && m.buffers.length && bed) { const src = this.ctx.createBufferSource(); src.buffer = m.buffers[0].buf; src.loop = true; src.playbackRate.value = this.r; src._k = 1; const fg = this.ctx.createGain(); fg.gain.value = lin(-7 + m.buffers[0].db); src.connect(fg); fg.connect(bed.g); src.start(0, rand(0, 4)); bed.srcs.push(src); }
+    } catch (e) { /* no voice beds */ }
+  }
+  /** Play a decoded voice clip on the voice stem. o: { db, pan -1..1, dist (m: dulls it), onend }. Returns { stop(), dur } or null. */
+  playVoice(buf, o = {}) {
+    if (!this.ctx || !buf || this.muted) return null;
+    const ctx = this.ctx, dist = Math.max(0, o.dist || 0), list = this.voices.voice;
+    if (list.length >= STEMS.voice.cap) { const old = list.shift(); try { old.src.stop(); } catch (e) { /* done */ } }
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = lpfHz(dist > 0 ? Math.min(40, dist * 0.9) : 0);
+    const g = ctx.createGain(); g.gain.value = lin((o.db || 0) - (dist > 0 ? Math.min(14, dist * 0.35) : 0));
+    src.connect(lp); lp.connect(g); let out = g;
+    if (ctx.createStereoPanner && o.pan) { const p = ctx.createStereoPanner(); p.pan.value = clamp(o.pan, -0.9, 0.9); g.connect(p); out = p; }
+    out.connect(this.stem.voice);
+    const v = { src, g, dist }; list.push(v);
+    src.onended = () => { const k = list.indexOf(v); if (k >= 0) list.splice(k, 1); try { src.disconnect(); } catch (e) { /* gone */ } if (o.onend) o.onend(); };
+    src.start();
+    return { dur: buf.duration, stop: () => { try { g.gain.setTargetAtTime(0, ctx.currentTime, 0.03); src.stop(ctx.currentTime + 0.12); } catch (e) { /* already stopped */ } } };
+  }
+  /** Keep the crowd (and the venue air) a little under a commentary line: db < 0 ducks, 0 releases. */
+  duckUnderVoice(db) {
+    if (!this.ctx) return;
+    this._run(() => { const t = this.ctx.currentTime; for (const k of ['crowd', 'air']) if (this.stem[k]) this.stem[k].gain.setTargetAtTime(lin(STEMS[k].db + db), t, db < 0 ? 0.08 : 0.5); });
   }
 
   _impulse(sec) {
@@ -516,11 +558,17 @@ export class GameAudio {
       else if (kind === 'applause') {
         for (let i = 0; i < Math.round(50 + 110 * s); i++) { const u = Math.random(); this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 26), pan: rand(-1, 1), db: 1 + rand(-4, 0) - 14 * Math.pow(Math.abs(u - 0.35) / 0.65, 1.5), rate: RT(), delay: lead + u * 4.5 }); }      // swells in over ~1.5 s, fades by ~4.5 s
         many('cheer_single', Math.round(3 * s), 2, -8);
+        if (has('crowd_applause')) this._play('crowd_applause', { stem: 'crowd', att: CROWD_ATT, dist: rand(11, 15), pan: rand(-0.5, 0.5), db: -6 + 3 * s, rate: rand(0.97, 1.03), delay: lead + 0.4, env: [0.5, 2.4] });      // recorded applause bed
+      }
+      else if (kind === 'charge') {      // the knights charge: a rising cheer (recorded), else the single cheers
+        if (has('crowd_charge')) this._play('crowd_charge', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 16), pan: rand(-0.4, 0.4), db: -6 + 3 * s, delay: lead });
+        else many('cheer_single', Math.round(3 * s), 1.5, -12);
       }
       else if (kind === 'chant') {
         for (let bar = 0; bar < 4; bar++) for (const [beat, rate, db] of [[0, 0.62, 5], [0.36, 0.62, 5], [0.72, 1, 7]])
           for (let k = 0; k < 7; k++) this._play('clap', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 26), pan: rand(-1, 1), db: db + rand(-4, 0), rate: rate * rand(0.94, 1.06), delay: lead + bar * 1.25 + beat + rand(0, 0.035) });
         many('cheer_single', Math.round(4 * s), 4.5, -7);
+        if (has('crowd_chant_bed')) this._play('crowd_chant_bed', { stem: 'crowd', att: CROWD_ATT, dist: rand(12, 18), pan: rand(-0.6, 0.6), db: -7 + 3 * s, delay: lead + 0.3 });      // recorded "Saint George!" chant
       }
     });
   }

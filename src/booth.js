@@ -26,7 +26,7 @@ const isTurn = (e) => typeof e[0] === 'string';
 
 /**
  * host = { phase(), mainBusy(), mainQuiet() (s until the main channel's next scheduled line), mainIdle() (s since it last showed a line ended),
- *          enabled(), vars() (placeholder values), speak(text, key, onEnd) -> bool, stopSpeak(), show(label, text, who), hide(), dev }
+ *          enabled(), vars() (placeholder values), clip(id, spk) -> { t, d } | null (a recorded clip is ready), speak(text, key, onEnd, clipId) -> false | true (robot voice) | 'clip', stopSpeak(), show(label, text, who), hide(), dev }
  */
 export function createBooth(host) {
   const B = { t: 0, lastEx: -99, cur: null, q: [], lastEnd: -99, gap: 0, course: 0, turns: 0, fillerAt: -99, agenda: [], log: [], lastKey: null, quietSince: 0 };
@@ -46,7 +46,7 @@ export function createBooth(host) {
     for (const i of cand) {
       const e = pool[i];
       if (!SW.drewe && (isTurn(e) ? [e] : e).some(([spk, text, nf]) => spk === 'C' || /Walter|Drewe/.test(text + (nf || '')))) { u.push(i); continue; }      // Sir Walter is off (src/channels.js BOOTH): no exchange with him, no Pell line that speaks to him
-      const turns = (isTurn(e) ? [e] : e).map(([spk, text, nf]) => ({ spk, text: fill(text, vars) ?? (nf ? fill(nf, vars) : null) }));
+      const ex = !isTurn(e), turns = (ex ? e : [e]).map(([spk, text, nf], k) => ({ spk, text: fill(text, vars) ?? (nf ? fill(nf, vars) : null), id: `booth.${path}.${i}${ex ? '.t' + k : ''}` }));      // id: the recorded clip for this turn (src/voice_clips.js)
       const total = turns.reduce((a, x) => a + (x.text ? sayTime(x.text) + 0.3 : 99), 0);
       if (turns.every(x => x.text) && sayTime(turns[0].text) <= fit && total <= fit + 1.5) { u.push(i); return turns; }      // fit: a line (or an exchange) that can be said in the quiet there is
     }
@@ -101,12 +101,14 @@ export function createBooth(host) {
   function startTurn(L) {
     const tr = L.turns[L.i], P = host.phase();
     const cast = BOOTH_CAST[tr.spk] || BOOTH_CAST.P;
+    const clip = host.clip ? host.clip(tr.id, tr.spk) : null;      // a recorded clip for this turn: its own words are the subtitle (a templated turn is recorded name-free), its length the time
+    if (clip) tr.text = clip.t;
     L.shownAt = B.t; L.endAt = B.t + turnTime(tr.text, L.fast); L.spoken = false;
     host.show(cast.label, tr.text, tr.spk);
     const me = L;
-    L.spoken = host.speak(tr.text, cast.id, () => { if (B.cur === me && me.spoken) me.endAt = Math.min(me.endAt, B.t + 0.15); });
-    if (L.spoken) L.endAt = Math.max(L.endAt, B.t + 0.8) + 0.6;      // a robot voice slower than the subtitle extends it (onEnd brings it back)
-    L.logRow = { t: +B.t.toFixed(2), phase: P, course: B.course, who: cast.label, spk: tr.spk, key: L.key, text: tr.text, spoken: L.spoken }; B.log.push(L.logRow);
+    L.spoken = host.speak(tr.text, cast.id, () => { if (B.cur === me && me.spoken) me.endAt = Math.min(me.endAt, B.t + 0.15); }, clip ? tr.id : null);
+    if (L.spoken) L.endAt = clip && L.spoken === 'clip' ? B.t + clip.d + 0.4 : Math.max(L.endAt, B.t + 0.8) + 0.6;      // a robot voice slower than the subtitle extends it (onEnd brings it back); a clip runs its own length
+    L.logRow = { t: +B.t.toFixed(2), phase: P, course: B.course, who: cast.label, spk: tr.spk, key: L.key, id: tr.id, text: tr.text, spoken: L.spoken, via: L.spoken === 'clip' ? 'clip' : L.spoken ? 'tts' : 'none' }; B.log.push(L.logRow);
     if (B.log.length > 2000) B.log.shift();
     if (!L.ex && !/^(away|charge)/.test(L.key)) B.turns++;
     B.lastKey = L.key;

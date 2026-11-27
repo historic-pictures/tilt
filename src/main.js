@@ -27,6 +27,7 @@ import { GFX, frameTime, bootDone, simSpin, dropTier, setOverride } from './gfx.
 import { stats as loadStats, mb } from './loadmeter.js';
 import { LanceArm, impact, breakAt, bites, rng32, seedOf, refStroke } from './physics.js';
 import { createVoice } from './voice.js';
+import { createClips } from './voice_clips.js';
 import { SPEECH, TEXT, UI, CROWD, SQUIRE, gate } from './channels.js';
 import { createField } from './retinue_field.js';
 import { createAftermath } from './aftermath.js';
@@ -119,6 +120,7 @@ function musicSync() {
   if (mood && mood !== musicMood) { musicMood = mood; m.play(mood); }
 }
 let audio = noop, HERALD = null, ttsVoice = null;
+const clips = createClips(() => audio);      // recorded voice clips (src/voice_clips.js): Pell, the squire, the stands' shouts; the browser's speech stays the fallback
 let audioStarted = false;
 /** The sound code and its samples are fetched once the menu is up (and, below the high tier, once the trees and props are in), so they never compete with what the menu needs. */
 function startAudio() {
@@ -127,6 +129,7 @@ function startAudio() {
     const c = audio.ctx;      // loaded after the player's first tap? the browser may have left the new audio context asleep: wake it on the next one
     if (c && c.state === 'suspended' && !S.muted) { const wake = () => { window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); try { c.resume(); if (audio.music && audio.music.want) audio.music.play(audio.music.want); } catch (e) { /* ignore */ } }; window.addEventListener('pointerdown', wake); window.addEventListener('keydown', wake); }
   }).catch(e => console.warn('audio unavailable', e));
+  setTimeout(() => clips.start(), 1500);      // the recorded voices are fetched in the background once the menu is up (Pell's first)
 }
 import('./herald_lines.js').then(m => { HERALD = m.HERALD; }).catch(() => {});
 function pickVoice() {
@@ -169,7 +172,18 @@ function speak(text, tier = 2, key = 'marshal', at = null) {
 
 /** The booth speaks only into silence: never over the herald, never queued behind him (subtitle only then). onEnd: when the robot voice has finished. */
 let boothUtt = null;
-function boothSpeak(text, key, onEnd) {
+let boothClipH = null;
+const PELL_DB = 0;      // the recorded commentator, dB on the voice stem (it sits above the crowd bed; the crowd and air are ducked a little under it)
+/** Pell's recorded clip for a booth turn (src/voice_clips.js), played through the game's audio bus; the crowd and the air sit 4 dB under it. 'clip' when it plays, else false (the browser's speech takes over). */
+function boothClip(clipId, onEnd) {
+  if (!clipId || !SPEECH.booth || !commentaryOn() || S.muted || G.manual || !clips.get('pell', clipId)) return false;
+  const done = () => { if (boothClipH === h) { boothClipH = null; try { audio.duckUnderVoice(0); } catch (e) { /* ignore */ } } if (onEnd) onEnd(); };
+  const h = clips.play('pell', clipId, { db: PELL_DB, onend: done }); if (!h) return false;
+  boothClipH = h; try { audio.duckUnderVoice(-4); } catch (e) { /* ignore */ }
+  return 'clip';
+}
+function boothSpeak(text, key, onEnd, clipId = null) {
+  const c = boothClip(clipId, onEnd); if (c) return c;
   if (!SPEECH.booth || !commentaryOn() || S.muted || G.manual || !window.speechSynthesis) return false;
   try {
     const ss = window.speechSynthesis; if (ss.speaking || ss.pending) return false;
@@ -178,7 +192,7 @@ function boothSpeak(text, key, onEnd) {
     boothUtt = u; ss.speak(u); return true;
   } catch (e) { return false; }
 }
-function boothHush() { try { if (boothUtt && window.speechSynthesis) { boothUtt = null; window.speechSynthesis.cancel(); } } catch (e) { /* ignore */ } }
+function boothHush() { if (boothClipH) { const h = boothClipH; boothClipH = null; h.stop(); try { audio.duckUnderVoice(0); } catch (e) { /* ignore */ } } try { if (boothUtt && window.speechSynthesis) { boothUtt = null; window.speechSynthesis.cancel(); } } catch (e) { /* ignore */ } }
 /** Browser speech can't be panned, so it is only made quieter with the speaker's distance from the camera (full within ~6 m, a fifth at ~40 m).
  *  Real directional voices need recorded clips through the game's 3D audio (see ROADMAP). */
 const _spkPos = new THREE.Vector3();
@@ -343,7 +357,8 @@ const booth = createBooth({
   enabled: () => commentaryOn() && !!M && !M.practice && performance.now() > squireUntil,
   vars: () => boothVars(),
   soon: () => !!(M && C && S.mode === 'ready' && C.rd.p && C.rd.o),
-  speak: (text, key, onEnd) => boothSpeak(text, key, onEnd), stopSpeak: boothHush,
+  clip: (id, spk) => (spk === 'P' && SPEECH.booth && commentaryOn() && !S.muted && !G.manual ? clips.get('pell', id) : null),
+  speak: (text, key, onEnd, clipId) => boothSpeak(text, key, onEnd, clipId), stopSpeak: boothHush,
   show: (label, text, spk) => { subGate.last = { l: label, t: text, s: spk, at: performance.now() }; if (textBandUp()) { subGate.shown = false; return; } boothSub.show(label, text, spk); subGate.shown = true; }, hide: () => { subGate.last = null; subGate.shown = false; boothSub.hide(); },
   dev: /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),
 });
@@ -352,9 +367,16 @@ const crowdVoices = createCrowdVoices(camera, {
   excite: () => S.excite, enabled: () => chatterOn() && !!M && !M.practice, phase: voicePhase,
   vars: () => (M ? { you: profile.name, youKnown: true, him: M.od.short, colours: colourWords(profile.arms, TINCTURES), hisColours: colourWords(M.od.arms, TINCTURES), land: 'any', hisLand: M.od.land, favour: M.favour } : {}),
   focusZ: () => (player && opp ? (player.z + opp.z) / 2 : 0),
-  play: null,      // recorded clips (docs/voice-plan.md): (id, pos, gain) -> a PannerNode at pos; gain rises with S.excite
+  play: (text, alt, pos, gain) => crowdClip(text, alt, pos, gain),      // recorded shouts (src/voice_clips.js): the clip whose words are `text` (or the name-free `alt`), from pos; gain rises with S.excite
 });
-G.booth = booth; G.crowdVoices = crowdVoices;
+/** A recorded crowd shout from a place in the stands (the Crowd setting switches it off with the rest of the stands' voices). */
+function crowdClip(text, alt, pos, gain = 0.6) {
+  if (S.muted || !crowdOn() || !audio.ctx || S.mode === 'menu') return false;
+  const id = clips.pick('crowd', text, alt); if (!id) return false;
+  const [d, pan] = hear(pos);
+  return !!clips.play('crowd', id, { db: -15 + 11 * gain, pan, dist: d });
+}
+G.booth = booth; G.crowdVoices = crowdVoices; G.clips = clips;
 G.boothCelebrate = (id) => booth.say('celebrate.' + id, { prio: 4, ttl: 6 });      // for src/celebrate.js (feat/celebrate): call when a celebration starts
 /** Seconds the main channel's current line still needs to be said (negative: said, its text lingering). A spoken line ~0.4 s a word; a ticker-only line 1.5 s to be read. */
 function mainTalking() {
@@ -748,7 +770,11 @@ function retSituation(c) {
 }
 // The squire's encouragement (owner, 27 Nov): short, supportive lines from his own pool (src/retinue_lines.js), between courses only, about one gap in 2.5, never two gaps in a row,
 // never over the booth or the judges'/royal band. Spoken with his voice and shown as the one subtitle line (the booth strip), which the booth then keeps clear of.
-const CHEER = { start: ['The lance is true, my lord. Ride well.', 'Gauntlets laced, my lord. Good luck.'], miss: ['He was quick, my lord. Next time.'], behind: ['One good course turns it, my lord.'], leading: ['You lead, my lord! The stands are with you.'] };
+const CHEER = { start: ['The lance is true, my lord. Ride well.', 'Gauntlets laced, my lord. Good luck.', 'All is ready, my lord. Go and spoil his afternoon.', 'Visor down, my lord. Your face is frightening the horse.'],
+  miss: ['He was quick, my lord. Next time.', 'Air, my lord. It happens to the best of men.', 'No matter, my lord. Nobody saw. Everybody saw. No matter.', 'You were looking at his helm. I saw your head go up.'],
+  behind: ['We are behind, my lord, but only by a lance.', 'One good course turns it, my lord.', 'Behind, my lord. My father said behind is where the brave live. He was usually behind.'],
+  leading: ['You lead, my lord! The stands are with you.', 'Ahead on points, my lord. I could shout!', "Don't smile yet, my lord. Smile at supper."] };      // the retinue_lines.js squire pools, recorded as squire.cheer.<pool>.<i> (the id is the pool and the index)
+const cheerId = (sit, text) => { const k = ({ nerves: 'start', broke: 'start', helm: 'start', struck: 'start', tired: 'start', lance: 'start' })[sit] || sit; const i = (CHEER[k] || []).indexOf(text); return i < 0 ? null : `squire.cheer.${k}.${i}`; };
 function squireCheer(sit, wait = 2.6) {
   if (!M || M.practice || S.online || !SQUIRE.cheer || !profile.retinue || !profile.retinue.squire || lateMen.squire || !sit) return;
   const pool = CHEER[sit === 'nerves' || sit === 'broke' || sit === 'helm' || sit === 'struck' || sit === 'tired' || sit === 'lance' ? 'start' : sit]; if (!pool) return;
@@ -760,10 +786,13 @@ function squireCheer(sit, wait = 2.6) {
     if (C !== Cc || !M || Cc.cheerSaid || !['ready', 'after'].includes(S.mode) || R || Cc.carded || Cc.mont || Cc.beat || (S.mode === 'after' && Cc.cut)) return;
     if (booth.busy() || voice.cur || (window.speechSynthesis && window.speechSynthesis.speaking) || $('ticker').classList.contains('on') || !$('royalCap').classList.contains('hidden')) return;
     Cc.cheerSaid = true; M.cheerLast = M.course; used.add(text);
+    const cid = cheerId(sit, text), clip = cid && !S.muted && !G.manual && voicesOn() ? clips.get('squire', cid) : null;
     const g = gate({ text, who: 'YOUR SQUIRE', voice: 'squire', cheer: true, speak: true });
-    boothSub.show('YOUR SQUIRE', text, 'squire'); subGate.shown = true; subGate.last = null; squireUntil = performance.now() + 3600;
-    if (g.speak) speak(text, 4, 'squire', speakerOf.man('squire'));
-    setTimeout(() => { if (performance.now() >= squireUntil - 50) { boothSub.hide(); subGate.shown = false; } }, 3650);
+    boothSub.show('YOUR SQUIRE', text, 'squire'); subGate.shown = true; subGate.last = null; squireUntil = performance.now() + (clip ? clip.d * 1000 + 900 : 3600);
+    if (g.speak && clip) { let pan = 0, dist = 0; try { const o = speakerOf.man('squire')(); if (o) { o.getWorldPosition(_spkPos); [dist, pan] = hear(_spkPos); } } catch (e) { /* unplaced */ } clips.play('squire', cid, { db: -4, pan, dist }); }      // his own recorded voice, from where he stands, quieter than the booth
+    else if (g.speak) speak(text, 4, 'squire', speakerOf.man('squire'));
+    G.cheerLog = (G.cheerLog || []).concat([{ id: cid, via: g.speak ? (clip ? 'clip' : 'tts') : 'silent', text }]);
+    setTimeout(() => { if (performance.now() >= squireUntil - 50) { boothSub.hide(); subGate.shown = false; } }, (clip ? clip.d * 1000 + 950 : 3650));
   };
   for (let i = 0; i < 8; i++) voice.later(wait + i * 2, tryIt);      // tried every 2 s through the ride back / the wait at the mark, until the booth and the prompts leave a gap
 }
@@ -1110,7 +1139,7 @@ function beginCourse(first = false) {
 function startCharge() {
   S.mode = 'charge'; C.t = 0; C.cut = null; player.raiseT = 0; if (!M.practice && !S.online) opp.raiseT = 0;
   if (!M.practice) {      // the booth calls the start and, a stride or two later, the pace or the point; the stands shout them on
-    booth.say('away', { prio: 5, ttl: 2 }); crowdVoices.react('away', 0);
+    booth.say('away', { prio: 5, ttl: 2 }); crowdVoices.react('away', 0); audio.crowd('charge', 0.8);
     voice.later(1.4, () => { if (S.mode === 'charge' && C && C.hitT === null) booth.say(C.tier >= 4 ? pick(['charge.fast', 'charge.couch']) : C.tier <= 2 ? 'charge.slow' : pick(['charge.couch', 'charge.aim']), { prio: 5, ttl: 2.5 }); });
   }
   $('verdict').classList.add('hidden'); $('royalCap').classList.add('hidden');
