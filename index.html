@@ -82,7 +82,7 @@
     <label>BODY</label><div class="bar"><div id="bodyBar"></div></div>
     <label>BREATH</label><div class="bar"><div id="breathBar"></div></div>
     <div id="lanceLeft"></div>
-    <div id="dolls" title="Armour damage: shield, helm, breastplate, shield-side shoulder"><div><canvas id="dollP" width="56" height="72"></canvas><span>YOUR HARNESS</span></div><div><canvas id="dollO" width="56" height="72"></canvas><span>HIS HARNESS</span></div></div>
+    <div id="dolls" aria-label="Armour damage: shield, helm, breastplate, shield-side shoulder"><div><canvas id="dollP" width="56" height="72"></canvas><span>YOUR HARNESS</span></div><div><canvas id="dollO" width="56" height="72"></canvas><span>HIS HARNESS</span></div></div>
   </div>
 
   <div id="reticle"><div class="ring"></div><div id="zoneTxt"></div></div>
@@ -103,7 +103,7 @@
 <div id="replayTag" class="hidden">INSTANT REPLAY</div>
 <div id="replayYou" class="panel rmap hidden"><label>YOUR LANCE</label><canvas class="hitmap" id="rhitYou" width="170" height="190"></canvas><div id="rwhatYou"></div></div>
 <div id="replayHim" class="panel rmap hidden"><label>HIS LANCE</label><canvas class="hitmap" id="rhitHim" width="170" height="190"></canvas><div id="rwhatHim"></div></div>
-<div id="rplCtl" class="hidden"><button data-k="back" aria-label="Back one frame">&#9664;|</button><button data-k="pp" id="rplPause">PAUSE</button><button data-k="fwd" aria-label="Forward one frame">|&#9654;</button><i></i><button data-s="1">1&times;</button><button data-s="0.5">&frac12;&times;</button><button data-s="0.25">&frac14;&times;</button><button data-s="0.1">0.1&times;</button><i></i><span class="rseek"><input type="range" id="rplSeek" min="0" max="1" step="0.001" value="0" aria-label="Replay timeline"><b id="rplNotch" title="Impact"></b></span><i></i><button data-k="view">VIEW</button><button data-k="skip" class="touchonly">SKIP</button></div>
+<div id="rplCtl" class="hidden"><button data-k="back" aria-label="Back one frame">&#9664;|</button><button data-k="pp" id="rplPause">PAUSE</button><button data-k="fwd" aria-label="Forward one frame">|&#9654;</button><i></i><button data-s="1">1&times;</button><button data-s="0.5">&frac12;&times;</button><button data-s="0.25">&frac14;&times;</button><button data-s="0.1">0.1&times;</button><i></i><span class="rseek"><input type="range" id="rplSeek" min="0" max="1" step="0.001" value="0" aria-label="Replay timeline"><b id="rplNotch" aria-label="Impact"></b></span><i></i><button data-k="view">VIEW</button><button data-k="skip" class="touchonly">SKIP</button></div>
 <div id="replayKeys" class="hidden"><kbd>V</kbd> change view &nbsp;&nbsp; <kbd>SPACE</kbd> skip</div>
 <div id="lesson" class="hidden"><div id="lessonTitle"></div><div id="lessonGoal"></div><ul id="lessonList"></ul><div id="lessonNote"></div></div>
 <div id="toast" class="scrollcall"><i class="paper"></i><b></b><span></span></div>
@@ -111,7 +111,7 @@
 
 <div id="pmenu" class="scroll hidden"><i class="paper"></i><div class="page">
   <div id="pmMain"><div id="pmTop">THE LISTS ARE STILL</div><h2>Paused</h2>
-    <button class="btn primary" id="pmRide">Ride on <kbd>Esc</kbd></button><button class="btn" id="pmRpl">Replays <kbd>R</kbd></button><button class="btn" id="pmFs">Full screen</button><button class="btn quiet" id="pmLeave">Leave the lists <kbd>Backspace</kbd></button></div>
+    <button class="btn primary" id="pmRide">Ride on <kbd>Esc</kbd></button><button class="btn" id="pmRpl">Replays <kbd>R</kbd></button><button class="btn" id="pmSet">Settings</button><button class="btn" id="pmFs">Full screen</button><button class="btn quiet" id="pmLeave">Leave the lists <kbd>Backspace</kbd></button></div>
   <div id="pmList" class="hidden"></div>
 </div></div>
 <button id="hlBack" class="btn hidden">Back to the replays</button>
@@ -130,7 +130,7 @@
 </div></div>
 
 <div id="screen"></div>
-<div id="audioBtns"><button id="soundBtn" aria-label="Sound off (M)" title="Sound off (M)"></button><button id="musicBtn" aria-label="Music" title="Music"></button></div>
+<div id="audioBtns"><button id="soundBtn" aria-label="Sound off (M)"></button><button id="musicBtn" aria-label="Music"></button></div>
 <div id="loading"><div id="loadBox"><img id="loadEmblem" src="assets/ui/icons/emblem-128.webp" alt="" draggable="false" onerror="this.style.display='none'"><div id="loadMsg">Raising the lists…</div><div id="loadBar"><i></i></div><div id="loadTxt"></div></div></div>
 <div id="preparing" class="hidden"><div><div id="prepMsg">Preparing the lists…</div><div id="prepTxt"></div></div></div>
 <div id="bgNote" class="hidden"></div>

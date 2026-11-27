@@ -64,7 +64,7 @@ export function initTouch(h) {
   const coach = mk('div', 'tCoach', '', ui);
   const tipEl = isIOS && !standalone && lsGet('tilt.a2hs', '') !== '1' ? mk('div', 'tA2hs', '<span>For full screen, tap <b>Share</b> then <b>Add to Home Screen</b>.</span><button aria-label="Close">OK</button>', body) : null;
   if (tipEl) tipEl.querySelector('button').addEventListener('click', () => { lsSet('tilt.a2hs', '1'); tipEl.remove(); });
-  mk('div', 'tPauseMenu', '<button id="tRide">Ride on</button><button id="tRpl">Replays</button><button id="tInstall">Install / Full screen</button><button id="tLeave">Leave the lists</button>', ui);
+  mk('div', 'tPauseMenu', '<button id="tRide">Ride on</button><button id="tRpl">Replays</button><button id="tSet">Settings</button><button id="tInstall">Install / Full screen</button><button id="tLeave">Leave the lists</button>', ui);
 
   const press = (el, fn, onUp) => {
     el.addEventListener('pointerdown', (e) => {
@@ -82,6 +82,7 @@ export function initTouch(h) {
   press(document.getElementById('tRotLeave'), () => h.leave());
   press(bPause, () => { if (h.inMatch()) h.setPaused(!S.paused); });
   press(document.getElementById('tRide'), () => h.setPaused(false));
+  press(document.getElementById('tSet'), () => { if (h.settings) h.settings(); });
   press(document.getElementById('tRpl'), () => { if (h.openReplays) h.openReplays(); });
   press(document.getElementById('tLeave'), () => h.leave());
   // Install / Full screen: not installed -> the same explainer as the gate (dismissible here); installed (Android) -> toggle full screen; installed on iOS has nothing to offer

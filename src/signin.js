@@ -120,8 +120,8 @@ export function mountChip(host, ctx = {}) {
     const me = account.signedIn() ? account.info() : null;
     if (!me && !anyOn(pv)) return;      // nothing to offer: no chip, no dead buttons
     const c = document.createElement('div'); c.className = 'si-chip';
-    c.innerHTML = me ? `<button class="si-chip-btn" data-si-menu aria-haspopup="menu" title="Your account"><span class="si-av">${esc((me.name || '?').trim().charAt(0).toUpperCase())}</span>${esc(me.name)}</button>`
-      : `<button class="si-chip-btn" data-si-open title="Sign in with Google or Discord (optional)">${KEY}Sign in</button>`;
+    c.innerHTML = me ? `<button class="si-chip-btn" data-si-menu aria-haspopup="menu"><span class="si-av">${esc((me.name || '?').trim().charAt(0).toUpperCase())}</span>${esc(me.name)}</button>`
+      : `<button class="si-chip-btn" data-si-open>${KEY}Sign in</button>`;
     c.addEventListener('click', (e) => {
       e.stopPropagation();
       if (e.target.closest('[data-si-open]')) return openSheet();

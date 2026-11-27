@@ -71,7 +71,7 @@ const ICON_OFF = `<svg viewBox="0 0 24 24" aria-hidden="true">${SPK}<path d="M16
 function showSoundBtn(on) {
   const b = $('soundBtn'); if (!b) return;
   b.innerHTML = on ? ICON_ON : ICON_OFF; b.classList.toggle('on', on); b.classList.toggle('off', !on);
-  const t = on ? 'Sound on: mute everything (M)' : 'Sound off: unmute (M)'; b.setAttribute('aria-label', t); b.title = t;
+  const t = on ? 'Sound on: mute everything (M)' : 'Sound off: unmute (M)'; b.setAttribute('aria-label', t);
   showMusicBtn();
 }
 // ---- the music-only switch: silences the music (the game's, "My files" and YouTube) and keeps the herald, voices, crowd and effects
@@ -87,7 +87,7 @@ function showMusicBtn() {
   const b = $('musicBtn'); if (!b) return;
   const off = musicOffNow || musicVol() <= 0;
   b.innerHTML = NOTE; b.classList.toggle('on', !off); b.classList.toggle('off', off); b.classList.toggle('dim', S.muted);
-  const t = off ? 'Music off: unmute the music' : 'Music on: mute the music only'; b.setAttribute('aria-label', t); b.title = t;
+  const t = off ? 'Music off: unmute the music' : 'Music on: mute the music only'; b.setAttribute('aria-label', t);
 }
 // ---- music: the mood follows the game state; one track runs on across courses (src/audio.js MusicBus)
 const musicVol = () => { try { const v = localStorage.getItem('tilt.music'); return v === null ? 60 : clamp(Math.round(+v) || 0, 0, 100); } catch (e) { return 60; } };
@@ -273,7 +273,7 @@ ranks.setAuthSource(() => account.token());
 /** Joust a friend (see src/net.js, src/online.js and the 'online' block below): the link, who is host, the friend's interpolated rider. */
 const NET = { mid: '', oppPlay: null, net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0 };
 let world = null, worldKey = -1, venueIdx = -1, player = null, opp = null, M = null, C = null, R = null, attract = null;      // (attract: the menu joust, built at boot)
-const G = window.G = { S, auto: false, get M() { return M; }, get C() { return C; }, get R() { return R; }, get player() { return player; }, get opp() { return opp; }, get world() { return world; }, get field() { return field; }, camera, scene, renderer };
+const G = window.G = { S, auto: false, get M() { return M; }, get C() { return C; }, get R() { return R; }, get player() { return player; }, get judges() { return judges; }, get opp() { return opp; }, get world() { return world; }, get field() { return field; }, camera, scene, renderer };
 S.fp = !!profile.firstPerson;
 /** Which beat of the match we are in, for the voice director: intro | ready | charge | strike (a lance has landed) | replay | after (verdict, wheeling about) | end (the result card). */
 function voicePhase() {
@@ -893,7 +893,7 @@ function introLines() {
   voice.later(INTRO_END + 0.5, () => {});      // (a mark only: the marshal calls the first course as the intro ends, so the booth's quietFor sees it coming)
 }
 /** The location card when a match opens: "Smithfield · London · 1390", and the rule set under it. */
-function titleCard() { if (M && !M.practice) ceremony.titleCard(M.V.name, M.V.city, M.V.year, M.mode.name); }
+function titleCard() { if (M && !M.practice) ceremony.titleCard(M.V.name, M.V.city + (M.V.country ? ', ' + M.V.country : ''), M.V.year, M.mode.name); }
 function introCues(t) {
   const at = (k, tt, fn) => { if (t >= tt && !introFired.has(k)) { introFired.add(k); fn(); } };
   at('title', 2.0, () => $('banner').classList.add('hidden'));
@@ -1009,11 +1009,11 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
   M.retUsed = new Set(); field.setup(profile.retinue, profile.arms, practice, practice ? null : { name: od.short, arms: od.arms });
   $('nameP').textContent = profile.name; $('nameO').textContent = od.name.replace(/, ".*"/, '');
   drawCrest($('crestP'), profile.arms); drawCrest($('crestO'), od.arms);
-  $('venueInfo').textContent = `${V.name.toUpperCase()} · ${V.city.toUpperCase()} · ${V.year} · ${mode.name.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`;
+  $('venueInfo').textContent = `${V.name.toUpperCase()} · ${V.city.toUpperCase()}${V.country ? ', ' + V.country.toUpperCase() : ''} · ${V.year} · ${mode.name.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`;
   $('screen').classList.remove('on'); $('card').classList.add('hidden'); $('verdict').classList.add('hidden'); $('lesson').classList.toggle('hidden', !practice);
   S.mode = 'intro'; S.introT = 0; S.skipHold = 0; S.skipWanted = { me: false, them: false }; introFired.clear(); skipKey = false;
   if (onl) { NET.remote.reset(); NET.rem = null; NET.rLb = 0; NET.rGuardAge = 9; NET.sendT = 0; NET.lastRx = performance.now(); NET.rdyOut = NET.rdyIn = -1; }
-  $('bannerTop').textContent = `${V.city.toUpperCase()} · ANNO ${V.year} · ${mode.name.toUpperCase()}, ${mode.sub.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`; $('bannerMain').textContent = V.name;
+  $('bannerTop').textContent = `${V.city.toUpperCase()}${V.country ? ', ' + V.country.toUpperCase() : ''} · ANNO ${V.year} · ${mode.name.toUpperCase()}, ${mode.sub.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`; $('bannerMain').textContent = V.name;
   $('bannerSub').innerHTML = `${profile.name} &nbsp;against&nbsp; ${od.name}<div id="tape"><div><b>${ovr({ skill: 0.42 + 0.07 * bondLevel(profile.bond[profile.horse]), seat: ARMOURS[profile.armour].protection * 0.85, drive: (HORSES[profile.horse].top - 7.2) / 2 })}</b>${HORSES[profile.horse].name} · bond ${BOND_NAMES[bondLevel(profile.bond[profile.horse])]}<small>${HELMS[profile.helm].name.toUpperCase()} · ${ARMOURS[profile.armour].name.toUpperCase()}</small></div><div><b>${ovr(od)}</b>${HORSES[od.horse].name} · ${od.land}<small>${ARMOURS[od.armour].name.toUpperCase()}</small></div></div>`;
   if (practice) { $('bannerTop').textContent = 'THE TILTYARD'; $('bannerMain').textContent = 'At the Quintain'; $('bannerSub').innerHTML = 'The master of horse will teach you the joust, one thing at a time.'; }
   $('banner').classList.remove('hidden'); $('hud').classList.add('hidden');
@@ -1021,7 +1021,7 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
   if (!practice) boothOpen();
   if (practice) { ceremony.clear(); life.clear(); fanfare('start'); react('start', 0, false); }      // the quintain keeps the short old intro
   else { ceremony.setup(V); life.setup(); player.visorUp = false; introLines(); }
-  flagmen.setup(V, practice); judges.setup(V, practice); judges.setVisible(false);      // (the judges' stand shows from the first course: the intro cameras run through its place)
+  flagmen.setup(V, practice); judges.setup(V, practice); judges.setVisible(true);      // (the judges sit in their stand through the intro too: it was hidden there, so the table read as empty whenever the intro cameras passed it)
   updateHud(true);
   if (bridge && bridge.bout > 1) {      // the next challenger: the short form of the intro (the herald names him, then straight to the marks)
     skipIntro();
@@ -1884,9 +1884,7 @@ function stepBeat(dtReal) {
   const look = !S.fp ? 0 : S.online ? 1.0 : HELM_LOOK, t1 = HELM_FIT + look;      // (online the beat stays short: the cuts are local only, and the signal does not wait for them)
   if (B.stage === 0 && B.t >= HELM_FIT) { B.stage = 1; player.visorUp = false; if (S.fp) C.cut = { kind: 'visor', t: 99 }; }      // (the visor-slit look is first person only)
   if (B.stage === 1 && B.t >= t1 && !S.online) {      // the film's held gallery face before the first flag, then the herald's cry
-    const L = world.crowd && world.crowd.ladies ? world.crowd.ladies(1, 0, 16).concat(world.crowd.ladies(-1, 0, 16)).sort((a, b) => a.d - b.d)[0] : null;
-    if (L) { B.stage = 2; B.lady = true; C.cut = { kind: 'lady', t: 99, pos: new THREE.Vector3(L.x, L.y + 1.15, L.z) }; if (hasSpot()) world.crowd.spotlight(L.i, -1, 'clap'); }
-    else B.stage = 3;
+    B.stage = 3;      // (no cut to a lady of the gallery here any more: it fired every match, from a lens that sat behind the judges' canopy and the tilt; the G key still looks at her, see ladyShot)
   }
   if (B.stage === 2 && B.t >= t1 + HELM_LADY) B.stage = 3;
   if (B.stage === 3 && !B.herald) { B.herald = true; B.hAt = B.t; fireAsk(); ceremony.speak(HELM_HERALD - 0.4); }      // (no cut to the announcer: he is silent, src/channels.js)
@@ -1957,6 +1955,12 @@ function seenCine(k) { const sn = M.cineSeen || (M.cineSeen = {}), first = !sn[k
 const _rc = new THREE.Raycaster();
 const inside = (o, root) => { for (let n = o; n; n = n.parent) if (n === root) return true; return false; };
 /** Before a close cut: is anything between the lens and the heads? Tries a few small offsets (sideways, up, back) and returns the first that is clear of everything but `ignore`. */
+/** The gallery shot (a lady, a gasping row): from over the tilt, high enough to look down past the judges' canopy (y 2.7), the barrier cloth and the pennant strings, never from beside them
+ *  (it was 6.5 m out at 0.6 m above her: with the lanes at 0.62 that put the lens just over the judges' striped roof and the tilt, a blurred wall of cloth filling the frame). */
+function ladyShot(q, want, look) {
+  const sx = Math.sign(q.x) || 1, cy = Math.max(q.y + 2.0, 4.8);
+  want.set(q.x - sx * 9.5, cy, q.z + 1.2); look.set(q.x, q.y, q.z); return 20;
+}
 function nudgeCam(pos, targets, ignore) {
   const offs = [[0, 0, 0], [0, 0.2, 0], [0, 0, 0.7], [0, 0, -0.7], [0, 0.25, 1.3], [0, 0.25, -1.3], [-0.9, 0.25, 0], [-1.4, 0.35, 0.8], [-1.4, 0.35, -0.8]].map(a => new THREE.Vector3(...a));
   let best = offs[0], bn = 99; const p = new THREE.Vector3(), d = new THREE.Vector3();
@@ -3845,6 +3849,7 @@ const freeMods = { fast: false, slow: false };      // the free replay camera: S
 window.addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
   const k = e.code;
+  if (typeof menus !== 'undefined' && menus.overOpen()) { if (k === 'Escape') { menus.closeOver(); e.preventDefault(); } return; }      // Settings over the pause menu: Esc closes it first, nothing else reaches the match
   freeMods.fast = e.shiftKey; freeMods.slow = e.ctrlKey || e.altKey;
   if (promptKey(k)) { e.preventDefault(); return; }      // the celebration prompt (1-4 or arrows) takes the key
   if (S.yieldAsk) { if (k === 'KeyY' || k === 'Enter') doYield(); else if (k === 'KeyN' || k === 'Escape' || k === 'Backspace') closeYield(); e.preventDefault(); return; }      // the yield confirm swallows every key
@@ -3915,6 +3920,7 @@ $('card').addEventListener('click', advance);
 window.addEventListener('blur', () => { skipKey = false; keys.rein = keys.left = keys.right = keys.guard = keys.look = keys.throw = false; focusHeld = false; if (M && S.mode === 'charge' && !G.manual && !S.online) setPaused(true); });
 
 function setPaused(v) {
+  if (!v && typeof menus !== 'undefined' && menus.overOpen()) menus.closeOver();      // (the touch pause button also closes Settings)
   if (!v) { if (R && R.hl) closeHL(); if (S.rpl) { const card = S.rplFrom === 'card'; closeReplays(); if (card) return; } }      // (the touch pause button also backs out of a highlight, and of the list)
   S.paused = v; const b = $('banner');
   if (v) { showPauseMain(); if (window.speechSynthesis && !S.online) window.speechSynthesis.pause(); }
@@ -3924,6 +3930,13 @@ function setPaused(v) {
 // the pause menu's buttons (desktop), its Replays list, and the highlight's Back button
 $('pmRide').addEventListener('click', () => setPaused(false));
 $('pmRpl').addEventListener('click', () => openReplays('pause'));
+/** Settings over the paused match: the same panel as the main menu; Done / Esc return to the pause menu. Difficulty is read at the start of a match (its help line says so); the rest applies live. */
+function openPauseSettings() {
+  if (!M || !S.paused) return;
+  $('pmenu').classList.add('hidden'); $('banner').classList.add('hidden'); document.body.classList.add('pm-settings');
+  menus.openOver(() => { document.body.classList.remove('pm-settings'); if (M && S.paused) showPauseMain(); });
+}
+$('pmSet').addEventListener('click', openPauseSettings);
 { const fs = $('pmFs'), de = document.documentElement; const can = !!(de.requestFullscreen || de.webkitRequestFullscreen);      // desktop pause menu: a Full screen toggle
   if (!can || touchMode) fs.remove(); else fs.addEventListener('click', () => { try { if (document.fullscreenElement) document.exitFullscreen(); else (de.requestFullscreen || de.webkitRequestFullscreen).call(de); } catch (e) { /* ignore */ } }); }
 $('pmLeave').addEventListener('click', () => { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } });
@@ -3942,11 +3955,11 @@ $('pmList').addEventListener('click', (e) => {
 
 // ------------------------------------------------------------------ HUD
 let hudT = 0;
-let dollSig = '';
+let dollSig = '', dollM = null;
 function updateHud(force) {
   if (!M) return;
   { const a = player.dmg, b = opp.dmg || {}, sig = [a.shield, a.helm, a.breast, a.pauldronL, b.shield, b.helm, b.breast, b.pauldronL].map(v => Math.round((v || 0) * 40)).join(',');
-    if (sig !== dollSig) { dollSig = sig; drawDoll($('dollP'), a); drawDoll($('dollO'), Object.assign({ shield: 0, helm: 0, breast: 0, pauldronL: 0 }, b)); } }
+    if (sig !== dollSig || dollM !== M) { dollSig = sig; dollM = M; drawDoll($('dollP'), a, profile.arms); drawDoll($('dollO'), Object.assign({ shield: 0, helm: 0, breast: 0, pauldronL: 0 }, b), M.od && M.od.arms); } }
   $('scoreP').textContent = M.score[0]; $('scoreO').textContent = M.score[1];
   $('courseInfo').textContent = (M.bridge ? `BOUT ${M.bridge.bout}/${M.bridge.n} · ` : '') + (M.practice ? `LESSON ${M.lesson + 1}/${LESSONS.length}` : M.course > M.courses ? 'EXTRA COURSE' : `COURSE ${Math.max(1, M.course)}/${M.courses}`);
   if (force) {
@@ -4185,7 +4198,7 @@ function updateCamera(dtReal) {
         const q = C.cut.pos, dz = -Math.sign(q.z) || 1, sq = field.where('squire', _d) || q;
         want.set(q.x * 0.6, 1.6, q.z + dz * 7); wantLook.set(sq.x, 1.5, sq.z); wantFov = 34;
       }
-      else { const q = C.cut.pos, sx = Math.sign(q.x) || 1; want.set(q.x - sx * 6.5, q.y + 0.6, q.z + 1.2); wantLook.set(q.x, q.y, q.z); wantFov = 22; }
+      else { wantFov = ladyShot(C.cut.pos, want, wantLook); }
     }
     else if (k === 'batter' || k === 'tend') {      // the battered knight: close on his helm or breast, then pulled back; the surgeon's beat: him at his mark, the camera slowly in
       const J = C.cut.who ? opp : player, fw = _a.set(0, 0, 1).applyQuaternion(J.root.quaternion), out = Math.sign(J.root.position.x) || 1;
@@ -4200,7 +4213,7 @@ function updateCamera(dtReal) {
       }
     }
     else if (k === 'commons') { want.set(p.x * 0.4, 2.3, p.z + D * 3.5); wantLook.set(-Math.sign(p.x) * 10.5, 1.3, p.z - D * 1.5); wantFov = 46; }
-    else if (k === 'lady') { const q = C.cut.pos, sx = Math.sign(q.x) || 1; want.set(q.x - sx * 6.5, q.y + 0.6, q.z + 1.2); wantLook.set(q.x, q.y, q.z); wantFov = 22; }
+    else if (k === 'lady') { wantFov = ladyShot(C.cut.pos, want, wantLook); }
     else if (k === 'opp') { const o = opp.root.position; want.set(o.x * 0.2, opp.seatY + 0.27, o.z - (opp.dir || -1) * -7); wantLook.set(o.x, opp.seatY + 0.17, o.z); wantFov = 26; }
     else { player.head.getWorldPosition(wantLook); want.set(wantLook.x - Math.sign(p.x) * 2.2, wantLook.y + 0.3, wantLook.z + D * 1.6); wantFov = 40; }
     rate = 30; { const sh = C.cut.ots > 0 ? 1 : 2; if (C.cut.shot !== sh) { C.cut.shot = sh; snap = true; } } C.cutWas = true;
@@ -4398,7 +4411,7 @@ attract = createAttract({ scene, camera, fx, S, audio: new Proxy({}, { get: (_, 
   world: () => world, ready: () => bgDone && SCANS.ready && worldScans && !M && !preparing, shake: (v) => { S.shake = Math.max(S.shake, v); },
   crowd: (kind) => { const Rk = REACT[kind]; if (!Rk) return; if (!S.muted && audio.ctx) { const gasp = Rk.snd.some(x => x[0] === 'gasp'); for (const [snd, str, ld] of Rk.snd) audio.crowd(snd, str, (ld || 0) + (gasp && snd !== 'gasp' && kind !== 'near' ? 0.2 : 0), { fav: 0 }); }      // cheers and gasps (Settings > Sound > Crowd still silences them)
     S.excite = Math.max(S.excite, Rk.ex); S.scorer = 0; if (Rk.ex > 0.75) S.waveT = S.time; S.crowdEv = { id: ++crowdEvId, kind: { rouse: 'break', sandbag: 'taunt' }[kind] || kind, by: 0 }; } });
-const touch = initTouch({ S, mouse, rpl: { active: () => !!R && S.mode === 'replay', orbit: (dx, dy) => freeOrbit(dx, dy), zoom: (k) => freeZoom(k) }, openReplays: () => openReplays('pause'), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
+const touch = initTouch({ S, mouse, rpl: { active: () => !!R && S.mode === 'replay', orbit: (dx, dy) => freeOrbit(dx, dy), zoom: (k) => freeZoom(k) }, openReplays: () => openReplays('pause'), settings: () => openPauseSettings(), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
   guard(v) { if (v && !keys.guard && C) C.guardAge = 0; keys.guard = v; }, portraitOk: () => S.mode === 'replay' || S.rpl || !$('card').classList.contains('hidden'),
   leave() { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } } });
 store.bindProfile(() => profile); store.onChange(() => { if (!M && player) rebuildPlayer(); });

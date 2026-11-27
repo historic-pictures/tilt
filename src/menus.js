@@ -94,13 +94,13 @@ export function initMenus(api) {
   function myMusicBlock() {
     const tr = mymusic.tracks, src = mymusic.source, yt = ytmusic.ids;
     const chip = (k, t) => `<span class="chip ${src === k ? 'sel' : ''}" data-mm="src" data-v="${k}">${t}</span>`;
-    const files = `<div class="toggles"><label class="chip" title="Pick audio files from this computer (mp3, m4a, ogg, wav)">Add songs<input type="file" id="mmFile" accept="audio/*" multiple hidden></label>${tr.length ? `<span class="chip" data-mm="next" title="Next song (N)">Next ▸</span>` : ''}</div>
-      ${tr.length ? `<div class="mmlist">${tr.map(t => `<div class="mmrow"><span>${esc(t.name)}</span><b data-mm="rm" data-id="${t.id}" title="Remove">✕</b></div>`).join('')}</div>` : ''}
+    const files = `<div class="toggles"><label class="chip">Add songs<input type="file" id="mmFile" accept="audio/*" multiple hidden></label>${tr.length ? `<span class="chip" data-mm="next">Next ▸</span>` : ''}</div>
+      ${tr.length ? `<div class="mmlist">${tr.map(t => `<div class="mmrow"><span>${esc(t.name)}</span><b data-mm="rm" data-id="${t.id}" aria-label="Remove">✕</b></div>`).join('')}</div>` : ''}
       <div class="mmnow" id="mmNow">${mmNow()}</div><div class="mmnote">Your songs stay in this browser only; they're not uploaded or shared.</div>`;
-    const ytp = `<div class="mmlist">${yt.map(id => `<div class="mmrow"><span>${esc(ytTitles[id] || (ytmusic.DEFAULTS[id] || 'youtu.be/' + id))}</span><b data-mm="ytrm" data-id="${id}" title="Remove">✕</b></div>`).join('') || '<div class="mmrow"><span>(empty)</span></div>'}</div>
-      <div class="mmadd"><input id="mmLink" placeholder="Paste a YouTube link" autocomplete="off" spellcheck="false"><span class="chip" data-mm="ytadd">Add link</span><span class="chip" data-mm="next" title="Next (N)">Next ▸</span></div>
+    const ytp = `<div class="mmlist">${yt.map(id => `<div class="mmrow"><span>${esc(ytTitles[id] || (ytmusic.DEFAULTS[id] || 'youtu.be/' + id))}</span><b data-mm="ytrm" data-id="${id}" aria-label="Remove">✕</b></div>`).join('') || '<div class="mmrow"><span>(empty)</span></div>'}</div>
+      <div class="mmadd"><input id="mmLink" placeholder="Paste a YouTube link" autocomplete="off" spellcheck="false"><span class="chip" data-mm="ytadd">Add link</span><span class="chip" data-mm="next">Next ▸</span></div>
       <div class="mmnote">Played by YouTube's own player, shown in the corner. Nothing is downloaded.</div>`;
-    return `<div class="mymusic"><div class="toggles"><span class="lbl">Music source:</span>${chip('game', 'Game music')}${chip('files', 'My files')}${api.touch ? `<span class="chip off" data-tip="YouTube music is desktop only" title="YouTube music is desktop only" style="opacity:.4;cursor:default">YouTube</span><span class="mmnote">desktop only</span>` : chip('yt', 'YouTube')}</div>
+    return `<div class="mymusic"><div class="toggles"><span class="lbl">Music source:</span>${chip('game', 'Game music')}${chip('files', 'My files')}${api.touch ? `<span class="chip off" data-tip="YouTube music is desktop only" style="opacity:.4;cursor:default">YouTube</span><span class="mmnote">desktop only</span>` : chip('yt', 'YouTube')}</div>
       ${src === 'files' ? files : src === 'yt' ? ytp : ''}<div class="mmmsg" id="mmMsg">${esc(mmMsg.text)}</div></div>`;
   }
   mymusic.list().then(() => { if (root.dataset.name === 'settings' && root.classList.contains('on')) show('settings'); });
@@ -176,7 +176,7 @@ export function initMenus(api) {
       <div class="stop"><h3>Settings</h3><button class="btn primary" data-go="main">Done</button></div>
       <div class="sgrid">
         <section class="sect"><h5>Play</h5>
-          ${row('Difficulty', DIFFICULTY.map((d, i) => opt((p.difficulty ?? 1) === i, 'diff', d.name, `data-v="${i}"`)).join(''), 'Squire is gentle: wide hit zones, a slow opponent.|Champion is a hard ride.')}
+          ${row('Difficulty', DIFFICULTY.map((d, i) => opt((p.difficulty ?? 1) === i, 'diff', d.name, `data-v="${i}"`)).join(''), 'Squire is gentle: wide hit zones, a slow opponent.|Champion is a hard ride.' + (overBack ? '|Applies from the next match.' : ''))}
           ${row('View', opt(!p.firstPerson, 'view', 'Third person', 'data-v="0"') + opt(!!p.firstPerson, 'view', 'First person', 'data-v="1"'), 'Third person watches over your shoulder.|First person looks through the helm.')}
           ${row('After a pass', opt(p.autoRide !== false, 'autoride', 'Ride back for me', 'data-v="1"') + opt(p.autoRide === false, 'autoride', 'By hand', 'data-v="0"'), 'The horse can take you back to your mark.|By hand: W/S set the gait, A/D steer.')}
           ${row('Replays', [['short', 'Short'], ['standard', 'Standard'], ['full', 'Full'], ['off', 'Off']].map(([v, l]) => opt((api.replaysMode ? api.replaysMode() : 'standard') === v, 'replays', l, `data-v="${v}"`)).join(''), 'After a hit the camera replays the strike.|Short: one angle. Standard: two angles, one from each knight. Full: four passes. Off: none.|Hold Space to skip.')}
@@ -217,7 +217,7 @@ export function initMenus(api) {
   const BUILD_NAMES = { skinny: 'Lean', medium: 'Medium', heavy: 'Heavy' };
   const bodyBlock = (p) => {
     const b = p.body = cleanBody(p.body), chip = (k, v, t) => `<span class="chip ${b[k] === v ? 'sel' : ''}" data-body="${k}|${v}">${t}</span>`;
-    const sws = (k, list) => list.map((c, i) => `<div class="sw ${b[k] === i ? 'sel' : ''}" title="${c.name}" style="background:${c.hex}" data-body="${k}|${i}"></div>`).join('');
+    const sws = (k, list) => list.map((c, i) => `<div class="sw ${b[k] === i ? 'sel' : ''}" data-tip="${c.name}" style="background:${c.hex}" data-body="${k}|${i}"></div>`).join('');
     return `<section class="body"><h5>Your Body <small>how you look, helm on or off; it changes nothing in the lists</small></h5>
       <div class="arms-row body-row"><canvas class="pv bodypv" data-pv="body:me" width="300" height="380" style="width:150px;height:190px"></canvas><div>
         <div class="row swatches"><span class="lbl">Build</span>${BUILDS.map(x => chip('build', x, BUILD_NAMES[x])).join('')}</div>
@@ -231,7 +231,7 @@ export function initMenus(api) {
   const NOFILL = 'autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-form-type="other"';
   function welcome() {
     const p = api.profile, a = p.arms; if (wDraft === null) wDraft = '';
-    const sw = (key) => `<div class="swatches"><span class="lbl">${{ c1: 'Field', c2: 'Division' }[key]}</span>${TINCTURES.map(t => `<div class="sw ${a[key] === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}</div>`;
+    const sw = (key) => `<div class="swatches"><span class="lbl">${{ c1: 'Field', c2: 'Division' }[key]}</span>${TINCTURES.map(t => `<div class="sw ${a[key] === t[1] ? 'sel' : ''}" data-tip="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}</div>`;
     root.innerHTML = scroll('menu welcome', `
       <div class="mini"><img src="assets/ui/welcome-banner-1600.webp" srcset="assets/ui/welcome-banner-800.webp 800w, assets/ui/welcome-banner-1600.webp 1600w" sizes="(max-width: 600px) 100vw, 420px" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>
       ${title()}
@@ -261,7 +261,7 @@ export function initMenus(api) {
     const r = S.log.find(x => x.v === i), now = !S.done && i === S.v;
     const res = r ? (r.res || (r.champion ? 'Champion' : `Out in the ${career.roundName(r.rounds, r.reached).toLowerCase()}`)) : store.locked.event(i) ? "Knight's Charter" : now ? 'the lists await' : 'ahead';
     const lk = !r && store.locked.event(i);
-    return `<div class="venue ${now ? 'now' : r ? 'done' : ''} ${lk ? 'locked' : ''}" ${lk ? 'data-lock="charter" data-why="event:${i}" data-tip="Open with the Knight&#39;s Charter"' : ''}><b>${v.name}</b><i>${v.city} · ${v.year}</i><div class="r">${res}</div>${r ? '' : `<div class="fee">${career.SIZES[i]} knights · purse ${coin(purse(i, 'win', true))}</div>`}</div>`;
+    return `<div class="venue ${now ? 'now' : r ? 'done' : ''} ${lk ? 'locked' : ''}" ${lk ? 'data-lock="charter" data-why="event:${i}" data-tip="Open with the Knight&#39;s Charter"' : ''}><b>${v.name}</b><i>${v.city}${v.country ? ', ' + v.country : ''} · ${v.year}</i><div class="r">${res}</div>${r ? '' : `<div class="fee">${career.SIZES[i]} knights · purse ${coin(purse(i, 'win', true))}</div>`}</div>`;
   }).join('')}</div>`;
   // a short tip from a long rule text: the place and date, then the first sentence or two
   const sentences = (t, n = 1) => (String(t || '').match(/[^.!?]+[.!?]+(\s|$)/g) || [String(t || '')]).slice(0, n).join('').trim();
@@ -288,7 +288,7 @@ export function initMenus(api) {
       const first = S.no === 1 && t.v === 0 && !S.log.length && !(p.honours || []).length;
       const cards = (first ? [['The Road', BEGIN]] : []).concat([[`Arriving at ${V.name}`, ST.arrive], ['What Is At Stake', ST.stakes], ['The Man To Beat', ST.rival]]);
       const ci = Math.min(t.card || 0, cards.length - 1), card = cards[ci], lastCard = ci === cards.length - 1;
-      root.innerHTML = scroll('sheet', `<div class="top"><div><h3>${V.name}</h3><p>${V.city}, ${V.year}. ${S.migrated && first ? 'Your old league table is retired: the career is now a season of tournaments.' : ''}</p></div>
+      root.innerHTML = scroll('sheet', `<div class="top"><div><h3>${V.name}</h3><p>${V.city}${V.country ? ', ' + V.country : ''}, ${V.year}. ${S.migrated && first ? 'Your old league table is retired: the career is now a season of tournaments.' : ''}</p></div>
         <div class="actions"><button class="btn" data-go="main">Back</button><button class="btn" data-act="stskip">Skip</button><button class="btn primary" data-act="stnext">${lastCard ? 'See the Draw' : 'Continue'}</button></div></div>
         <div class="story"><h5>${card[0]} <small>${ci + 1} of ${cards.length}</small></h5>${fillStory(card[1], vars).map(l => `<p>${l}</p>`).join('')}</div>${honoursBlock(p)}`);
       return;
@@ -315,7 +315,7 @@ export function initMenus(api) {
       <h5>The Joust ${tip('A single joust', `No entry fee and no ransom.|The purse is ${coinsTxt(purse(0, 'win', false))}.`)}</h5>
       <div class="picks">${Object.values(MODES).map(m => `<div class="pick ${m.id === exMode ? 'sel' : ''}" data-exm="${m.id}" ${modeTip(m)}><b>${m.name}</b></div>`).join('')}</div>
       <h5>Courses ${tip('Courses', cw)}</h5><div class="swatches">${fixedCourses(exMode) ? `<div class="chip sel">${fixedCourses(exMode)}</div>` : EX_COURSES.map(n => `<div class="chip ${n === exCourses ? 'sel' : ''}" data-exc="${n}">${n}</div>`).join('')}</div>
-      <h5>The Lists</h5><div class="picks">${VENUES.map((v, i) => store.locked.venue(i) ? `<div class="pick locked" data-lock="charter" data-why="venue:${i}" data-tip="Every venue comes with the Knight's Charter"><b>${v.name}</b><em>${v.year}</em></div>` : `<div class="pick ${i === exVenue ? 'sel' : ''}" data-exv="${i}" data-tip-title="${v.name}, ${v.year}" data-tip="${(v.city + '|' + sentences(v.blurb, 2)).replace(/"/g, '&quot;')}"><b>${v.name}</b><em>${v.year}</em></div>`).join('')}</div>
+      <h5>The Lists</h5><div class="picks">${VENUES.map((v, i) => store.locked.venue(i) ? `<div class="pick locked" data-lock="charter" data-why="venue:${i}" data-tip="Every venue comes with the Knight's Charter"><b>${v.name}</b><em>${v.year}</em></div>` : `<div class="pick ${i === exVenue ? 'sel' : ''}" data-exv="${i}" data-tip-title="${v.name}, ${v.year}" data-tip="${(v.city + (v.country ? ', ' + v.country : '') + '|' + sentences(v.blurb, 2)).replace(/"/g, '&quot;')}"><b>${v.name}</b><em>${v.year}</em></div>`).join('')}</div>
       <h5>Your Opponent ${MODES[exMode].bridge ? tip('Keep the bridge', 'One of the three challengers, in order of skill.|The rest are drawn.') : ''}</h5><div class="picks knights">${KNIGHTS.map(k => `<div class="pick ${k.id === exOpp ? 'sel' : ''}" data-exo="${k.id}" data-tip-title="${k.name}" data-tip="${oneOpp(k).split('|').slice(1).join('|').replace(/"/g, '&quot;')}">${crest(k.arms, 30, 36)}<span class="ovr">${ovr(k)}</span><b>${k.short}</b><em>${k.land}</em></div>`).join('')}</div>`);
     crests(); api.setVenue(exVenue);
   }
@@ -328,7 +328,7 @@ export function initMenus(api) {
     const chips = () => `<h5>The Lists</h5><div class="swatches">${VENUES.map((v, i) => `<span class="chip ${i === room.v ? 'sel' : ''}" data-onv="${i}">${v.name}</span>`).join('')}</div>
       <h5>Rules <small>${MODES[room.m].sub}</small></h5><div class="swatches">${modes.map(id => `<span class="chip ${id === room.m ? 'sel' : ''}" data-onm="${id}">${MODES[id].name}</span>`).join('')}</div>
       <h5>Courses${fixed ? ' <small>fixed by the rules</small>' : ''}</h5><div class="swatches">${fixed ? `<span class="chip sel">${fixed}</span>` : EX_COURSES.map(n => `<span class="chip ${n === room.c ? 'sel' : ''}" data-onc="${n}">${n}</span>`).join('')}</div>`;
-    const summary = () => `<p class="dimtxt">${V.name}, ${V.city} · ${MODES[room.m].name} · ${fixed || room.c} courses &nbsp;(the host chooses)</p>`;
+    const summary = () => `<p class="dimtxt">${V.name}, ${V.city}${V.country ? ', ' + V.country : ''} · ${MODES[room.m].name} · ${fixed || room.c} courses &nbsp;(the host chooses)</p>`;
     const friendRow = () => fr ? `<div class="friend">${crest(fr.arms, 30, 36)}<span><b>${fr.name}</b> <i>${fr.rank ? '· ' + fr.rank.text + ' · ' + fr.rank.h2h : fr.land ? '· ' + fr.land : ''}</i></span></div>` : '';
     let head = '', actions = '<button class="btn" data-on="back">Back</button>' + (ph === 'choose' ? '<button class="btn" data-on="ranks">Rankings</button>' : ''), body = '';
     const rows = () => {
@@ -352,7 +352,7 @@ export function initMenus(api) {
       head = 'Opponent found'; actions = '<button class="btn" data-on="back">Cancel</button>';
       body = `<div class="roomcode"><span>OPPONENT FOUND</span><b class="oppfound">${esc(o.name)} · ${esc(o.division)}</b></div>
         <p class="wait">${ph === 'found' ? 'Getting ready…' : fr ? 'Connected: the joust begins…' : 'Connecting to your opponent…'}</p>
-        <p class="dimtxt">${mv.name}, ${mv.city} · ${(MODES[m.mode] || MODES.planken).name} · ${m.courses} courses · ${m.ranked ? 'ranked' : 'unranked'}</p>`;
+        <p class="dimtxt">${mv.name}, ${mv.city}${mv.country ? ', ' + mv.country : ''} · ${(MODES[m.mode] || MODES.planken).name} · ${m.courses} courses · ${m.ranked ? 'ranked' : 'unranked'}</p>`;
     } else if (ph === 'choose') {
       head = '';
       const pl = (cls, attrs, label, t, tb) => `<button class="plaque ${cls}" ${attrs} ${tipAttr(t, tb)}>${label}${tip(t, tb, 'tonly')}</button>`;
@@ -499,20 +499,20 @@ export function initMenus(api) {
     const hb = store.has('herald'), PACKNAME = { herald: "the Herald's Book", rolls: 'the Rolls of Arms', finishes: "the Armourer's Finishes", patron: 'Grand Patrons only' };
     const lockTip = (sku) => `data-lock="${sku}" data-tip="${sku === 'patron' ? PACKNAME.patron : 'In ' + PACKNAME[sku]}"`;
     const fins = PACKS.finishes.finishes, fb = store.has('finishes');
-    const finishRow = `<div class="swatches"><span class="lbl">Finish</span><div class="chip ${!p.finish || !fb ? 'sel' : ''}" data-fin="plain">Bright steel</div>${Object.entries(fins).map(([id, f]) => fb ? `<div class="chip ${p.finish === id ? 'sel' : ''}" data-fin="${id}" title="${f.blurb}">${f.name}</div>` : `<div class="chip locked" ${lockTip('finishes')} title="${f.blurb}">${f.name}</div>`).join('')}</div>`;
+    const finishRow = `<div class="swatches"><span class="lbl">Finish</span><div class="chip ${!p.finish || !fb ? 'sel' : ''}" data-fin="plain">Bright steel</div>${Object.entries(fins).map(([id, f]) => fb ? `<div class="chip ${p.finish === id ? 'sel' : ''}" data-fin="${id}" data-tip="${f.blurb}">${f.name}</div>` : `<div class="chip locked" ${lockTip('finishes')}>${f.name}</div>`).join('')}</div>`;
     // THE BLAZON EDITOR (heraldry.js). Free: every field, division and ordinary, the starter charges (cosmetics.js FREE_CHARGES), the nine tinctures. The Herald's Book: the other
     // charges, the furs and three stain tinctures; the Rolls of Arms: its roll of real arms (and the two charges and the furs those bear); the patron's crown. cosmetics.js allowedArms is the rule.
     const P = armsParts(a), faults = tinctureFaults(a), party = { pale: 1, perfess: 1, perbend: 1, perbendsin: 1, perchevron: 1, persaltire: 1, quarterly: 1 }[P.field];
     const FUR_SW = [['Ermine', ERMINE, 'repeating-radial-gradient(circle at 50% 40%, #191919 0 1.5px, #ece8dc 2px 6px)'], ['Vair', VAIR, 'repeating-linear-gradient(90deg, #1f4690 0 5px, #ece8dc 5px 10px)']];
     const furOk = hb || store.has('rolls');
-    const sw = (key, lbl, cur, furs) => `<div class="swatches"><span class="lbl">${lbl}</span>${TINCTURES.map(t => `<div class="sw ${cur === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}${PACKS.herald.tinctures.map(t => hb ? `<div class="sw ${cur === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>` : `<div class="sw locked" title="${t[0]} (the Herald's Book)" style="background:${t[1]}" ${lockTip('herald')}></div>`).join('')}${furs ? FUR_SW.map(t => furOk ? `<div class="sw fur ${cur === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[2]}" data-col="${key}|${t[1]}"></div>` : `<div class="sw fur locked" title="${t[0]} (the Herald's Book)" style="background:${t[2]}" ${lockTip('herald')}></div>`).join('') : ''}</div>`;
+    const sw = (key, lbl, cur, furs) => `<div class="swatches"><span class="lbl">${lbl}</span>${TINCTURES.map(t => `<div class="sw ${cur === t[1] ? 'sel' : ''}" data-tip="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}${PACKS.herald.tinctures.map(t => hb ? `<div class="sw ${cur === t[1] ? 'sel' : ''}" data-tip="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>` : `<div class="sw locked" style="background:${t[1]}" ${lockTip('herald')}></div>`).join('')}${furs ? FUR_SW.map(t => furOk ? `<div class="sw fur ${cur === t[1] ? 'sel' : ''}" data-tip="${t[0]}" style="background:${t[2]}" data-col="${key}|${t[1]}"></div>` : `<div class="sw fur locked" style="background:${t[2]}" ${lockTip('herald')}></div>`).join('') : ''}</div>`;
     const lays = [['one', 'one'], ['three', 'three'], ['semy', 'semé (strewn)'], ...(P.ord !== 'none' ? [['onone', 'one on the ordinary'], ['onthree', 'three on it']] : []), ...(party && P.ord === 'none' ? [['counter', 'counterchanged']] : []), ...(P.lay === 'ten' ? [['ten', 'ten (3, 3, 3, 1)']] : [])];
     const chgOf = (k) => { const sku = skuOfCharge(k), ok = !sku || store.has(sku) || (sku === 'herald' && store.has('rolls') && ROLL_CHARGES.includes(k)), t = CHARGE_ROLL[k][0].replace(/^an? /, '');
-      return ok ? `<canvas class="chg ${P.charge === k ? 'sel' : ''}" width="72" height="72" data-chg="${k}" data-chgpv="${k}" title="${t}"></canvas>` : `<canvas class="chg locked" width="72" height="72" data-chgpv="${k}" ${lockTip(sku)} title="${t} (${PACKNAME[sku]})"></canvas>`; };
+      return ok ? `<canvas class="chg ${P.charge === k ? 'sel' : ''}" width="72" height="72" data-chg="${k}" data-chgpv="${k}" data-tip="${t}"></canvas>` : `<canvas class="chg locked" width="72" height="72" data-chgpv="${k}" ${lockTip(sku)}></canvas>`; };
     const chgKeys = Object.keys(CHARGE_ROLL).sort((x, y) => (skuOfCharge(x) ? 1 : 0) - (skuOfCharge(y) ? 1 : 0));
     const histOk = (h) => JSON.stringify(allowedArms(h.arms, ownedSkus())) === JSON.stringify(h.arms);
     const blazon = `<div class="arms-row herald"><div class="armspv"><canvas id="crestBig" width="300" height="356"></canvas>
-        <div class="armsmini"><canvas id="pvBanner" width="120" height="240" title="Banner"></canvas><canvas id="pvTrapper" width="250" height="240" title="Trapper (one flank)"></canvas></div>
+        <div class="armsmini"><canvas id="pvBanner" width="120" height="240" aria-label="Banner"></canvas><canvas id="pvTrapper" width="250" height="240" aria-label="Trapper (one flank)"></canvas></div>
         <p class="blazon">${blazonText(a)}</p>${faults.length ? `<p class="dimtxt rule">Against the rule of tincture (no metal on metal, no colour on colour): ${faults.join('; ')}. Heralds will mutter, but it is your shield.</p>` : ''}</div><div>
         <div class="swatches"><span class="lbl">Field</span>${Object.entries(FIELDS).map(([k, n]) => `<div class="chip ${P.field === k ? 'sel' : ''}" data-fld="${k}">${n}</div>`).join('')}</div>
         ${sw('c1', P.field === 'plain' ? 'Tincture' : 'First', a.c1, true)}${P.field === 'plain' ? '' : sw('c2', 'Second', a.c2, true)}
@@ -521,7 +521,7 @@ export function initMenus(api) {
         ${P.ord === 'none' ? '' : sw('ordT', 'Its tincture', P.ordT, true)}${P.bord ? sw('bordT', 'Bordure', P.bordT, true) : ''}
         <div class="swatches chgrow"><span class="lbl">Charge</span><div class="chip ${P.charge === 'none' ? 'sel' : ''}" data-chg="none">none</div>${chgKeys.map(chgOf).join('')}</div>
         ${P.charge === 'none' ? '' : `<div class="swatches"><span class="lbl">Set out</span>${lays.map(([k, n]) => `<div class="chip ${P.lay === k ? 'sel' : ''}" data-lay="${k}">${n}</div>`).join('')}</div>${P.lay === 'counter' ? '' : sw('c3', 'Its tincture', a.c3, false)}`}
-        <div class="swatches"><span class="lbl">Historic</span>${HISTORIC_ARMS.map((h, i) => histOk(h) ? `<div class="chip" title="${h.note}" data-hist="${i}">${h.name}</div>` : `<div class="chip locked" title="${h.note} (${PACKNAME.herald} or ${PACKNAME.rolls})" ${lockTip('rolls')}>${h.name}</div>`).join('')}${PACKS.rolls.arms.map((h, i) => store.has('rolls') ? `<div class="chip" title="${h.note}" data-roll="${i}">${h.name}</div>` : `<div class="chip locked" title="${h.note} (Rolls of Arms)" ${lockTip('rolls')}>${h.name}</div>`).join('')}</div></div></div>`;
+        <div class="swatches"><span class="lbl">Historic</span>${HISTORIC_ARMS.map((h, i) => histOk(h) ? `<div class="chip" data-tip="${h.note}" data-hist="${i}">${h.name}</div>` : `<div class="chip locked" ${lockTip('rolls')}>${h.name}</div>`).join('')}${PACKS.rolls.arms.map((h, i) => store.has('rolls') ? `<div class="chip" data-tip="${h.note}" data-roll="${i}">${h.name}</div>` : `<div class="chip locked" ${lockTip('rolls')}>${h.name}</div>`).join('')}</div></div></div>`;
     const pv = (kind, id) => `<canvas class="pv" data-pv="${kind}:${id}"></canvas>`;
     const q = (t) => String(t).replace(/"/g, '&quot;');
     const badge = (owned, cur, curWord, price) => `<em class="${owned ? 'own' : (p.gold || 0) < price ? 'cost cant' : 'cost'}">${owned ? curWord : marks(price)}</em>`;
@@ -715,6 +715,10 @@ export function initMenus(api) {
     store.mountStore(el('storeHost'), { show });
   }
   const screens = { main, settings, circuit, exhibition, online, armoury, skills, how, stable, feats, welcome, rankings, account: accountScreen, store: storeScreen };
+  /** Settings over a paused match (the pause menu's Settings button): `back` runs when it is closed (Done, Esc), returning to the pause menu. */
+  let overBack = null;
+  function openOver(back) { overBack = back; show('settings'); }
+  function closeOver() { const f = overBack; overBack = null; root.classList.remove('on'); root.dataset.name = ''; if (f) f(); }
   function show(name) {
     if (name === 'main' && api.profile.named === false) name = 'welcome';      // first visit: your name before anything else
     // re-drawing the screen you are on keeps your place on the page
@@ -764,6 +768,7 @@ export function initMenus(api) {
     if (d.fin) { p.finish = d.fin !== 'plain' && store.has('finishes') && PACKS.finishes.finishes[d.fin] ? d.fin : undefined; api.saveProfile(); api.rebuildPlayer(); return show('armoury'); }
     if (d.roll !== undefined) { if (store.has('rolls') && PACKS.rolls.arms[+d.roll]) { p.arms = JSON.parse(JSON.stringify(PACKS.rolls.arms[+d.roll].arms)); api.saveProfile(); api.rebuildPlayer(); } return show('armoury'); }
     if (d.act === 'fullscreen') { if (api.fullscreen) api.fullscreen(); return; }
+    if (d.go && overBack) return closeOver();      // Settings opened over the pause menu: Done (or any way out) goes back to the pause menu, not the main menu
     if (d.go) { dismissArm = null; if (d.go === 'online') api.online.open(); return show(d.go); }
     if (d.on) {
       const O = api.online;
@@ -855,5 +860,5 @@ export function initMenus(api) {
   root.addEventListener('click', onClick);
   root.addEventListener('mouseover', (e) => { const c = e.target.closest && e.target.closest('[data-cel]'); if (c && api.celPreview && c.dataset.cel !== (api.celPreviewId && api.celPreviewId())) { api.celPreview(c.dataset.cel); root.querySelectorAll('[data-cel].view').forEach(x => x.classList.remove('view')); c.classList.add('view'); } });
 
-  return { show, root, refreshAudio: () => { if (root.dataset.name === 'settings' && root.classList.contains('on')) show('settings'); }, stableHorse: () => stableSel, stableCap: () => stableCap || 'livery' };
+  return { show, openOver, closeOver, overOpen: () => !!overBack, root, refreshAudio: () => { if (root.dataset.name === 'settings' && root.classList.contains('on')) show('settings'); }, stableHorse: () => stableSel, stableCap: () => stableCap || 'livery' };
 }

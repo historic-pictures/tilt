@@ -8,7 +8,7 @@ import { coin, coinsTxt } from './icons.js';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const marks = coinsTxt;      // money reads as coins (the data still counts marks); plain text for sentences and tips
 const coinH = (n) => coin(n);      // the manuscript coin-and-number for table cells
-const tip = (s) => `data-tip="${esc(s)}" title="${esc(s)}"`;
+const tip = (s) => `data-tip="${esc(s)}"`;
 let watch = null, watchTimer = 0;      // the herald reading a day's other pairs: { r, n } = pairs read so far
 
 const pairsToRead = (t, r) => t.rnds[r].pairs.filter(m => m.a !== 'you' && m.b !== 'you');

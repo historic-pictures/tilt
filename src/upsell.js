@@ -115,7 +115,7 @@ function words(o) {
   switch (o.reason) {
     case 'finished_free': return { kicker: o.champion ? 'Champion of Smithfield' : 'Smithfield is ridden', title: o.champion ? 'You\'ve conquered Smithfield' : 'Well ridden at Smithfield', lede: o.champion ? 'The heralds cry your name, and the road runs on across Europe.' : 'That was the free tournament, and the road runs on across Europe.', road };
     case 'event': return { kicker: 'The road goes on', title: `On to ${V.name}`, lede: `${V.name}, ${V.city}, and the rest of the season's calendar come with the full game.`, road };
-    case 'venue': return { kicker: 'Another list awaits', title: `${V.name}, ${V.year}`, lede: `${V.city}. Every venue for a Joust comes with the full game.`, road: '' };
+    case 'venue': return { kicker: 'Another list awaits', title: `${V.name}, ${V.year}`, lede: `${V.city}${V.country ? ', ' + V.country : ''}. Every venue for a Joust comes with the full game.`, road: '' };
     case 'daily_cap': return { kicker: 'That\'s today\'s free jousts', title: 'Rest the horses', lede: `You've ridden ${o.n} free exhibition jousts today, and there are more tomorrow. The full game lifts the limit. Online and training are always free.`, road: '' };
     default: return { kicker: GAME, title: 'Unlock the full game', lede: 'The whole career and every venue.', road };
   }

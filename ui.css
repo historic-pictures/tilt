@@ -23,7 +23,7 @@
   --caps: 'EB Garamond SC', 'EB Garamond', Georgia, serif;
   --body: 'EB Garamond', Georgia, 'Times New Roman', serif;
   --head: var(--caps); --black: var(--display); --pirata: var(--display);
-  --hs: 98px;                      /* the help strip under a menu page (52 + 6 + 1 + 38 margin): menu pages leave this much room */
+  --hs: 112px;                     /* the help strip under a menu page (64 + 6 + 1 + 38 margin = title line + two text lines, never clipped): menu pages leave this much room */
   --bw: 34px;                      /* thickness of the page frame */
   --lz: 14px;                      /* lozenge size in the CSS fallback frame */
 }
@@ -680,9 +680,10 @@ body.touch.portrait #discordBtn { right: calc(var(--sr, 0px) + 56px); bottom: ca
 /* ---------- the help strip: one info bar along the bottom of each menu panel (replaces the floating tooltips in the menus) ---------- */
 .scroll > .helpstrip { position: relative; z-index: 2; font-family: var(--body); color: var(--ink); line-height: 1.22; overflow: hidden; }
 .sheet.scroll > .helpstrip { position: absolute; left: 50px; right: 50px; bottom: 32px; height: 54px; padding: 6px 14px 4px; border-top: 1px solid var(--gold); background: linear-gradient(rgba(255, 250, 228, .0), rgba(226, 191, 94, .16)); }
-.menu.scroll > .helpstrip { margin: 0 34px 38px; height: 52px; padding: 6px 4px 0; border-top: 1px solid var(--gold); font-size: 15px; }
+.menu.scroll > .helpstrip { margin: 0 34px 38px; height: 64px; padding: 6px 4px 0; border-top: 1px solid var(--gold); font-size: 15px; }
 .helpstrip .ht { display: block; font-family: var(--caps); font-size: 13px; letter-spacing: .12em; color: var(--red); font-weight: 400; text-transform: none; }
-.helpstrip .hb { font-size: 17px; font-style: italic; } .menu .helpstrip .hb { font-size: 15px; }
+.helpstrip .hb { font-size: 17px; font-style: italic; }
+.menu.scroll > .helpstrip .hb { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; text-overflow: ellipsis; }      /* fits its lines; a longer text ends in an ellipsis, never cut mid-line */ .menu .helpstrip .hb { font-size: 15px; }
 .helpstrip .coin { display: inline-flex; align-items: center; gap: .15em; vertical-align: middle; font-style: normal; } .helpstrip .coin img, .helpstrip .coin svg { width: 1.1em; height: 1.1em; }
 .sheet.scroll > .page { inset: 0 0 92px 0; }
 @media (max-width: 700px), (max-height: 520px) { .sheet.scroll > .helpstrip { left: 22px; right: 22px; bottom: 22px; height: 46px; padding: 3px 8px 0; } .helpstrip .hb { font-size: 14px; } .helpstrip .ht { font-size: 11px; } .sheet.scroll > .page { inset: 0 0 74px 0; } }
@@ -722,5 +723,6 @@ body.touch.portrait .tabs .tab { padding: 4px 9px; min-height: 34px; font-size: 
 body.touch.compact .armstage { grid-template-columns: 1fr 1fr; grid-template-rows: none; }
 body.touch.compact .armscr .tabbody.armlay { grid-template-rows: minmax(0, 1fr) 96px; }
 /* phones: the help strip may need three lines, so it is taller and the menu pages leave more room for it */
-@media (max-width: 700px) { :root { --hs: 112px; } .menu.scroll > .helpstrip { height: 66px; } }
+@media (max-width: 700px) and (min-height: 521px) { :root { --hs: 128px; } .menu.scroll > .helpstrip { height: 80px; } .menu.scroll > .helpstrip .hb { -webkit-line-clamp: 3; line-clamp: 3; } }      /* portrait phones: three lines */
+@media (max-height: 520px) { :root { --hs: 100px; } .menu.scroll > .helpstrip { height: 54px; margin-bottom: 38px; } .menu .helpstrip .hb { font-size: 13px; } .helpstrip .ht { font-size: 11px; } }      /* landscape phones: little height, smaller type, still two lines */
 body.touch #pmenu kbd, body.touch #pmenu .kbd { display: none; }      /* no keyboard hints on a touch screen */

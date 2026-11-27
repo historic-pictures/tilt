@@ -30,7 +30,7 @@ function heater(g, cx, cy, w, h) {
  * near: closest approach for a miss ({zone, off, d}). opts: { quintain, arms:{c1,c2}, blank, ok }
  */
 const FIG = typeof Image !== 'undefined' ? Object.assign(new Image(), { src: 'assets/ui/tips/figure-512.png' }) : null;
-const pending = new Map();
+const pending = new Map(), dollPending = new Map();
 // The shield in the art: assets/ui/tips/figure-shield.png is its exact mask (alpha, a pixel dilated so the arms tuck under the rim) with the original painting's
 // outline and shading as grey (multiplied back over the arms), cropped to SHX,SHY,SHW,SHH of the figure. SHQ is the quadratic map from a heater shield
 // (u across 0..1, v down 0..1.2, in widths) to the art's pixels, fitted to the mask (IoU 0.98): the shield is curved and angled across his chest.
@@ -38,7 +38,7 @@ const SHX = 111, SHY = 283, SHW = 126, SHH = 157, SHQ = [111.76, 88.42, 46.28, 9
 const shMap = (u, v) => [SHQ[0] + SHQ[1] * u + SHQ[2] * v + SHQ[3] * u * u + SHQ[4] * u * v + SHQ[5] * v * v, SHQ[6] + SHQ[7] * u + SHQ[8] * v + SHQ[9] * u * u + SHQ[10] * u * v + SHQ[11] * v * v];
 const SHIELD = typeof Image !== 'undefined' ? Object.assign(new Image(), { src: 'assets/ui/tips/figure-shield.png' }) : null;
 const ready = () => !!(FIG && FIG.complete && FIG.naturalWidth && SHIELD && SHIELD.complete && SHIELD.naturalWidth);
-const redrawPending = () => { if (!ready()) return; for (const [cv, a] of [...pending]) { pending.delete(cv); drawHitMap(cv, ...a); } };
+const redrawPending = () => { if (!ready()) return; for (const [cv, a] of [...pending]) { pending.delete(cv); drawHitMap(cv, ...a); } for (const [cv, a] of [...dollPending]) { dollPending.delete(cv); drawDoll(cv, ...a); } };
 if (FIG) FIG.onload = redrawPending;
 if (SHIELD) SHIELD.onload = redrawPending;
 const armsCache = new Map();
@@ -130,17 +130,29 @@ export function drawHitMap(cv, res, near, opts = {}) {
   burst(g, cx + Math.max(-1, Math.min(1, off[0])) * r * 0.85, cy - Math.max(-1, Math.min(1, off[1])) * r * 0.85, res.broke || res.unhorse ? 15 : 9);
 }
 
-/** The paper-doll of a harness: shield, helm, breastplate and the shield-side shoulder, tinted from steel (sound) through yellow to red (ruined). dmg: {shield, helm, breast, pauldronL}. */
-export function drawDoll(cv, dmg) {
-  const g = cv.getContext('2d'), W = cv.width, H = cv.height;
-  const tint = (v) => v < 0.04 ? '#d3d0c4' : `hsl(${Math.round(48 - 48 * Math.min(1, v))}, 78%, ${Math.round(58 - 12 * Math.min(1, v))}%)`;
-  g.clearRect(0, 0, W, H); g.lineJoin = 'round'; g.lineWidth = 2; g.strokeStyle = INK;
-  const part = (v, draw) => { g.fillStyle = tint(v); g.beginPath(); draw(); g.fill(); g.stroke(); };
-  g.fillStyle = '#b9b3a1'; g.beginPath(); g.moveTo(14, 28); g.lineTo(9, 56); g.lineTo(15, 58); g.lineTo(20, 34); g.fill(); g.stroke();   // his lance arm
-  part(0, () => { g.moveTo(21, 54); g.lineTo(19, 70); g.lineTo(37, 70); g.lineTo(35, 54); g.closePath(); });                          // the harness below
-  part(dmg.breast, () => { g.moveTo(17, 27); g.quadraticCurveTo(28, 21, 39, 27); g.lineTo(36, 54); g.lineTo(20, 54); g.closePath(); });
-  part(dmg.pauldronL, () => g.ellipse(41, 29, 7, 6, 0.3, 0, Math.PI * 2));
-  part(dmg.helm, () => g.arc(28, 14, 9, 0, Math.PI * 2));
-  g.lineWidth = 2.5; g.beginPath(); g.moveTo(22, 14); g.lineTo(34, 14); g.stroke(); g.lineWidth = 2;
-  part(dmg.shield, () => { g.moveTo(37, 34); g.lineTo(55, 34); g.lineTo(55, 47); g.bezierCurveTo(55, 54, 49, 59, 46, 62); g.bezierCurveTo(43, 59, 37, 54, 37, 47); g.closePath(); });
+/** The HUD's pair of little knights: the painted figure of the hit diagram (assets/ui/tips/figure-512.png) at HUD size, his own arms on the shield, drawn at 3x so it stays crisp.
+ *  The harness state is not painted into the art: a ring (steel-bright when sound, going yellow then red as it is ruined) sits on each damaged part (helm, shield, breast, shield-side shoulder),
+ *  and four small pips under his feet (H helm, S shield, B breast, P pauldron) show the state of all four at a glance. dmg: {shield, helm, breast, pauldronL}; arms: his heraldry. */
+export function drawDoll(cv, dmg, arms) {
+  const LW = 40, LH = 72, dpr = 3, FH = 58, k = FH / 187, a = arms || { c1: '#a81e1e', c2: '#ece8dc' };
+  if (cv.width !== LW * dpr) { cv.width = LW * dpr; cv.height = LH * dpr; }
+  const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+  if (!ready()) { dollPending.set(cv, [dmg, arms]); return; } dollPending.delete(cv);
+  if (!heraldryReady() && needsAtlas(a)) whenHeraldry(() => drawDoll(cv, dmg, arms));
+  const tint = (v) => v < 0.04 ? null : `hsl(${Math.round(52 - 52 * Math.min(1, v))}, 85%, ${Math.round(56 - 8 * Math.min(1, v))}%)`;
+  g.setTransform(dpr * k, 0, 0, dpr * k, dpr * (LW / 2 - 84 * k), 0);      // the figure's hit-diagram coordinates, scaled down; his body is centred on x = 84
+  const [x0, y0] = P(0, -FEXT), dh = 650 * FSC;
+  g.drawImage(FIG, x0, y0, 272 * FSC, dh);
+  const dx = x0 + SHX * FSC, dy = y0 + SHY * FSC, dw = SHW * FSC, dhh = SHH * FSC;
+  g.drawImage(shieldArms(a), dx, dy, dw, dhh);
+  g.save(); g.globalCompositeOperation = 'multiply'; g.drawImage(SHIELD, dx, dy, dw, dhh); g.restore();
+  const parts = [['helm', Zc(130, 85, 12)], ['shield', Zc(172, 212, 17)], ['breast', Zc(125, 290, 15)], ['pauldronL', Zc(185, 150, 9)]];
+  g.lineWidth = 4.5;
+  for (const [key, z] of parts) { const c = tint(dmg[key] || 0); if (!c) continue; g.strokeStyle = c; g.shadowColor = c; g.shadowBlur = 6; g.beginPath(); g.arc(z[0], z[1], z[2], 0, Math.PI * 2); g.stroke(); }
+  g.shadowBlur = 0;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ['helm', 'shield', 'breast', 'pauldronL'].forEach((key, i) => {      // the pips: steel when sound
+    const x = LW / 2 + (i - 1.5) * 8, y = LH - 7; g.fillStyle = tint(dmg[key] || 0) || '#c9c6bb'; g.strokeStyle = INK; g.lineWidth = 1;
+    g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); g.fill(); g.stroke();
+  });
 }

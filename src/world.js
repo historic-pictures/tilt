@@ -17,9 +17,9 @@ import { skyNow, loadSky, skyFromPhoto } from './scans.js';
 import { rng, TAU, box, limb, grassTexture, sandTexture, woodTexture, stoneTexture, stripeTexture, armsTexture, canvasTex, photoSet, photoTex, worldUV, detailWorld } from './util.js';
 
 export const LIST_HALF = 32;      // half-length of the tilt barrier
-export const LANE_X = 0.62;       // rider offset from the tilt
+export const LANE_X = 0.72;       // rider offset from the tilt (0.62 from the drone footage rode too close to the barrier: the flank 0.14 m from the cloth; 0.72 gives a hand's breadth more)
 // Where a horse touches the tilt (its cloth is +-0.17, the barrel 0.31 wide: 0.5 is the flank brushing it) and the riding line's good, close and wide limits, all on the rider's offset from the tilt (was 0.7 / 0.8 / 0.84 / 1.3 with the lane at 0.95).
-export const BARRIER_X = 0.5, LAT_CLOSE = 0.56, LAT_SHAVE = 0.58, LAT_WIDE = 1.0;
+export const BARRIER_X = 0.58, LAT_CLOSE = 0.65, LAT_SHAVE = 0.67, LAT_WIDE = 1.16;      // all scaled by 0.72 / 0.62 with the lane (were 0.5 / 0.56 / 0.58 / 1.0)
 export const START_Z = 40;        // riders start at +-START_Z
 
 const BANNER_ARMS = [

@@ -36,6 +36,16 @@ function loadApi() {
   return apiP;
 }
 
+/** Draw the next index from a shuffled bag held on `st` (_bag, _bagN): all n songs once each before any repeat, never `cur` again straight away. Exported for the unit test. */
+export function bagDraw(st, n, cur, rnd = Math.random) {
+  if (!st._bag || !st._bag.length || st._bagN !== n) {
+    st._bagN = n; st._bag = Array.from({ length: n }, (_, i) => i).filter(i => i !== cur);
+    for (let i = st._bag.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [st._bag[i], st._bag[j]] = [st._bag[j], st._bag[i]]; }
+  }
+  let i = st._bag.pop(); if (i === cur && st._bag.length) i = st._bag.pop();
+  return i;
+}
+
 const listeners = new Set();
 export const ytmusic = {
   DEFAULTS: { '_yICA0JNmig': 'Big Poppa (bardcore)', '3okjFDo2aSU': 'The Real Slim Shady (bardcore)', 'L1Uvr5v8IOE': 'Still Dre (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)", 'zg3Ggn3CMgU': 'Lose Yourself (bardcore)', 't70UQr_fMgM': 'The Next Episode (bardcore)', 'XbigmX35ICQ': 'Blinding Lights (bardcore)', 'kJWvmSJ3k9Q': 'What Is Love (bardcore)', 'nKGsnHF7PTI': 'Hey Ya! (bardcore)', 'AWEwF0PGTmI': 'Land Down Under (medieval)', 'p8M2TPZG0f4': 'Gimme! Gimme! Gimme! (medieval)', 'YMnC1SHxct0': 'Ms. Jackson (bardcore)', 'NOPPcsrsM4M': 'Numb/Encore (bardcore)', 'Z83PICHUwSc': 'Eiffel 65 - Blue (Da Ba Dee)' },
@@ -68,14 +78,14 @@ export const ytmusic = {
     this.collapsed = innerWidth < 1500; try { const c = localStorage.getItem(CKEY); if (c !== null) this.collapsed = c === '1'; } catch (e) { /* default */ }       // small windows start collapsed; the choice is remembered
     const b = this.box = document.createElement('div'); b.id = 'ytbox'; b.dataset.where = this._where || 'menu'; b.dataset.tip = 'YouTube music: a YouTube player that has to stay visible while it plays. Pause or skip here, or press the cross to switch it off.';
     b.hidden = this.held;
-    b.innerHTML = `<div class="ythead"><span id="ytnow">YouTube</span><b data-yt="play" id="ytplay" aria-label="Pause" title="Pause">❚❚</b><b data-yt="next" aria-label="Next" title="Next">▶▶</b><b data-yt="fold" id="ytfold" aria-label="Collapse" title="Collapse">▴</b><b data-yt="stop" aria-label="Switch YouTube music off" title="Switch YouTube music off">✕</b></div><div id="ytnote"></div><div id="ytframe"><div id="ytplayer"></div></div>`;
+    b.innerHTML = `<div class="ythead"><span id="ytnow">YouTube</span><b data-yt="play" id="ytplay" aria-label="Pause">❚❚</b><b data-yt="next" aria-label="Next">▶▶</b><b data-yt="fold" id="ytfold" aria-label="Collapse">▴</b><b data-yt="stop" aria-label="Switch YouTube music off">✕</b></div><div id="ytnote"></div><div id="ytframe"><div id="ytplayer"></div></div>`;
     b.addEventListener('click', (e) => { const t = e.target.closest('[data-yt]'); if (!t) return; const k = t.dataset.yt; if (k === 'next') this.next(); else if (k === 'play') this.toggle(); else if (k === 'fold') this.setCollapsed(!this.collapsed); else this._emit('stop'); });
     document.body.appendChild(b); document.body.classList.add('ytdock'); this._layout(); return b;
   },
   _layout() {
     const [w, h] = this._size, f = document.getElementById('ytframe'), b = this.box; if (!f || !b) return;
     b.classList.toggle('min', this.collapsed); b.style.width = w + 'px'; f.style.width = w + 'px'; f.style.height = h + 'px';
-    const fb = document.getElementById('ytfold'); if (fb) { fb.textContent = this.collapsed ? '▾' : '▴'; fb.title = this.collapsed ? 'Expand' : 'Collapse'; fb.setAttribute('aria-label', fb.title); }
+    const fb = document.getElementById('ytfold'); if (fb) { fb.textContent = this.collapsed ? '▾' : '▴'; fb.setAttribute('aria-label', this.collapsed ? 'Expand' : 'Collapse'); }
     if (this.player && this.ready) try { this.player.setSize(w, h); } catch (e) { /* ignore */ }
   },
   setCollapsed(c) { this.collapsed = !!c; try { localStorage.setItem(CKEY, c ? '1' : '0'); } catch (e) { /* ignore */ } this._layout(); },
@@ -84,7 +94,7 @@ export const ytmusic = {
     try { const s = this.player.getPlayerState(); if (s === 1 || s === 3) { this.wantPlay = false; this.player.pauseVideo(); } else { this.wantPlay = true; this.player.playVideo(); } } catch (e) { /* ignore */ }
     this._playIcon();
   },
-  _playIcon() { const p = document.getElementById('ytplay'); if (!p) return; const on = this.wantPlay; p.textContent = on ? '❚❚' : '▶'; p.title = on ? 'Pause' : 'Play'; p.setAttribute('aria-label', p.title); },
+  _playIcon() { const p = document.getElementById('ytplay'); if (!p) return; const on = this.wantPlay; p.textContent = on ? '❚❚' : '▶'; p.setAttribute('aria-label', on ? 'Pause' : 'Play'); },
   /** FIFA-style: music belongs to the menus. on = a match is starting: fade out over 1 s, then pause (not stop) and hide the box. Off = back in the menus: show, play, fade in. */
   hold(on) {
     on = !!on; if (this.held === on) return; this.held = on; clearInterval(this._ft);
@@ -113,17 +123,15 @@ export const ytmusic = {
     this.title = (d && d.title) || ''; const n = document.getElementById('ytnow'); if (n) n.textContent = this.title || 'YouTube'; this._emit('now');
   },
   _load() { try { const id = this.curId; if (id) this.player.loadVideoById(id); } catch (e) { /* ignore */ } },
-  // Shuffle (owner, 27 Nov): the session still opens on the first track of the list; after that each next track is drawn from a shuffled bag,
-  // so every song plays once before any repeats and the same song never plays twice in a row.
+  // True shuffle (owner, 27 Nov: "I said music should be on shuffle"): a new session opens on a random track, and from then on every track is drawn from a shuffled bag,
+  // so every song plays once before any repeats and the same song never plays twice in a row. (Coming back from a match resumes the same song: _restorePos.)
   next() {
     const n = this.ids.length; if (!n) return;
-    if (n > 1) {
-      const cur = this.idx % n;
-      if (!this._bag || !this._bag.length || this._bagN !== n) { this._bagN = n; this._bag = Array.from({ length: n }, (_, i) => i).filter(i => i !== cur); for (let i = this._bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [this._bag[i], this._bag[j]] = [this._bag[j], this._bag[i]]; } }
-      this.idx = this._bag.pop(); if (this.idx === cur && this._bag.length) this.idx = this._bag.pop();
-    }
+    if (n > 1) this.idx = bagDraw(this, n, this.idx % n);
     this._setNote(''); if (this.ready) this._load();
   },
+  /** The session's opening track: random, once per page load (the box's first start), not the head of the list. */
+  _openRandom() { if (this._opened) return; this._opened = true; const n = this.ids.length; if (n > 1) this.idx = bagDraw(this, n, -1); },
   /** Show the box and start (or resume) playing. The first call must come from a user gesture. */
   async start() {
     this.wantPlay = true;
@@ -131,6 +139,7 @@ export const ytmusic = {
     if (this.held) return;
     if (this.player && this.ready) { this._apply(); try { const s = this.player.getPlayerState(); if (s !== 1 && s !== 3) this.player.playVideo(); } catch (e) { /* ignore */ } return; }
     if (this._starting || this.player) return; this._starting = true;
+    this._openRandom();
     try {
       const YT = await loadApi(); if (!this.wantPlay) return;
       this._ensureBox();

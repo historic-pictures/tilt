@@ -199,7 +199,7 @@ export function mountStore(host, ctx = {}) {
     const card = (P) => {
       const A = ABOUT[P.id] || { lines: [] }, own = has(P.id);
       const crests = (SAMPLE[P.id] || []).map((a) => `<canvas width="40" height="48" data-arms='${JSON.stringify(a)}'></canvas>`).join('');
-      const sw = P.id === 'finishes' ? Object.values(PACKS.finishes.finishes).map((f) => `<span class="sw" title="${esc(f.name)}" style="background:#${f.tint.toString(16).padStart(6, '0')}"></span>`).join('') : '';
+      const sw = P.id === 'finishes' ? Object.values(PACKS.finishes.finishes).map((f) => `<span class="sw" data-tip="${esc(f.name)}" style="background:#${f.tint.toString(16).padStart(6, '0')}"></span>`).join('') : '';
       const extra = P.id === 'patron' && patrons && patrons.length ? `<p class="patronroll">The roll of Grand Patrons: ${patrons.map(esc).join(', ')}</p>` : '';
       return `<div class="panel pick card ${P.id} ${focusSku === P.id ? 'focus' : ''}" data-tip="${esc(A.lead || '')}">
         <div class="head"><div><b>${esc(P.name)}</b>${P.founder && !own ? ' <span class="founder">Founder\'s price</span>' : ''}

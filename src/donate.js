@@ -45,7 +45,7 @@ export function mountDonate(host, opts = {}) {
   if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'btn plaque donate-btn'; b.setAttribute('data-tip', 'Support Joust Revival with a gift. It buys nothing in the game; it keeps it going.');
-  b.title = 'Support Joust Revival'; b.innerHTML = `${PURSE}<span>${opts.label || 'Support'}</span>`;
+  b.setAttribute('aria-label', 'Support Joust Revival'); b.innerHTML = `${PURSE}<span>${opts.label || 'Support'}</span>`;
   b.addEventListener('click', (e) => { e.stopPropagation(); if (opts.ui) opts.ui('click'); openDonate(opts); });
   host.appendChild(b);
   return b;

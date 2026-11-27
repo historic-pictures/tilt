@@ -96,16 +96,18 @@ export const KNIGHTS = [
 ];
 
 // The circuit. Each venue re-dresses the lists.
+/** "London, England": the place line of a venue, with its modern country (owner, 27 Nov: jousts should have the country). */
+export const venuePlace = (V) => V.country ? `${V.city}, ${V.country}` : V.city;
 export const VENUES = [
-  { id: 'smithfield', sky: 'sunflowers_puresky', zenith: 0x2a66c8, horizon: 0xb4d2f0, sunCol: 0xfff2dc, clouds: 0.55, name: 'Smithfield', city: 'London', year: 1390, host: 'clifford', blurb: 'King Richard\'s great jousts outside the city walls. The stands were built by the King\'s Clerk of Works, one Geoffrey Chaucer.',
+  { id: 'smithfield', sky: 'sunflowers_puresky', zenith: 0x2a66c8, horizon: 0xb4d2f0, sunCol: 0xfff2dc, clouds: 0.55, name: 'Smithfield', city: 'London', country: 'England', year: 1390, host: 'clifford', blurb: 'King Richard\'s great jousts outside the city walls. The stands were built by the King\'s Clerk of Works, one Geoffrey Chaucer.',
     sun: [-0.55, 0.62, -0.45], turbidity: 2.2, rayleigh: 2.2, fog: 0xc4d6e4, grass: '#5b7a36', sand: '#b89a6a', awn: ['#8f1d1d', '#eadfbe'], awn2: ['#1f3f7a', '#eadfbe'], tilt: ['#a3201f', '#efe6cf'], crowd: 1.0, home: -0.15 },
-  { id: 'inglevert', sky: 'kloofendal_48d_partly_cloudy_puresky', zenith: 0x2f7bdc, horizon: 0xc6e2f6, sunCol: 0xfff6e6, clouds: 0.42, name: 'Saint-Inglevert', city: 'Calais', year: 1390, host: 'renaud', blurb: 'Three French knights hold the field against all comers for thirty days.',
+  { id: 'inglevert', sky: 'kloofendal_48d_partly_cloudy_puresky', zenith: 0x2f7bdc, horizon: 0xc6e2f6, sunCol: 0xfff6e6, clouds: 0.42, name: 'Saint-Inglevert', city: 'Calais', country: 'France', year: 1390, host: 'renaud', blurb: 'Three French knights hold the field against all comers for thirty days.',
     sun: [0.35, 0.8, -0.5], turbidity: 1.6, rayleigh: 1.7, fog: 0xcfe0ee, grass: '#6f8a3c', sand: '#cbb383', awn: ['#1f4690', '#e9d27a'], awn2: ['#ece8dc', '#1f4690'], tilt: ['#1f4690', '#e9d27a'], crowd: 0.9, home: -0.3 },
-  { id: 'leon', sky: 'qwantani_afternoon_puresky', zenith: 0x2b6fd6, horizon: 0xe6dcc0, sunCol: 0xfff0cf, clouds: 0.22, name: 'Passo Honroso', city: 'Órbigo, León', year: 1434, host: 'quinones', blurb: 'Quiñones holds the bridge until three hundred lances are broken.',
+  { id: 'leon', sky: 'qwantani_afternoon_puresky', zenith: 0x2b6fd6, horizon: 0xe6dcc0, sunCol: 0xfff0cf, clouds: 0.22, name: 'Passo Honroso', city: 'Órbigo, León', country: 'Spain', year: 1434, host: 'quinones', blurb: 'Quiñones holds the bridge until three hundred lances are broken.',
     sun: [-0.2, 0.9, 0.35], turbidity: 1.2, rayleigh: 1.3, fog: 0xe2dccb, grass: '#8b8a45', sand: '#d3b57e', awn: ['#b5561c', '#f0e2b6'], awn2: ['#a81e1e', '#e0b83c'], tilt: ['#e0b83c', '#a81e1e'], crowd: 0.95, home: -0.35 },
-  { id: 'bruges', sky: 'evening_road_01_puresky', zenith: 0x3c5fae, horizon: 0xf2c596, sunCol: 0xffc98a, clouds: 0.62, name: 'The Golden Tree', city: 'Bruges', year: 1468, host: 'lalaing', blurb: 'The Burgundian court\'s wedding pas d\'armes, the richest tourney in Christendom.',
+  { id: 'bruges', sky: 'evening_road_01_puresky', zenith: 0x3c5fae, horizon: 0xf2c596, sunCol: 0xffc98a, clouds: 0.62, name: 'The Golden Tree', city: 'Bruges', country: 'Belgium', year: 1468, host: 'lalaing', blurb: 'The Burgundian court\'s wedding pas d\'armes, the richest tourney in Christendom.',
     sun: [-0.28, 0.4, -0.86], turbidity: 8, rayleigh: 2.4, fog: 0xe6cfb4, grass: '#55733a', sand: '#b3925f', awn: ['#6b2478', '#e0b83c'], awn2: ['#191919', '#e0b83c'], tilt: ['#6b2478', '#e0b83c'], crowd: 1.15, home: -0.4 },
-  { id: 'nuremberg', sky: 'kloppenheim_03_puresky', zenith: 0x35629f, horizon: 0xc4d0dc, sunCol: 0xfff0e0, clouds: 0.72, name: 'Gesellenstechen', city: 'Nuremberg', year: 1501, host: 'freydal', blurb: 'The patricians\' joust in the market square, before the Emperor himself.',
+  { id: 'nuremberg', sky: 'kloppenheim_03_puresky', zenith: 0x35629f, horizon: 0xc4d0dc, sunCol: 0xfff0e0, clouds: 0.72, name: 'Gesellenstechen', city: 'Nuremberg', country: 'Germany', year: 1501, host: 'freydal', blurb: 'The patricians\' joust in the market square, before the Emperor himself.',
     sun: [0.5, 0.5, 0.55], turbidity: 3.5, rayleigh: 2.6, fog: 0xc9d2da, grass: '#4f6f39', sand: '#a88d62', awn: ['#191919', '#e0b83c'], awn2: ['#a81e1e', '#ece8dc'], tilt: ['#191919', '#e0b83c'], crowd: 1.2, home: -0.5 },
 ];
 
@@ -405,12 +407,13 @@ export const PHYS = {
     sway: 0.008, roll: 0.012, yaw: 0.012,   // synthetic saddle motion at full gallop: sideways (m), roll (rad), twist of the pelvis (rad), once per stride
     surgeW: 8, surgeZ: 0.5, surgeK: 0.08, surgeMax: 0.16,   // jolt at the start and the stop: w and zeta of the follower on ground speed; rad of trunk pitch per m/s of lag (back on starting, forward on stopping)
     legF: 2.5, legSwing: 1.4, legSide: 1.2,    // legs: thigh flex (rad) per metre of the pelvis's vertical give; shin fore-aft swing (rad) per rad of pitch lag; sideways rad per metre of sway lag
-    tipW: 20, tipZ: 0.16, tipY: 0.9, tipX: 0.5,    // couched lance, a heavy beam: bending w (rad/s) and zeta; the tip's travel (m) per metre the hand moves up/down and sideways
+    tipW: 20, tipZ: 0.16, tipY: 0.6, tipX: 0.33,      // (tipY 0.9 -> 0.6, tipX 0.5 -> 0.33: less shake for playability (owner, 27 Nov))    // couched lance, a heavy beam: bending w (rad/s) and zeta; the tip's travel (m) per metre the hand moves up/down and sideways
     // PENDING PLAYTEST: aimTip is the VISIBLE stride bob of the lance tip (m of tip travel, amplitude; with the chain's own ~8 cm it gives about 40 cm p-p at full gallop, as filmed). Only `aimShare` of it
     // (strike tip about 35% of the visible bob p-p) perturbs the aim: Jouster.tipWorld (what every strike reads) turns the tip back by the rest. Raise aimShare to make the bob matter more; 0 = pure show.
-    aimTip: 0.18,
-    aimShare: 0.23,      // measured with tools/ride_probe.js meas(10.5,1): visible tip 40.5 cm p-p, strike tip 14 cm p-p (35%) with the chain's own 8 cm included
-    shW: 16, shZ: 0.22, shK: 0.8,    // the shield arm: w, zeta, and how much of the chest's motion it adds as shake
+    aimTip: 0.12,      // 0.18: less shake for playability (owner, 27 Nov)
+    aimShare: 0.12,    // 0.23: less shake for playability (owner, 27 Nov)      // measured with tools/ride_probe.js meas(10.5,1): visible tip 40.5 cm p-p, strike tip 14 cm p-p (35%) with the chain's own 8 cm included
+    shW: 16, shZ: 0.22, shK: 0.5,      // (shK 0.8 -> 0.5: less shake for playability (owner, 27 Nov))
+    //    // the shield arm: w, zeta, and how much of the chest's motion it adds as shake
     // The horse's BODY under the rider (Jouster._horseMotion): film (docs/mocap-findings.md) shows the rider sits still on the horse (helm 4.9 cm p-p against the poll, torso 1.4 deg) and the
     // visible 'jumping about' is the horse pitching (14 deg p-p, 2.3-2.5 Hz) and rolling (7 deg p-p) under him. Added on the body and the model about a point near the girth, once per
     // stride (roll partly at half the stride), scaled walk -> canter -> gallop. The clip's own pitch (about 6 deg p-p) is already in the total.
@@ -591,7 +594,7 @@ export const PHYS = {
     aiYield: 0.06,      /* was 0.35: the AI that is DOUBTFUL and far behind yields only very rarely (owner, 27 Nov) */ aiBehind: 3, spares: 3,
     dropPower: 0.7, dropArm: 0.5, dropLean: 0.8, dropChance: 0.45, dropMax: 1,
     dazeBase: 0.9, dazePower: 1.1, dazeHelm: 1.35, dazeMax: 3, dazeAim: 2.2, oppDaze: 1.6, dazeBlur: 0.8 },
-  lanceArm: { wnLoose: 5.5, wnSet: 11.5, zetaLoose: 0.35, zetaSet: 0.68, refKg: 5.5, lever: 0.36, tremor: 0.5, tremorFatigue: 2.6, tremorAgit: 1.4 },
+  lanceArm: { wnLoose: 5.5, wnSet: 11.5, zetaLoose: 0.35, zetaSet: 0.68, refKg: 5.5, lever: 0.36, tremor: 0.32, tremorFatigue: 1.7, tremorAgit: 0.9 }      // tremor 0.5 / 2.6 / 1.4 before: less shake for playability (owner, 27 Nov); the aim spring's noise only, the impact physics is untouched,
 };
 
 // EQUAL_GEAR (config.js): the one choke point. While it is on, the stat fields of every horse, harness, helm and lance (and PHYS.horseKg / armourKg / lance) are overwritten, once, at load,
