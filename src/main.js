@@ -1756,6 +1756,13 @@ function updateRide(dt, dtReal) {
 
 // ------------------------------------------------------------------ the victory lap (single player): the winner rides to the royal box, the loser to his tent
 const LAP_END = 9.8, LAP_CUT1 = 4.4, LAP_CUT2 = 7.2;
+// The winner's lap stays on the sand and well clear of the judges' stand (x 7.8..9.6, z +-1.9: src/judges.js) and the fence (x +-9.5, z +-51): he halts at LAP_X facing it, the
+// head of the horse 1.6 m short of the stand. (It was x = 7: the horse's head and chest went into the judges' table, and the far-side detour ran out past the end fence at z = 55.)
+const LAP_X = 4.4, LAP_XMAX = 4.9, LAP_ZMAX = 47.5, LAP_XMIN = -7.2;
+function lapKeep(r) {
+  r.position.z = clamp(r.position.z, -LAP_ZMAX, LAP_ZMAX);
+  r.position.x = Math.abs(r.position.z) < 4 ? clamp(r.position.x, LAP_XMIN, LAP_XMAX) : clamp(r.position.x, LAP_XMIN, 6.4);
+}
 const lapOk = () => !S.online && !M.practice && !M.void && !/yield|forfeit/.test(M.result || '') && G.lap !== false && !(M.bridge && !M.bridge.final);
 /** Settle a drawn knockout match: more lances broken, else the marshals draw lots. */
 function settleTie() {
@@ -1770,7 +1777,7 @@ function lapStart() {
   const wp = W.root.position, sg = Math.sign(wp.z) || 1, wx = wp.x >= 0;
   const lp = L.root.position, lsx = Math.sign(lp.x) || 1, lsz = Math.sign(lp.z) || sg;
   C.lap = { t: 0, W, L, draw, shot: 0, arrived: false, saluted: false, ended: false,
-    w: { wps: wx ? [[7, 0]] : [[-7, sg * 50], [3, sg * 55], [7, sg * 32], [7, 0]], i: 0, vmax: 9, finalYaw: Math.PI / 2 },
+    w: { wps: wx ? [[LAP_X, 0]] : [[-4.5, sg * 46], [3.5, sg * 43], [LAP_X, sg * 30], [LAP_X, 0]], i: 0, vmax: 9, finalYaw: Math.PI / 2, keep: true },
     l: { wps: [[lsx * 13, lsz * 70]], i: 0, vmax: 3.8, finalYaw: null } };
   const win = res.startsWith('win'), TO = M.tourn, pf = TO && win ? career.purseFactor(TO.rounds, TO.round) : 1;
   const marks = Math.round(purse(M.vIdx, win ? res : 'win', M.circuit) * (win || !TO ? pf : 1));
@@ -1792,7 +1799,7 @@ function lapRider(j, st, dt) {
   const dy = wrapA(want - st.yaw), vmax = last ? clamp(dist * 0.8, 0, st.vmax) : st.vmax, vt = Math.abs(dy) > 1.0 ? Math.min(vmax, 3.5) : vmax;
   st.v += clamp(vt - st.v, -5 * dt, 3 * dt);
   st.yaw += clamp(dy, -clamp(2.6 - st.v * 0.17, 0.8, 2.6) * dt, clamp(2.6 - st.v * 0.17, 0.8, 2.6) * dt);
-  r.position.x += Math.sin(st.yaw) * st.v * dt; r.position.z += Math.cos(st.yaw) * st.v * dt; r.rotation.y = st.yaw; r.rotation.z = damp(r.rotation.z, 0, 4, dt);
+  r.position.x += Math.sin(st.yaw) * st.v * dt; r.position.z += Math.cos(st.yaw) * st.v * dt; if (st.keep) lapKeep(r); r.rotation.y = st.yaw; r.rotation.z = damp(r.rotation.z, 0, 4, dt);
   j.speed = st.v; j.manualPos = true; st.dist = dist;
   st.done = last && dist < 1.3 && st.v < 0.5 && (st.finalYaw == null || Math.abs(wrapA(st.finalYaw - st.yaw)) < 0.15);
 }
@@ -1804,9 +1811,9 @@ function lapStep(dt) {
   const W = P.W, L = P.L, w = P.w, wr = W.root;
   if (!L.unhorsed) lapRider(L, P.l, dt);
   // the cut to the box hides a long way round: the winner is put on the last stretch if he is still far off
-  if (P.t >= LAP_CUT1 && !P.cut1) { P.cut1 = true; if (w.i < w.wps.length - 1 || (w.dist || 0) > 16) { w.i = w.wps.length - 1; const sg = Math.sign(wr.position.z) || 1; wr.position.set(7, 0, sg * 14); w.yaw = Math.atan2(0, -sg); wr.rotation.y = w.yaw; w.v = 6; w.init = true; } }
+  if (P.t >= LAP_CUT1 && !P.cut1) { P.cut1 = true; if (w.i < w.wps.length - 1 || (w.dist || 0) > 16) { w.i = w.wps.length - 1; const sg = Math.sign(wr.position.z) || 1; wr.position.set(LAP_X, 0, sg * 14); w.yaw = Math.atan2(0, -sg); wr.rotation.y = w.yaw; w.v = 6; w.init = true; } }
   lapRider(W, w, dt);
-  if (P.t >= LAP_CUT2 - 0.8 && !w.done && !P.arrived) { wr.position.set(7, 0, 0); w.yaw = Math.PI / 2; wr.rotation.y = w.yaw; w.v = 0; W.speed = 0; w.done = true; }
+  if (P.t >= LAP_CUT2 - 0.8 && !w.done && !P.arrived) { wr.position.set(LAP_X, 0, 0); w.yaw = Math.PI / 2; wr.rotation.y = w.yaw; w.v = 0; W.speed = 0; w.done = true; }
   if (w.done && !P.arrived) { P.arrived = true; W.raiseT = 1; }
   if (P.arrived && !P.cel) { P.cel = true; if (!P.draw) celMatch(W, L); }
   if (P.arrived && !P.saluted) { P.saluted = true; react('salute', W === player ? 1 : -1, false); if (world.setRoyalMood) world.setRoyalMood('applaud'); if (!P.draw && L !== player) L.raiseT = 0; if (P.draw) L.raiseT = 1; }
@@ -1818,7 +1825,7 @@ function lapCamera() {
   const snap = P.shot !== shot; P.shot = shot; let fov = 40;
   if (C.cel && C.cel.cam && W.cel) { const r = celCam(W, W.cel.t, W.cel.dur, want, wantLook), sn = C.cel.shot !== r.shot && camPos.distanceTo(want) > 14; C.cel.shot = r.shot; return { snap: snap || sn, fov: r.fov, rate: r.rate }; }
   if (shot === 1) { const sx = Math.sign(p.x) || 1, c = Math.cos(P.w.yaw || 0); want.set(-sx * 4.5 + p.x * 0.2, 1.7 + dw, p.z - c * 5); wantLook.set(p.x, 1.7 + dw, p.z + c * 1.5); fov = 40; }
-  else if (shot === 2) { want.set(-2.5, 2.1 + dw, -6.5); wantLook.set(9.2, 2.5 + dw, 0); fov = 40; }
+  else if (shot === 2) { want.set(-2.5, 2.1 + dw, -6.5); wantLook.set(LAP_X + 2, 2.5 + dw, 0); fov = 40; }
   else if (L.unhorsed) { const f = afterM.focus(L, _d) || L.rider.position; want.set(f.x + (Math.sign(f.x) || 1) * 5.5, 1.6, f.z + 3.2 * (L.dir || 1)); wantLook.set(f.x, 0.3 + f.y * 0.7 + 0.4, f.z); fov = 36; }      // the beaten man on his feet, his squire and his horse
   else { const q = L.root.position, y = P.l.yaw || 0; want.set(q.x - Math.sin(y) * 7 + 3, 2.1 + dl, q.z - Math.cos(y) * 7); wantLook.set(q.x + Math.sin(y) * 3, 1.6 + dl, q.z + Math.cos(y) * 3); fov = 36; }
   return { snap, fov };
