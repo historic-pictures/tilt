@@ -3,10 +3,10 @@
 // Lists are kept in localStorage 'tilt.ytlist' (video ids). The default list is "Mates' radio".
 const KEY = 'tilt.ytlist';
 // Opens with Big Poppa (bardcore); the whole list loops.
-export const DEFAULT_IDS = ['BROaC0gtyQs', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'];
+export const DEFAULT_IDS = ['BROaC0gtyQs', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc', 'drDs-Y5DNH8', 'SGx3IY95bAI', 'wVCE6HqAPts', 'QXQHog8BHTI', 'emyE_GQNFW4', 'skfZBqH1NgM', 'xpxCu2q_99A', 'I5TB9DT6s-E', 'RZ4H0KJezNE'];
 // Earlier default lists: a saved list equal to one of these was never customised, so it follows the new default.
-const OLD_DEFAULTS = [['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'], ['3okjFDo2aSU', 'dywM446-vcE', 'Z83PICHUwSc'], ['_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'], ['-tJYN-eG1zk', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc']].map(a => a.join());
-const DUCK = 0.35, MIN = 200, BIG_W = 320, BIG_H = 220, FADE_MS = 1000, CKEY = 'tilt.ytcollapsed';
+const OLD_DEFAULTS = [['Z83PICHUwSc', '3okjFDo2aSU', 'dywM446-vcE'], ['3okjFDo2aSU', 'dywM446-vcE', 'Z83PICHUwSc'], ['_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'], ['-tJYN-eG1zk', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'], ['BROaC0gtyQs', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc'], ['BROaC0gtyQs', '_yICA0JNmig', '3okjFDo2aSU', 'L1Uvr5v8IOE', 'dywM446-vcE', 'zg3Ggn3CMgU', 't70UQr_fMgM', 'XbigmX35ICQ', 'kJWvmSJ3k9Q', 'nKGsnHF7PTI', 'AWEwF0PGTmI', 'p8M2TPZG0f4', 'YMnC1SHxct0', 'NOPPcsrsM4M', 'Z83PICHUwSc', 'drDs-Y5DNH8', 'SGx3IY95bAI', 'wVCE6HqAPts', 'QXQHog8BHTI', 'emyE_GQNFW4', 'skfZBqH1NgM', 'xpxCu2q_99A', 'I5TB9DT6s-E']].map(a => a.join());
+const DUCK = 0.35, MIN = 200, BIG_W = 320, BIG_H = 220, FADE_MS = 1000, CKEY = 'tilt.ytcollapsed', PKEY = 'tilt.ytpos';
 // YouTube's embedded-player rules: the player stays visible and at least 200x200, so "collapsed" is exactly that size (the bar stays on top of it).
 
 /** Video id from a watch URL, youtu.be link, shorts/embed link (a &list= or ?si= is ignored) or a bare id. */
@@ -48,7 +48,7 @@ export function bagDraw(st, n, cur, rnd = Math.random) {
 
 const listeners = new Set();
 export const ytmusic = {
-  DEFAULTS: { 'BROaC0gtyQs': 'We Will Rock You (bardcore)', '_yICA0JNmig': 'Big Poppa (bardcore)', '3okjFDo2aSU': 'The Real Slim Shady (bardcore)', 'L1Uvr5v8IOE': 'Still Dre (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)", 'zg3Ggn3CMgU': 'Lose Yourself (bardcore)', 't70UQr_fMgM': 'The Next Episode (bardcore)', 'XbigmX35ICQ': 'Blinding Lights (bardcore)', 'kJWvmSJ3k9Q': 'What Is Love (bardcore)', 'nKGsnHF7PTI': 'Hey Ya! (bardcore)', 'AWEwF0PGTmI': 'Land Down Under (medieval)', 'p8M2TPZG0f4': 'Gimme! Gimme! Gimme! (medieval)', 'YMnC1SHxct0': 'Ms. Jackson (bardcore)', 'NOPPcsrsM4M': 'Numb/Encore (bardcore)', 'Z83PICHUwSc': 'Eiffel 65 - Blue (Da Ba Dee)' },
+  DEFAULTS: { 'RZ4H0KJezNE': 'Thunderstruck (medieval)', 'drDs-Y5DNH8': "We Didn't Start the Fire (bardcore)", 'SGx3IY95bAI': 'Dracula (bardcore)', 'wVCE6HqAPts': 'Paint It Black (bardcore)', 'QXQHog8BHTI': 'Wicked Game (bardcore)', 'emyE_GQNFW4': 'House of the Rising Sun (bardcore)', 'skfZBqH1NgM': 'Teenage Dirtbag (bardcore)', 'xpxCu2q_99A': 'I Want It That Way (medieval)', 'I5TB9DT6s-E': 'All Star (bardcore)', 'BROaC0gtyQs': 'We Will Rock You (bardcore)', '_yICA0JNmig': 'Big Poppa (bardcore)', '3okjFDo2aSU': 'The Real Slim Shady (bardcore)', 'L1Uvr5v8IOE': 'Still Dre (bardcore)', 'dywM446-vcE': "Gangsta's Paradise (bardcore)", 'zg3Ggn3CMgU': 'Lose Yourself (bardcore)', 't70UQr_fMgM': 'The Next Episode (bardcore)', 'XbigmX35ICQ': 'Blinding Lights (bardcore)', 'kJWvmSJ3k9Q': 'What Is Love (bardcore)', 'nKGsnHF7PTI': 'Hey Ya! (bardcore)', 'AWEwF0PGTmI': 'Land Down Under (medieval)', 'p8M2TPZG0f4': 'Gimme! Gimme! Gimme! (medieval)', 'YMnC1SHxct0': 'Ms. Jackson (bardcore)', 'NOPPcsrsM4M': 'Numb/Encore (bardcore)', 'Z83PICHUwSc': 'Eiffel 65 - Blue (Da Ba Dee)' },
   player: null, box: null, ready: false, idx: 0, note: '', title: '', vol: 0.6, ducked: false, muted: false, wantPlay: false, _failed: 0, held: false, fade: 1, collapsed: false,
   get ids() { try { const j = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(j)) { const a = j.filter(x => /^[\w-]{11}$/.test(x)); return OLD_DEFAULTS.includes(a.join()) ? DEFAULT_IDS.slice() : a; } } catch (e) { /* default */ } return DEFAULT_IDS.slice(); },
   _save(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) { /* ignore */ } this._emit('list'); },
@@ -71,7 +71,7 @@ export const ytmusic = {
   duck(on) { this.ducked = !!on; this._apply(); },
   setMuted(m) { this.muted = !!m; this._apply(); if (this.player && this.ready) try { if (m) this.player.pauseVideo(); else if (this.wantPlay && !this.held) this.player.playVideo(); } catch (e) { /* ignore */ } },
   /** 'menu' or 'match': which corner the box sits in (CSS decides where). */
-  place(where) { this._where = where; if (this.box) this.box.dataset.where = where; },
+  place(where) { this._where = where; if (this.box) { this.box.dataset.where = where; this._applyPos(); } },
   get _size() { return this.collapsed ? [MIN, MIN] : [BIG_W, BIG_H]; },
   _ensureBox() {
     if (this.box && this.box.isConnected) return this.box;
@@ -80,13 +80,46 @@ export const ytmusic = {
     b.hidden = this.held;
     b.innerHTML = `<div class="ythead"><span id="ytnow">YouTube</span><b data-yt="play" id="ytplay" aria-label="Pause">❚❚</b><b data-yt="next" aria-label="Next">▶▶</b><b data-yt="fold" id="ytfold" aria-label="Collapse">▴</b><b data-yt="stop" aria-label="Switch YouTube music off">✕</b></div><div id="ytnote"></div><div id="ytframe"><div id="ytplayer"></div></div>`;
     b.addEventListener('click', (e) => { const t = e.target.closest('[data-yt]'); if (!t) return; const k = t.dataset.yt; if (k === 'next') this.next(); else if (k === 'play') this.toggle(); else if (k === 'fold') this.setCollapsed(!this.collapsed); else this._emit('stop'); });
-    document.body.appendChild(b); document.body.classList.add('ytdock'); this._layout(); return b;
+    document.body.appendChild(b); document.body.classList.add('ytdock'); this._layout(); this._bindDrag(b); return b;
+  },
+  // Draggable by the header bar (owner: "you should be able to click and drag the music YouTube little thing"). The spot is remembered per placement (menu / match) in tilt.ytpos as {menu:[x,y], match:[x,y]}; no spot = the CSS dock.
+  _pos() { try { return JSON.parse(localStorage.getItem(PKEY)) || {}; } catch (e) { return {}; } },
+  _setPos(w, xy) { const o = this._pos(); if (xy) o[w] = xy; else delete o[w]; try { if (Object.keys(o).length) localStorage.setItem(PKEY, JSON.stringify(o)); else localStorage.removeItem(PKEY); } catch (e) { /* ignore */ } },
+  /** Put the box at its remembered spot (clamped to the window), or back on the CSS dock when there is none. */
+  _applyPos() {
+    const b = this.box; if (!b) return; const xy = this._pos()[b.dataset.where];
+    if (!Array.isArray(xy) || !xy.every(Number.isFinite)) { b.style.left = b.style.top = ''; return; }
+    const x = Math.max(0, Math.min(xy[0], innerWidth - b.offsetWidth)), y = Math.max(0, Math.min(xy[1], innerHeight - b.offsetHeight));
+    b.style.left = x + 'px'; b.style.top = y + 'px';
+  },
+  _bindDrag(b) {
+    const head = b.querySelector('.ythead'); let d = null;
+    const frame = () => b.querySelector('iframe');
+    const end = (e, keep) => {
+      if (!d) return; const was = d; d = null; b.classList.remove('ytdrag'); const f = frame(); if (f) f.style.pointerEvents = '';
+      try { head.releasePointerCapture(was.id); } catch (er) { /* ignore */ }
+      if (keep && was.moved) { const r = b.getBoundingClientRect(); this._setPos(b.dataset.where, [Math.round(r.left), Math.round(r.top)]); }
+    };
+    head.addEventListener('pointerdown', (e) => {
+      if (e.button > 0 || e.target.closest('[data-yt]')) return;      // the buttons stay buttons
+      const r = b.getBoundingClientRect(); d = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, moved: false };
+      try { head.setPointerCapture(e.pointerId); } catch (er) { /* ignore */ }
+    });
+    head.addEventListener('pointermove', (e) => {
+      if (!d || e.pointerId !== d.id) return;
+      if (!d.moved) { if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return; d.moved = true; b.classList.add('ytdrag'); const f = frame(); if (f) f.style.pointerEvents = 'none'; }      // YouTube's iframe swallows pointer events
+      b.style.left = Math.max(0, Math.min(e.clientX - d.dx, innerWidth - b.offsetWidth)) + 'px'; b.style.top = Math.max(0, Math.min(e.clientY - d.dy, innerHeight - b.offsetHeight)) + 'px'; e.preventDefault();
+    });
+    head.addEventListener('pointerup', (e) => end(e, true)); head.addEventListener('pointercancel', (e) => end(e, true)); head.addEventListener('lostpointercapture', (e) => end(e, true));
+    head.addEventListener('dblclick', (e) => { if (e.target.closest('[data-yt]')) return; this._setPos(b.dataset.where, null); this._applyPos(); });
+    if (!this._rz) { this._rz = () => this._applyPos(); addEventListener('resize', this._rz); }
   },
   _layout() {
     const [w, h] = this._size, f = document.getElementById('ytframe'), b = this.box; if (!f || !b) return;
     b.classList.toggle('min', this.collapsed); b.style.width = w + 'px'; f.style.width = w + 'px'; f.style.height = h + 'px';
     const fb = document.getElementById('ytfold'); if (fb) { fb.textContent = this.collapsed ? '▾' : '▴'; fb.setAttribute('aria-label', this.collapsed ? 'Expand' : 'Collapse'); }
     if (this.player && this.ready) try { this.player.setSize(w, h); } catch (e) { /* ignore */ }
+    this._applyPos();
   },
   setCollapsed(c) { this.collapsed = !!c; try { localStorage.setItem(CKEY, c ? '1' : '0'); } catch (e) { /* ignore */ } this._layout(); },
   toggle() {

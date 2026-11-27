@@ -85,6 +85,8 @@ class MusicBus {
   /** The pause menu in a match: the game's own music (never YouTube or the player's files) fades in on a plain audio element, since pausing suspends the audio context; it fades out on resume. */
   async pauseMusic(on) {
     on = !!on; if (on === !!this._pmOn) return; this._pmOn = on; const tok = this._pmTok = (this._pmTok || 0) + 1;
+    if (on && this.yt && mymusic.source === 'yt' && !this.off) { this._pmYt = true; this.yt.hold(false); return; }      // YouTube radio: it simply carries on in the pause menu (owner 27 Nov: it loads fast enough)
+    if (!on && this._pmYt) { this._pmYt = false; if (this.yt) this.yt.hold(this.held); return; }
     if (!on) { this._pmRamp(this._pmEl, 0, 800, true); this._pmEl = null; return; }
     if (this.vol <= 0 || this.off) return;
     const tracks = this.tracks || await this.load(); if (tok !== this._pmTok || !tracks.length) return;

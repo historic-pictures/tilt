@@ -4147,6 +4147,7 @@ function updateReticle() {
   const ret = $('reticle'), cur = $('cursorDot');
   const show = M && C && (S.mode === 'charge' || S.mode === 'ready') && !C.pL.done && !C.cut && player.look < 0.3;
   ret.style.display = cur.style.display = show ? 'block' : 'none';
+  document.body.classList.toggle('aiming', !!show && !touchMode && !S.paused && !S.rpl);      // the system arrow is hidden while you aim: the diamond is the pointer, and it starts centred (the arrow sat wherever the hand was, so the two never agreed)
   if (!show) return;
   const w = window.innerWidth, h = window.innerHeight, D = dirP();
   cur.style.left = `${(mouse.x * 0.5 + 0.5) * w}px`; cur.style.top = `${(-mouse.y * 0.5 + 0.5) * h}px`;

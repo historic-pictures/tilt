@@ -143,6 +143,7 @@ body.celcam #horsePanel, body.celcam #lancePanel, body.celcam #prompt, body.celc
 #reticle.body .ring { border-color: #8fd0ff; } #reticle.horse .ring { border-color: #ff5a4a; box-shadow: 0 0 0 1px #20140a, 0 0 12px #ff5a4a; }
 #reticle.up .ring { opacity: .25; border-style: dashed; }
 #zoneTxt { position: absolute; top: 22px; left: -60px; width: 120px; text-align: center; font-family: var(--caps); font-size: 14px; letter-spacing: .14em; color: var(--vellum3); text-shadow: 0 0 4px #000, 0 1px 3px #000, 0 0 2px #000; }
+body.aiming, body.aiming #game, body.aiming canvas { cursor: none; }
 #cursorDot { position: absolute; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(255, 255, 255, .8); box-shadow: 0 0 2px #000; transform: rotate(45deg); }
 #prompt { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); max-width: 92vw; font-family: var(--caps); font-size: 20px; letter-spacing: .06em; text-align: center; color: var(--vellum3); text-shadow: 0 0 6px #000, 0 2px 8px #000, 0 0 2px #000; }
 #prompt kbd { font-family: var(--caps); background: var(--vellum); color: var(--ink); padding: 0 8px 1px; border-radius: 3px; box-shadow: 0 2px 0 var(--ink2), 0 3px 6px rgba(0, 0, 0, .5); text-shadow: none; margin: 0 2px; }
@@ -650,6 +651,7 @@ body.touch.compact .mymusic { margin-top: 4px; }
 #ytbox[hidden] { display: none; }
 #ytbox .ythead { display: flex; align-items: center; gap: 2px; padding: 0 3px 0 8px; height: 28px; background: linear-gradient(var(--vellum3), var(--vellum)); border-bottom: 1px solid var(--ink2); }
 #ytbox #ytnow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--note, 'Pirata One', Georgia, serif); font-size: 16px; line-height: 28px; }
+#ytbox .ythead { cursor: grab; touch-action: none; user-select: none; } #ytbox.ytdrag, #ytbox.ytdrag .ythead { cursor: grabbing; }
 #ytbox .ythead b { flex: none; display: grid; place-items: center; min-width: 26px; height: 24px; cursor: pointer; font-weight: normal; font-size: 12px; color: var(--ink2); border-radius: 3px; user-select: none; }
 #ytbox .ythead b:hover { color: var(--red); background: rgba(43,29,18,.1); }
 #ytnote { display: none; padding: 2px 8px; background: var(--red2); color: var(--vellum3); font-size: 11px; }

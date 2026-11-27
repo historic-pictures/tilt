@@ -156,6 +156,26 @@ function armHalf(g, cut, up) {
   for (const k in g.attributes) { const a = g.attributes[k], d = new a.array.constructor(order.length * a.itemSize); order.forEach((v, i) => { for (let c = 0; c < a.itemSize; c++) d[i * a.itemSize + c] = a.array[v * a.itemSize + c]; }); h.setAttribute(k, new THREE.BufferAttribute(d, a.itemSize)); }
   h.setIndex(idx); if (!up) h.translate(0, -cut, 0); return h;
 }
+/** A ball of the sleeve's own cell joined into the forearm (origin = the elbow): where the two halves turn against each other the outside of the bend opens a wedge, the ball fills it. Same geometry, no extra draw call. */
+function elbowBall(low, r, ry) {
+  const P = low.attributes.position; let k = 0, best = 9;      // a vertex of the forearm's top ring: its sleeve uv and shade
+  for (let i = 0; i < P.count; i++) { const d = Math.abs(P.getY(i) + 0.03); if (d < best) { best = d; k = i; } }
+  let u0 = 9, u1 = -9; for (let i = 0; i < P.count; i++) if (Math.abs(P.getY(i) - P.getY(k)) < 1e-4) { const x = low.attributes.uv.getX(i); u0 = Math.min(u0, x); u1 = Math.max(u1, x); }
+  const s = new THREE.SphereGeometry(1, 10, 7), n = s.attributes.position.count, u = (u0 + u1) / 2, v = low.attributes.uv.getY(k), sh = low.attributes.aSh.getX(k);
+  s.scale(r, ry, r); const sn = s.attributes.normal, base = P.count, A = {};
+  for (const name in low.attributes) {
+    const a = low.attributes[name], d = new Float32Array((base + n) * a.itemSize); d.set(a.array, 0);
+    for (let i = 0; i < n; i++) {
+      const o = (base + i) * a.itemSize;
+      if (name === 'position') { d[o] = s.attributes.position.getX(i); d[o + 1] = s.attributes.position.getY(i); d[o + 2] = s.attributes.position.getZ(i); }
+      else if (name === 'normal') { d[o] = sn.getX(i); d[o + 1] = sn.getY(i); d[o + 2] = sn.getZ(i); }
+      else if (name === 'uv') { d[o] = u; d[o + 1] = v; } else if (name === 'aSh') d[o] = sh;
+    }
+    A[name] = new THREE.BufferAttribute(d, a.itemSize);
+  }
+  const I = Array.from(low.index.array), SI = s.index.array; for (let i = 0; i < SI.length; i++) I.push(base + SI[i]);
+  const out = new THREE.BufferGeometry(); for (const name in A) out.setAttribute(name, A[name]); out.setIndex(I); return out;
+}
 const ARM_LEN = 0.65, ARM_ELBOW = 0.3;      // the arm part is 0.65 long (its hand ends there); the elbow is 0.3 from the shoulder
 let ARM2 = null;
 /**
@@ -166,7 +186,7 @@ let ARM2 = null;
  * where the straight arm's hand was: nothing that is held, nothing that was posed, needs touching. `.material` reads (and sets) both halves, as it did on the old mesh.
  */
 export function elbowArm(F, mat, shadow) {
-  const a = ARM2 || (ARM2 = { up: armHalf(F.arm, -ARM_ELBOW, true), low: armHalf(F.arm, -ARM_ELBOW, false) });
+  const a = ARM2 || (ARM2 = { up: armHalf(F.arm, -ARM_ELBOW, true), low: elbowBall(armHalf(F.arm, -ARM_ELBOW, false), 0.06, 0.06) });
   const g = new THREE.Group(), up = new THREE.Mesh(a.up, mat), low = new THREE.Mesh(a.low, mat);
   up.castShadow = low.castShadow = shadow; g.add(up, low);
   const l1 = ARM_ELBOW, l2 = ARM_LEN - ARM_ELBOW, set = () => {
