@@ -278,6 +278,10 @@ export function createPost(renderer, scene, camera, opts = {}) {
       gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.6, thickness: 1.2, scale: 1.25, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
       gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
       gtao.blendIntensity = 0.85;
+      // three.js renders the sun's shadow map inside EVERY renderer.render() call, and GTAO draws the whole scene again (normals) through one: the shadow map is the same
+      // as RenderPass just made, so draw it once. (Measured at 1080p, high tier, charge: about 500 draw calls and 3 ms of GPU per frame.)
+      const gtaoRender = gtao.render.bind(gtao);
+      gtao.render = (r, ...rest) => { const sm = r.shadowMap, was = sm.autoUpdate; sm.autoUpdate = false; try { gtaoRender(r, ...rest); } finally { sm.autoUpdate = was; } };
       composer.insertPass(gtao, 1);
       gtao.setSize(state.w * state.pr, state.h * state.pr);
       state.gtao = gtao;

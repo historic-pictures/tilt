@@ -516,7 +516,9 @@ function makeRider(def, dir, isPlayer) {
   const j = new Jouster(scene, Object.assign({}, def.arms, def.armourTint ? { armourTint: def.armourTint } : {}, def.lance ? { lanceScale: LANCES[def.lance].scale } : {}, def.crest || def.mantling || def.helmCross ? { crest: def.crest, mantling: def.mantling, helmCross: def.helmCross } : {}, { body: def.body ? cleanBody(def.body) : bodyFor(def.id || def.name) }), dir, LANE_X, def.horseDef || HORSES[def.horse], def.armourDef || harness(def.armour, def.helm));
   hookRider(j, isPlayer); return j;
 }
-function disposeRider(j) { if (!j) return; scene.remove(j.root); if (j.unhorsed) scene.remove(j.rider); }
+/** Free what a rider holds on the GPU: each skinned mesh's bone texture and each mesh's buffers (without this every match leaked ~34 bone textures and ~30 geometries; found by docs/perf-audit.md). Shared geometry is just uploaded again if something still draws it. */
+function freeGpu(o) { o.traverse((m) => { if (m.isSkinnedMesh && m.skeleton) m.skeleton.dispose(); if (m.isMesh && m.geometry) m.geometry.dispose(); }); }
+function disposeRider(j) { if (!j) return; scene.remove(j.root); if (j.unhorsed) scene.remove(j.rider); freeGpu(j.root); if (j.rider && j.rider !== j.root) freeGpu(j.rider); }
 function rebuildPlayer() {
   disposeRider(player);
   if (!profile.bond) profile.bond = {};
