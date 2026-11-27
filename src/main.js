@@ -1443,7 +1443,7 @@ function rideOut(j, T, dt) {
         // arrival: the tolerance grows with the time spent in the turn, and after 7 s (or if he has walked past the mark) he is blended on regardless, so it always ends
         const grow = Math.max(0, T.tT - 3.5);
         if (du < 0.6 + grow * 0.6 && v < 1.0 + grow * 0.5 && Math.abs(w - mw) < 0.45 + grow * 0.5 && Math.abs(wrapA(T.ph - Math.PI)) < 0.2 + grow * 0.25 || T.tT > 7 || du < -0.8 || T.t > 20) {
-          T.sub = 'blend'; T.tt = 0; T.b0 = [r.position.x, r.position.z, T.ph, r.rotation.z]; T.bd = clamp(0.4 + 0.3 * Math.hypot(r.position.x - d * mw, r.position.z - d * mu), 0.5, 2.2); rideService(j, T);
+          T.sub = 'blend'; T.tt = 0; T.b0 = [r.position.x, r.position.z, T.ph, r.rotation.z]; T.bd = clamp(0.4 + 0.3 * Math.hypot(r.position.x - d * mw, r.position.z - d * mu), 0.5, 2.2); if (Math.hypot(r.position.x - d * mw, r.position.z - d * mu) < 2.5) rideService(j, T);      // (still a way off: the stump is thrown down when he is on the mark, see rideArrive, so the squire never walks out into the lane for it)
         }
       }
       if (u > 46.4 && svT < 0.4) svT = 0.4;

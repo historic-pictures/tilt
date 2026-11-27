@@ -70,7 +70,7 @@ function lance(parent, c1, c2) {      // a lance in your colours: shaft, a band,
 function makeSide(scene, isLate) {
   const root = new THREE.Group(); root.visible = false; scene.add(root);
   const endG = grp(root);
-  let men = {}, hAng = 0, tD = 0, prevMode = '', t = 0, serving = 0, rack = [], arms = null, pile = [], pileN = 0, lo = 0, lf = 0, gs = null;      // gs: the stump the rider threw down
+  let men = {}, hAng = 0, tD = 0, prevMode = '', t = 0, serving = 0, rack = [], arms = null, pile = [], pileN = 0, lo = 0, lf = 0, gs = null; let replaying = false;      // gs: the stump the rider threw down
   const F = { root, men: () => men };
 
   function build(id, rec, c1, c2, extras) {
@@ -153,7 +153,8 @@ function makeSide(scene, isLate) {
   /** The rider throws his broken stump down beside his horse: it tumbles out and lies on the grass until the squire fetches it. */
   F.throwStump = function throwStump() {
     if (!gs || !men.squire) return false;
-    const o0 = lo + 0.1, f0 = lf + 0.35, o1 = lo + 1.5, f1 = lf - 0.7, T = 0.7, y0 = 2.0;      // starts at the rider's hand, leaves it 0.2 s into the arm's swing
+    const bo = replaying ? 0 : lo, bf = replaying ? 0 : lf;      // (under a replay this side does not track you: he is on or by his mark by then, see rideOut)
+    const o0 = bo + 0.1, f0 = bf + 0.35, o1 = bo + 1.5, f1 = bf - 0.7, T = 0.7, y0 = 2.0;      // starts at the rider's hand, leaves it 0.2 s into the arm's swing
     Object.assign(gs, { active: true, thud: false, t: 0, T, o0, f0, o1, f1, y0, vy: (0.05 - y0 + 4.905 * T * T) / T, spin: (3 + Math.random() * 2) * Math.PI, yaw: (Math.random() - 0.5) * 0.7, spot: [o1, f1 + 0.35] });
     gs.mesh.visible = true; return true;
   };
@@ -170,10 +171,12 @@ function makeSide(scene, isLate) {
         { fn() { a.stump.visible = false; showPile(); a.lanceP.visible = true; putRack(false); } }, { act: 'present', dur: 1.2, at: 0.6, mid: hand }, { hold: 'idle', until: () => false, max: 0.3 }, home(a)], done); serving = 1;
       return true;
     }
+    // he fetches the stump only when it lies by your mark and not out in the lane ahead of you (thrown down on the way back): there it stays in the sand with the splinters
+    const near = !!gs && gs.active && Math.hypot(gs.spot[0], gs.spot[1]) < 4.5 && !(gs.spot[1] > 1.5 && gs.spot[0] < 2.4);
     const fresh = () => { a.lanceP.visible = true; putRack(false); }, hand = () => { a.lanceP.visible = false; if (F.onHand) F.onHand(a.g.getWorldPosition(new THREE.Vector3())); done(); };
     go(a, [{ fn: fresh }, { walk: SPOT.stirrup }, { act: 'present', dur: 1.2, at: 0.6, mid: hand }, { hold: 'idle', until: () => false, max: 0.3 },
-      { walk: gs ? gs.spot : SPOT.stirrup }, { act: 'pick', dur: 1.0, at: 0.55, mid() { hideGround(); a.stump.visible = true; } },
-      { walk: SPOT.pile }, { act: 'lay', dur: 0.9, at: 0.5, mid() { a.stump.visible = false; showPile(); } }, home(a)], done); serving = 1;
+      ...(near ? [{ walk: gs.spot }, { act: 'pick', dur: 1.0, at: 0.55, mid() { hideGround(); a.stump.visible = true; } },
+      { walk: SPOT.pile }, { act: 'lay', dur: 0.9, at: 0.5, mid() { a.stump.visible = false; showPile(); } }] : []), home(a)], done); serving = 1;
     return true;
   };
   F.serving = () => serving > 0;
@@ -268,7 +271,7 @@ function makeSide(scene, isLate) {
   /** env: { mode, tD (which way you will face at the end you stand at), px, pz (you, in the world), helmOff }. */
   F.update = function update(dt, env) {
     if (env.mode === 'menu' || !Object.keys(men).length) { root.visible = false; prevMode = env.mode; return; }
-    if (env.mode === 'replay') return;
+    if (env.mode === 'replay') { replaying = true; return; } replaying = false;
     root.visible = true; t += dt;
     if (mk.g) {      // the mark on the ground
       mk.on = damp(mk.on, env.marker ? 1 : 0, 6, dt); mk.g.visible = mk.on > 0.02; const c = env.onMark ? '#7fe08a' : '#e8c75a', pul = 1 + Math.sin(t * 3) * 0.03;
