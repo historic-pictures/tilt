@@ -65,24 +65,28 @@
   </div>
 
   <div id="horsePanel" class="panel">
-    <div class="row"><div id="rhythm"><div id="rhythmDot"></div></div>
-      <div class="col"><div id="gaitPips"><span>HALT</span><span>WALK</span><span>TROT</span><span>CANTER</span><span>GALLOP</span></div>
-      <div id="speedTxt">0 km/h</div><div id="bondTxt"></div><div id="burstTxt"></div></div></div>
-    <label>STAMINA</label><div class="bar"><div id="stamBar"></div></div>
-    <label>TEMPER</label><div class="bar"><div id="calmBar"></div></div>
-    <label>HORSE HEALTH</label><div class="bar"><div id="horseBar"></div></div>
+    <div class="hrow"><div id="rhythm"><div id="rhythmDot"></div></div>
+      <div class="hmain"><div id="speedTxt"><b>0</b><small>km/h</small></div><div id="burstTxt"></div></div>
+      <div id="bondTxt"></div></div>
+    <div id="gaitPips"><span>HALT</span><span>WALK</span><span>TROT</span><span>CANTER</span><span>GALLOP</span></div>
+    <div class="hbars">
+      <div class="brow" id="rStam"><label>STAMINA</label><div class="bar"><div id="stamBar"></div></div></div>
+      <div class="brow" id="rCalm"><label>TEMPER</label><div class="bar"><div id="calmBar"></div></div></div>
+      <div class="brow" id="rHorse"><label>HORSE</label><div class="bar"><div id="horseBar"></div></div></div>
+    </div>
   </div>
 
   <div id="lancePanel" class="panel">
-    <div id="couchTxt">LANCE UPRIGHT</div><div id="strideTxt"></div>
-    <label>ARM</label><div class="bar"><div id="armBar"></div></div>
-    <label>NERVE</label><div class="bar"><div id="focusBar"></div></div>
-    <div id="braceTxt">SEAT: LOOSE</div>
-    <div id="shieldTxt">SHIELD: LOW</div>
-    <label>BODY</label><div class="bar"><div id="bodyBar"></div></div>
-    <label>BREATH</label><div class="bar"><div id="breathBar"></div></div>
+    <div class="lhead"><div id="couchTxt">LANCE UPRIGHT</div><div id="strideTxt"></div></div>
+    <div class="lbody"><div class="lbars">
+      <div class="brow"><label>ARM</label><div class="bar"><div id="armBar"></div></div></div>
+      <div class="brow"><label>NERVE</label><div class="bar"><div id="focusBar"></div></div></div>
+      <div class="brow"><label>BODY</label><div class="bar"><div id="bodyBar"></div></div></div>
+      <div class="brow"><label>BREATH</label><div class="bar"><div id="breathBar"></div></div></div>
+    </div>
+    <div id="dolls" aria-label="Armour damage: shield, helm, breastplate, shield-side shoulder"><div><canvas id="dollP" width="56" height="72"></canvas><span>YOU</span></div><div><canvas id="dollO" width="56" height="72"></canvas><span>HIM</span></div></div></div>
+    <div class="lchips"><div id="braceTxt" class="lchip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 19 5M15 4l5 5-3 .5-2.5-2.5z"/></svg><span>THRUST</span></div><div id="shieldTxt" class="lchip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v8c0 4-3 7-7 9-4-2-7-5-7-9z"/><path class="pt" d="M12 7v9"/></svg><span>SHIELD LOW</span></div></div>
     <div id="lanceLeft"></div>
-    <div id="dolls" aria-label="Armour damage: shield, helm, breastplate, shield-side shoulder"><div><canvas id="dollP" width="56" height="72"></canvas><span>YOUR HARNESS</span></div><div><canvas id="dollO" width="56" height="72"></canvas><span>HIS HARNESS</span></div></div>
   </div>
 
   <div id="reticle"><div class="ring"></div><div id="zoneTxt"></div></div>

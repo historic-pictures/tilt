@@ -322,12 +322,6 @@ body.touch.compact #pmenu { width: min(520px, 96vw); } body.touch.compact #pmenu
 
 /* the match HUD: the same slips, smaller and a little see-through, so more of the field shows. Nothing is added; the crowd's mood text is dropped. */
 #crowdPanel { width: 150px; padding: 8px 12px 9px; opacity: .85; } #crowdTxt { display: none; }
-#horsePanel { width: 262px; padding: 8px 14px 9px; } #lancePanel { width: 188px; padding: 8px 14px 9px; }
-.panel label { font-size: 11px; margin: 5px 0 2px; }
-#strideTxt { font-size: 22px; min-height: 24px; } #couchTxt, #braceTxt, #shieldTxt { font-size: 12px; }
-#dolls span { display: none; } #dolls { margin-top: 4px; }
-#speedTxt { font-size: 24px; }
-body.touch #horsePanel { width: 200px; }
 body.touch #screen[data-name="armoury"] .tabs { flex-wrap: wrap; }
 @media (max-width: 720px) { body.touch.compact #screen[data-name="armoury"] .sheet { left: 14vw; } body.touch.compact .tabhint { display: none; } }
 body.touch.compact #screen .menu.welcome .mini { display: none; }
@@ -388,10 +382,13 @@ body.touch #scorebar .score { padding: 0 10px; gap: 8px; }
 body.touch #scorebar .score b { font-size: 24px; line-height: 1.1; } body.touch #scorebar .score i { font-size: 10px; }
 body.touch #venueInfo, body.touch #marks { display: none; }
 /* the horse's bars: a slim strip at the top left, beside the pause button */
-body.touch #horsePanel { left: calc(var(--sl) + 86px); top: calc(var(--st) + 10px); bottom: auto; width: min(190px, 24vw); padding: 5px 9px 6px; opacity: .88; }
-body.touch #horsePanel .row { display: none; }
-body.touch #horsePanel label { font-size: 9px; margin: 2px 0 1px; } body.touch #horsePanel .bar { height: 7px; }
-body.touch #horsePanel label:nth-of-type(2) { display: none; } body.touch #horsePanel label:nth-of-type(2) + .bar { display: none; }
+body.touch #horsePanel { left: calc(var(--sl) + 86px); top: calc(var(--st) + 10px); bottom: auto; width: min(210px, 27vw); padding: 5px 10px 6px; opacity: .9; }
+body.touch #horsePanel .hrow { grid-template-columns: 1fr auto; gap: 6px; } body.touch #rhythm, body.touch #burstTxt { display: none; }
+body.touch #horsePanel #speedTxt { font-size: 23px; } body.touch #horsePanel #speedTxt small { font-size: 9px; margin-left: 3px; }
+body.touch #horsePanel #bondTxt { font-size: 8px; padding-top: 2px; }
+body.touch #gaitPips { margin: 3px 0 0; gap: 2px; } body.touch #gaitPips span { font-size: 0; padding: 0; height: 4px; background: rgba(43, 29, 18, .25); border-radius: 1px; } body.touch #gaitPips span.on { background: var(--red); }
+body.touch #horsePanel .hbars { margin-top: 4px; padding-top: 3px; } body.touch .brow { grid-template-columns: 46px 1fr; gap: 5px; margin: 4px 0; }
+body.touch .panel .brow label { font-size: 9px; letter-spacing: .05em; } body.touch .panel .brow .bar { height: 6px; }
 body.touch #yieldBtn { left: calc(var(--sl) + 86px); top: calc(var(--st) + 66px); min-height: 34px; font-size: 13px; padding: 3px 10px; }
 body.touch #yieldBtn kbd { display: none; }
 /* hints: small, at the top, short */

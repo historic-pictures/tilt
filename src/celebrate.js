@@ -375,23 +375,33 @@ export function solveLimb(A, F, H, tgt, hq, pole) {
 }
 
 // ------------------------------------------------------------------------------------------------ the camera
+const _cs = new THREE.Vector3(), _cv = new THREE.Vector3();
+export const CEL_CAM_RATE = 6;
 /**
- * The celebration cam: the low tracking shot (first 55 %), then the close-up. Fills `want` and `look`, returns { fov, shot, rate }. J: the celebrating rider; t, dur: the clock.
- * Both are framed relative to the rider and his heading, so they follow him along the lists and hold still when he does.
+ * The celebration cam: ONE continuous tracking shot on the celebrating rider for the whole celebration (no cut, no close-up swap). Fills `want` and `look`, returns { fov, shot: 1, rate }.
+ * It rides alongside him at 4.8-5.7 m, at his chest height and a little above, in front of his shoulder (three-quarter), a slow push-in and a slight orbit for life. His own velocity
+ * is added ahead of both points, so the damped camera (main.js lerps it at `rate`) sits where he IS, not a stride behind: he stays framed, with his horse, however he rides, turns or rears.
+ * Course: on his own side of the tilt (the cloth and the other lane are never between the lens and the horse; the lens is above the rail, 2.1 m up, anyway). Match: at the royal box, from his
+ * side and a little behind, so the box is behind him. J: the rider; t, dur: the celebration clock.
  */
 export function celCam(J, t, dur, want, look) {
-  const p = J.root.position, fx = Math.sin(J.root.rotation.y), fz = Math.cos(J.root.rotation.y), sy = J.seatY || 1.71;
-  const tg = crowdPoint(J, _tg), shot = t < dur * 0.55 ? 1 : 2;
-  // the crowd (or, at the end of a match, the royal box) is behind the rider in both shots: the camera stands on the far side of him from it, a little ahead (or to his left) so that he is seen three-quarters
-  const cx = tg.x - p.x, cz = tg.z - p.z, cl = Math.hypot(cx, cz) || 1, dx = cx / cl, dz = cz / cl;
-  let lx = -dz, lz = dx; if (lx * fx + lz * fz < -0.2) { lx = -lx; lz = -lz; }
-  if (shot === 1) {
-    const k = clamp(t / (dur * 0.55), 0, 1);
-    want.set(p.x - dx * (3.0 - 0.6 * k) + lx * 2.6, 0.7 + 0.35 * k, p.z - dz * (3.0 - 0.6 * k) + lz * 2.6); look.set(p.x + dx * 0.4, sy + 0.55 + 0.1 * k, p.z + dz * 0.4);
-    return { fov: 40, shot, rate: 7 };
-  }
-  want.set(p.x - dx * 1.7 + lx * 1.5, sy + 0.62, p.z - dz * 1.7 + lz * 1.5); look.set(p.x + dx * 0.1, sy + 0.62, p.z + dz * 0.1);
-  return { fov: 27, shot, rate: 5 };
+  const c = J.cel, p = J.root.position, sy = J.seatY || 1.71, match = c ? c.mode === 'match' : false;
+  const st = c.cv || (c.cv = { p: new THREE.Vector3(), t: -1, v: new THREE.Vector3(), f: new THREE.Vector3(Math.sin(J.root.rotation.y), 0, Math.cos(J.root.rotation.y)), n: 0 });
+  if (st.t < 0) { st.v.copy(st.f).multiplyScalar(J.speed || 0); st.n = Math.sign(p.x) || 1; }
+  else if (t > st.t) { const dt = t - st.t; _cv.set((p.x - st.p.x) / dt, 0, (p.z - st.p.z) / dt); if (_cv.lengthSq() < 400) st.v.lerp(_cv, Math.min(1, dt * 6)); }
+  st.p.copy(p); st.t = t;
+  const sp = Math.hypot(st.v.x, st.v.z);
+  if (sp > 1.2) { _cv.set(st.v.x / sp, 0, st.v.z / sp); st.f.lerp(_cv, 0.08).normalize(); }      // (heading: his way of going, held when he slows or stops)
+  // the chest: the torso's height (it rises on the pesade and the fists) and a point between rider and horse to look at
+  (J.torso || J.rider).getWorldPosition(_cs); const ty = Math.max(sy - 0.1, _cs.y), u = clamp(t / Math.max(0.1, dur), 0, 1);
+  const ph = t * 0.5, fz = st.f.z >= 0 ? 1 : -1;
+  let ox, oz, D;
+  if (match) { D = 5.8 - 0.6 * u; const a = -0.45 + 0.2 * Math.sin(ph), nx = -st.f.z, nz = st.f.x; ox = nx * D * Math.cos(a) + st.f.x * D * Math.sin(a); oz = nz * D * Math.cos(a) + st.f.z * D * Math.sin(a); }      // (his side, a little behind: the box is beyond him)
+  else { D = 5.7 - 0.9 * u; const a = 0.5 + 0.2 * Math.sin(ph); ox = st.n * D * Math.cos(a); oz = fz * D * Math.sin(a); }      // (his own side, in front of his shoulder)
+  const lead = 1 / CEL_CAM_RATE;
+  want.set(p.x + ox + st.v.x * lead, Math.max(2.05, ty + 0.2), p.z + oz + st.v.z * lead);
+  look.set(p.x + st.v.x * lead * 0.8, ty - 0.2 + 0.08 * u, p.z + st.v.z * lead * 0.8);
+  return { fov: 33 - 3 * u, shot: 1, rate: CEL_CAM_RATE };
 }
 
 // ------------------------------------------------------------------------------------------------ the prompt: a few seconds' choice, like picking a FIFA celebration

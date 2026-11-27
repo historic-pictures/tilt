@@ -37,10 +37,15 @@ const pending = new Map(), dollPending = new Map();
 const SHX = 111, SHY = 283, SHW = 126, SHH = 157, SHQ = [111.76, 88.42, 46.28, 9.28, -19.96, 14.52, 328.91, -38.09, 94.10, -3.65, -5.88, 13.41];
 const shMap = (u, v) => [SHQ[0] + SHQ[1] * u + SHQ[2] * v + SHQ[3] * u * u + SHQ[4] * u * v + SHQ[5] * v * v, SHQ[6] + SHQ[7] * u + SHQ[8] * v + SHQ[9] * u * u + SHQ[10] * u * v + SHQ[11] * v * v];
 const SHIELD = typeof Image !== 'undefined' ? Object.assign(new Image(), { src: 'assets/ui/tips/figure-shield.png' }) : null;
-const ready = () => !!(FIG && FIG.complete && FIG.naturalWidth && SHIELD && SHIELD.complete && SHIELD.naturalWidth);
+// The surcoat: assets/ui/tips/figure-surcoat.png is the cream cloth of the painting as a grey (its folds, shading and ink lines) with an alpha mask (tools/make_surcoat_mask.py), 122x273,
+// cropped at SCX,SCY of the figure. It is dyed with the knight's field tincture by a multiply, so the painting's own shading stays: dye, not paint. Armour and shield are not in it.
+const SCX = 78, SCY = 272, SCW = 122, SCH = 273;
+const SURCOAT = typeof Image !== 'undefined' ? Object.assign(new Image(), { src: 'assets/ui/tips/figure-surcoat.png' }) : null;
+const ready = () => !!(FIG && FIG.complete && FIG.naturalWidth && SHIELD && SHIELD.complete && SHIELD.naturalWidth && SURCOAT && SURCOAT.complete && SURCOAT.naturalWidth);
 const redrawPending = () => { if (!ready()) return; for (const [cv, a] of [...pending]) { pending.delete(cv); drawHitMap(cv, ...a); } for (const [cv, a] of [...dollPending]) { dollPending.delete(cv); drawDoll(cv, ...a); } };
 if (FIG) FIG.onload = redrawPending;
 if (SHIELD) SHIELD.onload = redrawPending;
+if (SURCOAT) SURCOAT.onload = redrawPending;
 const armsCache = new Map();
 /** His arms mapped onto the painted shield: a 2x picture of the crop, transparent outside the shield. */
 function shieldArms(arms) {
@@ -65,6 +70,26 @@ function shieldArms(arms) {
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'destination-in'; g.drawImage(SHIELD, 0, 0, SHW * S, SHH * S);
   if (heraldryReady() || !needsAtlas(arms)) { armsCache.set(key, off); if (armsCache.size > 24) armsCache.delete(armsCache.keys().next().value); }
   return off;
+}
+
+const dyeCache = new Map();
+/** The surcoat dyed in his field: a picture of the cloth (SCW x SCH figure pixels at 2x). A plain field dyes all of it; (A division or an ordinary is not shown: the shield beside it carries them, and per pale the right half of the cloth is hidden behind the shield anyway.)
+ *  Dark tinctures are lifted a little so that the folds still read, and a near-white one (argent, ermine) leaves the cream as painted. */
+function surcoatLayer(arms) {
+  const c1 = arms && /^#[0-9a-f]{6}$/i.test(arms.c1) ? arms.c1 : '#ece8dc', key = c1;
+  if (dyeCache.has(key)) return dyeCache.get(key);
+  const S = 2, cv = document.createElement('canvas'); cv.width = SCW * S; cv.height = SCH * S;
+  const g = cv.getContext('2d'); g.drawImage(SURCOAT, 0, 0, SCW * S, SCH * S);
+  const dye = (hex) => { const n = parseInt(hex.slice(1), 16), ch = [n >> 16 & 255, n >> 8 & 255, n & 255], l = (0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]) / 255, k = l < 0.3 ? 0.22 * (0.3 - l) / 0.3 : 0; return `rgb(${ch.map(v => Math.round(v + (255 - v) * k * 0.5 + 8 * k)).join(',')})`; };
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = dye(c1); g.fillRect(0, 0, cv.width, cv.height);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(SURCOAT, 0, 0, SCW * S, SCH * S);
+  dyeCache.set(key, cv); if (dyeCache.size > 24) dyeCache.delete(dyeCache.keys().next().value);
+  return cv;
+}
+/** The painted figure with his surcoat dyed: call with the context already transformed so that (x0, y0) is the picture's top left and FSC the scale. */
+function paintFigure(g, x0, y0, dh, arms) {
+  g.drawImage(FIG, x0, y0, 272 * FSC, dh);
+  g.drawImage(surcoatLayer(arms), x0 + SCX * FSC, y0 + SCY * FSC, SCW * FSC, SCH * FSC);
 }
 
 export function drawHitMap(cv, res, near, opts = {}) {
@@ -97,7 +122,7 @@ export function drawHitMap(cv, res, near, opts = {}) {
     // the painted knight, head-on, no horse
     if (ready()) {
       const [x0, y0] = P(0, -FEXT), dh = 650 * FSC;
-      g.drawImage(FIG, x0, y0, 272 * FSC, dh);
+      paintFigure(g, x0, y0, dh, arms);
       // his arms, warped onto the painted shield (clipped to its exact shape), then the painting's own outline and shading multiplied back over them
       const dx = x0 + SHX * FSC, dy = y0 + SHY * FSC, dw = SHW * FSC, dhh = SHH * FSC;
       g.drawImage(shieldArms(arms), dx, dy, dw, dhh);
@@ -142,7 +167,7 @@ export function drawDoll(cv, dmg, arms) {
   const tint = (v) => v < 0.04 ? null : `hsl(${Math.round(52 - 52 * Math.min(1, v))}, 85%, ${Math.round(56 - 8 * Math.min(1, v))}%)`;
   g.setTransform(dpr * k, 0, 0, dpr * k, dpr * (LW / 2 - 84 * k), 0);      // the figure's hit-diagram coordinates, scaled down; his body is centred on x = 84
   const [x0, y0] = P(0, -FEXT), dh = 650 * FSC;
-  g.drawImage(FIG, x0, y0, 272 * FSC, dh);
+  paintFigure(g, x0, y0, dh, a);
   const dx = x0 + SHX * FSC, dy = y0 + SHY * FSC, dw = SHW * FSC, dhh = SHH * FSC;
   g.drawImage(shieldArms(a), dx, dy, dw, dhh);
   g.save(); g.globalCompositeOperation = 'multiply'; g.drawImage(SHIELD, dx, dy, dw, dhh); g.restore();

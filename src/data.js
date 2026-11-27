@@ -192,7 +192,7 @@ export const CAPARISONS = {
 export const DEFAULT_PROFILE = {
   name: 'Sir Nameless', named: false, arms: { c1: '#1f4690', c2: '#e0b83c', c3: '#ece8dc', pattern: 'chevron', charge: 'cross' },
   horse: 'rouncey', armour: 'mail', helm: 'greathelm', lance: 'standard', venue: 0, table: null, firstPerson: false, bond: {},
-  caparison: 'livery', gold: 60, owned: { horses: ['rouncey'], armours: ['mail'], helms: ['greathelm'], caparisons: ['livery', 'none'] }, difficulty: 1, herald: true, celebs: [], arts: {}, lesson: 0,
+  caparison: 'livery', gold: 60, owned: { horses: ['rouncey'], armours: ['mail'], helms: ['greathelm'], caparisons: ['livery', 'none'] }, difficulty: 0, herald: true, celebs: [], arts: {}, lesson: 0,
   renown: 0, skills: {}, retinue: { squire: 1 }, courses: 5,
   body: { sex: 'm', h: 1.73, build: 'medium', face: 0, skin: 1, hair: 1 },      // the knight's body (src/body_types.js): drawn only, it changes nothing in play
   achievements: {}, stats: {},      // achievements: id -> date earned; stats: running counts for them (see src/achievements.js)
@@ -210,10 +210,15 @@ export const LANCES = {
   standard: { id: 'standard', name: 'Tourney lance', blurb: 'Solid fir with a three-pronged coronel. The lance of the lists, as the rule books describe it.', blurbStats: 'Solid fir with a three-pronged coronel. The honest measure.', power: 1.0, sway: 1.0, fatigue: 1.0, scale: 1.0 },
   heavy: { id: 'heavy', name: 'Great lance', blurb: 'A long lance of ash, the kind the chronicles call a beam. A fine thing to see carried.', blurbStats: 'A beam of ash. Brutal in the shock, if your arm can hold it true.', power: 1.15, sway: 1.28, fatigue: 1.7, scale: 1.16 },
 };
+// The three levels. Squire is the default for a new knight: easy but not trivial. Knight is about how the game felt before the realism pass; Champion is the full realistic ride.
+//   sway: multiplier on the lance arm's wander.  zone: width of the player's hit marks (x radius; also pads the lance-chain hit volumes).  ai: added to the opponent's skill (lower = clumsier).
+//   couchT: seconds to couch the lance.  assist: aim magnetism, the point eases toward the nearest valid mark (helm, shield, body) when within assistR metres of its edge, up to this share of the way.
+//   fatigue: how fast the arm tires (x; also how long it holds).  nerve: how much the crowd, the salute and big blows fret the horse (x).  seat: added to your own seat when struck (0..1);
+//   hold: x the cantle's hold on you (a harder blow is needed to unhorse you).  oHelm: x the chance the opponent goes for the helm.  oPow: x how much of him goes into the opponent's stroke (coupling), so fewer clean breaks on you.
 export const DIFFICULTY = [
-  { name: 'Squire', sway: 0.8, ai: -0.12, zone: 1.12 },
-  { name: 'Knight', sway: 1.25, ai: 0.05, zone: 0.9 },
-  { name: 'Champion', sway: 1.55, ai: 0.12, zone: 0.8 },
+  { name: 'Squire',   sway: 0.4, ai: -0.2,  zone: 1.5, couchT: 0.9, assist: 0.85, assistR: 0.3, fatigue: 0.5,  nerve: 0.5, seat: 0.2,  hold: 1.35, oHelm: 0.3, oPow: 0.85 },
+  { name: 'Knight',   sway: 1.0,  ai: -0.02, zone: 1.1, couchT: 1.0, assist: 0.5, assistR: 0.15, fatigue: 0.8, nerve: 0.8, seat: 0.08, hold: 1.1,  oHelm: 0.8, oPow: 1.0 },
+  { name: 'Champion', sway: 1.55, ai: 0.12,  zone: 0.8, couchT: 1.5, assist: 0,    assistR: 0,    fatigue: 1.0, nerve: 1.0, seat: 0,    hold: 1.0,  oHelm: 1.0, oPow: 1.0 },
 ];
 export const purse = (vIdx, result, circuit) => { const base = circuit ? 90 + 45 * vIdx : 35; return result.startsWith('win') ? base + (result === 'win-unhorse' && !circuit ? 30 : 0) : result === 'draw' ? Math.round(base / 2) : result === 'practice' ? 0 : Math.round(base / 5); };
 
@@ -365,7 +370,7 @@ export const ARTS = {
 // The tiltyard: one thing at a time.
 export const LESSONS = [
   { title: 'The Gaits', goal: 'Bring your horse up to a gallop and ride the length of the tilt.', steps: [['Tap W to walk', 't1'], ['Tap W again to trot', 't2'], ['Again to canter', 't3'], ['Again to gallop', 't4']], note: 'Each tap of W makes the horse go one step faster. Hold S to slow him down.' },
-  { title: 'The Lance', goal: 'Lower your lance and have it set in the rest before you pass the quintain.', steps: [['Reach a gallop', 't4'], ['Hold LEFT MOUSE to lower the lance', 'couch'], ['Keep it down until it reads COUCHED · SET', 'set']], note: 'Start lowering when the counter says about 3 strides. Too early and your arm gets tired and shaky; too late and the lance is still wobbling when you arrive.' },
+  { title: 'The Lance', goal: 'Lower your lance and have it set in the rest before you pass the quintain.', steps: [['Reach a gallop', 't4'], ['Hold LEFT MOUSE to lower the lance', 'couch'], ['Keep it down until it reads COUCHED · SET', 'set']], note: 'Start lowering when the counter says about 3 strides (4 on Champion, where the lance comes down slower). Too early and your arm gets tired and shaky; too late and the lance is still wobbling when you arrive.' },
   { title: 'The Mark', goal: 'Strike the painted shield of the quintain.', steps: [['Gallop and couch your lance', 'set'], ['Move the mouse so the ring sits on the shield', 'onmark'], ['Strike it', 'hit']], note: 'Watch the ring, not the mouse pointer. The ring is where your lance will actually hit.' },
   { title: 'The Shock', goal: 'Hit the shield and thrust (SPACE) at the moment you hit.', steps: [['Couch and aim', 'set'], ['Press SPACE just before you hit, to thrust', 'brace'], ['Strike the shield', 'hit']], note: 'Press SPACE just before you hit, not earlier. The thrust only lasts a moment; press too soon and it is over before the lance lands.' },
   { title: 'The Full Course', goal: 'Break your lance on the quintain at the full gallop.', steps: [['Gallop', 't4'], ['Lower late, set the lance', 'set'], ['Thrust (SPACE)', 'brace'], ['Break the lance', 'broke']], note: 'The lance only breaks if you are going fast (a gallop) and you hit the middle of the shield straight on. After the hit, keep riding fast. If you slow down, the sandbag swings round and hits you in the back.' },
@@ -439,9 +444,9 @@ export const PHYS = {
   lanceBeam: { rest: 0.25, tip: 2.7, from: 1.05, to: 2.5, flaw: 0.3 },
   // The shaft is solid. horse: share of the horse's head and neck hit-spheres the shaft must stay outside (it is carried across the neck).
   // rail: clearance above the tilt rail (m). kick: how far up an unbroken lance is thrown by its own stroke (0 = stays level, 1 = upright).
-  // Lance geometry (docs/lance-geometry.md, drone footage): aim yaw across the horse (rad) from 0.18 at the couch to what the foe needs at the meeting, 0.10..0.66 (6-38 deg; footage 18-25 at the meeting, never over 30: the margin is for a helm or body stroke when the horses have swayed apart), same for both riders so the lances lie parallel in plan.
+  // Lance geometry (docs/lance-geometry.md, drone footage): aim yaw across the horse (rad) from 0.18 at the couch to what the foe needs at the meeting, 0.10..0.80 (6-46 deg; yawMax widened from 0.66 on 27 Nov: at LANE_X 0.72 the foe's shield at contact needs ~0.57-0.67, a rider wide of the tilt more, and the clamp must never forbid a valid aim; footage 18-25 at the meeting, never over 30: the margin is for a helm or body stroke when the horses have swayed apart), same for both riders so the lances lie parallel in plan.
   // clearYaw: the most the shaft is swung further left to clear its own horse's head (the rest by lifting the grip gripUp metres). easeFar / easeNear: gap (m) where the yaw leaves the couch value / reaches the meeting value.
-  aim: { yawMin: 0.10, yawMax: 0.66, yawCouch: 0.18, pitchMin: -0.12, pitchMax: 0.20, clearYaw: 0.12, gripUp: 0.05, easeFar: 12, easeNear: 3.5 },
+  aim: { yawMin: 0.10, yawMax: 0.80, yawCouch: 0.18, pitchMin: -0.12, pitchMax: 0.20, clearYaw: 0.12, gripUp: 0.05, easeFar: 12, easeNear: 3.5 },
   // The lift after the stroke (a damped spring; footage: S-curve over 0.5-0.7 s after ~0.1 s, ~5% overshoot, +-4 deg sway). w: rad/s at refKg, zeta: damping, delay: s before the butt leaves the rest.
   // carry: the pose held after the lift (pitch / yaw to the left, rad) for hold seconds, then upright once the horse is below slowAt of its pace; whip: spring velocity into the tip whip. couchT: seconds to couch (both riders; footage 2-3 s, was 0.85 / 0.95).
   lift: { w: 7, zeta: 0.65, delay: 0.08, carryPitch: 0.87, carryYaw: 0.61, hold: 1.0, slowAt: 0.7, carryRate: 5, whip: 0.15, couchT: 1.5 },

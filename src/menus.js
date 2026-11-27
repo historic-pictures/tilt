@@ -176,7 +176,7 @@ export function initMenus(api) {
       <div class="stop"><h3>Settings</h3><button class="btn primary" data-go="main">Done</button></div>
       <div class="sgrid">
         <section class="sect"><h5>Play</h5>
-          ${row('Difficulty', DIFFICULTY.map((d, i) => opt((p.difficulty ?? 1) === i, 'diff', d.name, `data-v="${i}"`)).join(''), 'Squire is gentle: wide hit zones, a slow opponent.|Champion is a hard ride.' + (overBack ? '|Applies from the next match.' : ''))}
+          ${row('Difficulty', DIFFICULTY.map((d, i) => opt((p.difficulty ?? 0) === i, 'diff', d.name, `data-v="${i}"`)).join(''), 'Squire is the easy ride: the lance comes down quickly and helps your aim, the arm tires slowly, and the horse stays calm.|Knight is how the lists used to feel.|Champion is the full, realistic ride: a heavy lance, a wandering point, a sharp opponent.' + (overBack ? '|Applies from the next match.' : ''))}
           ${row('View', opt(!p.firstPerson, 'view', 'Third person', 'data-v="0"') + opt(!!p.firstPerson, 'view', 'First person', 'data-v="1"'), 'Third person watches over your shoulder.|First person looks through the helm.')}
           ${row('After a pass', opt(p.autoRide !== false, 'autoride', 'Ride back for me', 'data-v="1"') + opt(p.autoRide === false, 'autoride', 'By hand', 'data-v="0"'), 'The horse can take you back to your mark.|By hand: W/S set the gait, A/D steer.')}
           ${row('Replays', [['short', 'Short'], ['standard', 'Standard'], ['full', 'Full'], ['off', 'Off']].map(([v, l]) => opt((api.replaysMode ? api.replaysMode() : 'standard') === v, 'replays', l, `data-v="${v}"`)).join(''), 'After a hit the camera replays the strike.|Short: one angle. Standard: two angles, one from each knight. Full: four passes. Off: none.|Hold Space to skip.')}
@@ -820,7 +820,7 @@ export function initMenus(api) {
     if (d.act === 'replays') { if (api.setReplays) api.setReplays(d.v || 'standard'); return show('settings'); }
     if (d.act === 'chatter') { api.setChatter(d.v !== undefined ? d.v === '1' : !(api.chatterOn ? api.chatterOn() : true)); return show('settings'); }
     if (d.act === 'voices') { api.setVoices(d.v !== undefined ? d.v === '1' : !(api.voicesOn ? api.voicesOn() : true)); return show('settings'); }
-    if (d.act === 'diff') { p.difficulty = d.v !== undefined ? +d.v : ((p.difficulty ?? 1) + 1) % DIFFICULTY.length; api.saveProfile(); return show('settings'); }
+    if (d.act === 'diff') { p.difficulty = d.v !== undefined ? +d.v : ((p.difficulty ?? 0) + 1) % DIFFICULTY.length; api.saveProfile(); return show('settings'); }
     if (d.act === 'sfxpack') { const nx = d.v || (sfxPack() === 'new' ? 'old' : 'new'); if (nx === sfxPack()) return; setSfxPack(nx); return location.reload(); }
     if (d.act === 'autoride') { if (d.v !== undefined ? d.v === '1' : p.autoRide === false) delete p.autoRide; else p.autoRide = false; api.saveProfile(); return show('settings'); }
     if (d.act === 'view') { p.firstPerson = d.v !== undefined ? d.v === '1' : !p.firstPerson; api.S.fp = p.firstPerson; api.saveProfile(); return show('settings'); }
