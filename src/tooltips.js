@@ -81,7 +81,7 @@ export function showTip(el) {
 
 export function initTooltips() {
   if (window.__tiltTips) return; window.__tiltTips = true;
-  const tipEl = (t) => (t && t.closest ? t.closest('[data-tip],[title]:not(html):not(svg *)') : null);
+  const tipEl = (t) => (t && t.closest && !t.closest('#ytbox') ? t.closest('[data-tip],[title]:not(html):not(svg *)') : null);      // (never on the YouTube box: its iframe carries the video's title)
   const finePointer = () => !(document.body.classList.contains('touch')) && (!window.matchMedia || window.matchMedia('(hover: hover)').matches);
   // hover (desktop only; touch browsers fire fake mouse events after a tap, which are ignored for a moment)
   document.addEventListener('mouseover', (e) => {
