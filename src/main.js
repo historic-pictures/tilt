@@ -1790,7 +1790,8 @@ function lapKeep(r) {
   r.position.z = clamp(r.position.z, -LAP_ZMAX, LAP_ZMAX);
   r.position.x = Math.abs(r.position.z) < 4 ? clamp(r.position.x, LAP_XMIN, LAP_XMAX) : clamp(r.position.x, LAP_XMIN, 6.4);
 }
-const lapOk = () => !S.online && !M.practice && !M.void && !/yield|forfeit/.test(M.result || '') && G.lap !== false && !(M.bridge && !M.bridge.final);
+// The victory lap (riding past the stands to halt before the judges) is off by default (owner 28 Nov: "riding towards judges... so annoying"): the winner celebrates where he is. G.lap = true brings it back.
+const lapOk = () => G.lap === true && !S.online && !M.practice && !M.void && !/yield|forfeit/.test(M.result || '') && G.lap !== false && !(M.bridge && !M.bridge.final);
 /** Settle a drawn knockout match: more lances broken, else the marshals draw lots. */
 function settleTie() {
   const bw = M.breaks[0] - M.breaks[1], win = bw > 0 || (bw === 0 && Math.random() < 0.5);
