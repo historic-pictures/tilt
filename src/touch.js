@@ -44,7 +44,7 @@ export function goFullscreen() {
 }
 
 /**
- * h = { S, openReplays(), mouse, inMatch(), getC(), spur(), brace(), advance(), setPaused(v), leave(), initAudio(), setSkip(v) }
+ * h = { S, openReplays(), mouse, inMatch(), getC(), spur(), brace(), advance(), pauseKey(), autoPause(v), leave(), initAudio(), setSkip(v) }
  * Returns { update() }, to be called once a frame.
  */
 export function initTouch(h) {
@@ -64,7 +64,6 @@ export function initTouch(h) {
   const coach = mk('div', 'tCoach', '', ui);
   const tipEl = isIOS && !standalone && lsGet('tilt.a2hs', '') !== '1' ? mk('div', 'tA2hs', '<span>For full screen, tap <b>Share</b> then <b>Add to Home Screen</b>.</span><button aria-label="Close">OK</button>', body) : null;
   if (tipEl) tipEl.querySelector('button').addEventListener('click', () => { lsSet('tilt.a2hs', '1'); tipEl.remove(); });
-  mk('div', 'tPauseMenu', '<button id="tRide">Ride on</button><button id="tRpl">Replays</button><button id="tSet">Settings</button><button id="tInstall">Install / Full screen</button><button id="tLeave">Leave the lists</button>', ui);
 
   const press = (el, fn, onUp) => {
     el.addEventListener('pointerdown', (e) => {
@@ -80,18 +79,7 @@ export function initTouch(h) {
   press(bBrace, () => h.brace());
   press(bShield, () => h.guard(true), () => h.guard(false));
   press(document.getElementById('tRotLeave'), () => h.leave());
-  press(bPause, () => { if (h.inMatch()) h.setPaused(!S.paused); });
-  press(document.getElementById('tRide'), () => h.setPaused(false));
-  press(document.getElementById('tSet'), () => { if (h.settings) h.settings(); });
-  press(document.getElementById('tRpl'), () => { if (h.openReplays) h.openReplays(); });
-  press(document.getElementById('tLeave'), () => h.leave());
-  // Install / Full screen: not installed -> the same explainer as the gate (dismissible here); installed (Android) -> toggle full screen; installed on iOS has nothing to offer
-  const bInst = document.getElementById('tInstall'), canFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
-  if (standalone && (isIOS || !canFs)) bInst.remove(); else if (standalone) bInst.textContent = 'Full screen';
-  press(bInst, () => {
-    if (!standalone && window.TiltInstall) { window.TiltInstall.show(); return; }
-    if (document.fullscreenElement) { try { document.exitFullscreen(); } catch (e) { /* ignore */ } } else goFullscreen();
-  });
+  press(bPause, () => { if (h.inMatch()) h.pauseKey(); });      // (the pause menu itself is the page's #pmenu, the same on every device)
 
   // ---- the layer: one finger aims (relative, like a trackpad), any finger can tap or hold
   const pts = new Map(); let aim = null, skipHeld = false;
@@ -218,8 +206,8 @@ export function initTouch(h) {
       const needRot = inM && isPortrait() && !h.portraitOk();
       if (needRot !== body.classList.contains('rotate-need')) {
         body.classList.toggle('rotate-need', needRot);
-        if (needRot && !S.paused) { autoPaused = true; h.setPaused(true); }
-        else if (!needRot && autoPaused) { autoPaused = false; if (S.paused) h.setPaused(false); }
+        if (needRot && !S.paused) { autoPaused = true; h.autoPause(true); }
+        else if (!needRot && autoPaused) { autoPaused = false; if (S.paused) h.autoPause(false); }
       }
       if (inM !== wasIn) { wasIn = inM; if (inM) lockLandscape(); else unlock(); }
       // the stick: relative aim velocity with a dead zone, a power curve and a little acceleration at full deflection

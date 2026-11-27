@@ -17,6 +17,7 @@ import { createPreviews } from './previews.js';
 import { createStable } from './stable.js';
 import { createAttract } from './attract.js';      // the menu joust (src/attract.js): two knights riding endless passes behind the main menu
 import { createPost } from './post.js';
+import { OnlinePause } from './pause.js';
 import { touchMode, initTouch, goFullscreen, noteMatch, getAimMode } from './touch.js';
 /** Touch words for the keyboard-and-mouse wording in tips and lessons. */
 const tw = (t) => !touchMode || !t ? t : t.replace(/Hold LEFT MOUSE to (lower the lance|bring it down)\.?/g, (m, a) => a === 'bring it down' ? 'The lance lowers itself as you close in.' : 'The lance lowers itself as you close in').replace(/Hold <kbd>LEFT MOUSE<\/kbd>/g, 'The lance lowers itself').replace(/Move the mouse so/g, 'Aim so').replace(/Watch the ring, not the mouse pointer\./g, 'Watch the ring: it is where your lance will actually hit.').replace(/Press SPACE just before/g, 'Tap BRACE just before').replace(/thrust \(SPACE\)/g, 'thrust (BRACE)').replace(/Thrust \(SPACE\)/g, 'Thrust (BRACE)').replace(/Press SPACE/g, 'Tap BRACE').replace(/Tap W/g, 'Tap SPUR').replace(/Each tap of W/g, 'Each tap of SPUR').replace(/ Hold S to slow him down\./g, '').replace(/SPACE/g, 'BRACE');
@@ -287,7 +288,7 @@ let profile = loadProfile();
 ranks.setNameSource(() => profile.name);
 ranks.setAuthSource(() => account.token());
 /** Joust a friend (see src/net.js, src/online.js and the 'online' block below): the link, who is host, the friend's interpolated rider. */
-const NET = { mid: '', oppPlay: null, net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0 };
+const NET = { mid: '', oppPlay: null, net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0, pz: null };
 let world = null, worldKey = -1, venueIdx = -1, player = null, opp = null, M = null, C = null, R = null, attract = null;      // (attract: the menu joust, built at boot)
 /** The current difficulty level's numbers (data.js DIFFICULTY): Squire is the default for a new knight. */
 const DF = () => DIFFICULTY[M && M.spec ? 1 : (profile.difficulty ?? 0)] || DIFFICULTY[0];      // (a watched bout: Knight level for both riders)
@@ -1082,7 +1083,7 @@ function startMatchNow(vIdx, oppId, circuit, practice = false, modeId = null, co
   $('venueInfo').textContent = `${V.name.toUpperCase()} · ${V.city.toUpperCase()}${V.country ? ', ' + V.country.toUpperCase() : ''} · ${V.year} · ${mode.name.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`;
   $('screen').classList.remove('on'); $('card').classList.add('hidden'); $('verdict').classList.add('hidden'); $('lesson').classList.toggle('hidden', !practice);
   S.mode = 'intro'; S.introT = 0; S.skipHold = 0; S.skipWanted = { me: false, them: false }; introFired.clear(); skipKey = false;
-  if (onl) { NET.remote.reset(); NET.rem = null; NET.rLb = 0; NET.rGuardAge = 9; NET.sendT = 0; NET.lastRx = performance.now(); NET.rdyOut = NET.rdyIn = -1; }
+  if (onl) { NET.remote.reset(); NET.rem = null; NET.rLb = 0; NET.rGuardAge = 9; NET.sendT = 0; NET.lastRx = performance.now(); NET.rdyOut = NET.rdyIn = -1; pzMake(); }
   $('bannerTop').textContent = `${V.city.toUpperCase()}${V.country ? ', ' + V.country.toUpperCase() : ''} · ANNO ${V.year} · ${mode.name.toUpperCase()}, ${mode.sub.toUpperCase()}${bridge ? ` · BOUT ${bridge.bout} OF ${bridge.n}` : ''}`; $('bannerMain').textContent = V.name;
   $('bannerSub').innerHTML = `${profile.name} &nbsp;against&nbsp; ${od.name}<div id="tape"><div><b>${ovr({ skill: 0.42 + 0.07 * bondLevel(profile.bond[profile.horse]), seat: ARMOURS[profile.armour].protection * 0.85, drive: (HORSES[profile.horse].top - 7.2) / 2 })}</b>${HORSES[profile.horse].name} · bond ${BOND_NAMES[bondLevel(profile.bond[profile.horse])]}<small>${HELMS[profile.helm].name.toUpperCase()} · ${ARMOURS[profile.armour].name.toUpperCase()}</small></div><div><b>${ovr(od)}</b>${HORSES[od.horse].name} · ${od.land}<small>${ARMOURS[od.armour].name.toUpperCase()}</small></div></div>`;
   if (practice) { $('bannerTop').textContent = 'THE TILTYARD'; $('bannerMain').textContent = 'At the Quintain'; $('bannerSub').innerHTML = 'The master of horse will teach you the joust, one thing at a time.'; }
@@ -1752,7 +1753,7 @@ function updateRide(dt, dtReal) {
 
   // keep the last few seconds for instant replay
   if (!R) { player.lanceOver(); opp.lanceOver(); }      // two lances never pass through each other: a look only, after every stroke of the frame is decided (jouster.lanceOver)
-  if ((S.mode === 'charge' || (S.mode === 'after' && C.afterT < 2.6)) && !C.replayed && !R && !S.online) recFrame(C.t);
+  if ((S.mode === 'charge' || (S.mode === 'after' && C.afterT < 2.6)) && !C.replayed && !R) recFrame(C.t);      // (online too: the pause menu's Replays are this screen's own view)
 
   if (C.cut) { C.cut.t -= dtReal; if (C.cut.ots > 0) C.cut.ots -= dtReal; if (C.cut.t <= 0) { C.cut = null; $('royalCap').classList.add('hidden'); if (C.verdict && !M.result && S.mode !== 'charge') $('verdict').classList.remove('hidden'); } }
   // The quintain's sandbag is a real thing swinging round on its arm: be gone before it comes about, or it catches you in the back.
@@ -2387,7 +2388,7 @@ let NFX = null;      // online host: what the guest needs to show this stroke (s
 function strike(Aj, Bj, zone, cent, st, isP, off, geo) {
   st.done = true;
   const nfx = NFX = S.online && NET.host && !M.practice ? {} : null; if (nfx) (C.nfx || (C.nfx = {}))[isP ? 'p' : 'o'] = nfx;
-  if (!R && !S.online && !C.replayed && C.rec.preT !== C.t) { C.rec.preT = C.t; recFrame(C.t - 1e-4); }      // the riders as they stand when the contact falls, before the blow has done anything to them (the frame's own record comes at its end, after the blow)
+  if (!R && !C.replayed && C.rec.preT !== C.t) { C.rec.preT = C.t; recFrame(C.t - 1e-4); }      // the riders as they stand when the contact falls, before the blow has done anything to them (the frame's own record comes at its end, after the blow)
   const tHit = HG ? HG.t : C.t; if (C.hitT === null) C.hitT = tHit;      // (the contact's own instant, not the end of the frame it fell in)
   // every draw this stroke makes comes from one stream, seeded by the match, the course and the striker: the host (or a replay of the same
   // inputs) always gets the same outcome. Order of draws: glance scatter, then impact() (grain, seat, at), then the fall.
@@ -3317,7 +3318,8 @@ function recTitle(r) {
   const keep = parts.length > 1 && rank(parts[1]) < 2 ? [parts[0]] : parts;
   return `Course ${r.n} — ${keep.length ? keep.join(', ') : 'no stroke'}`;
 }
-const recList = () => (M && M.recs ? M.recs : []).map((r, i) => [r, i]).filter(([r]) => r.p && r.f.length > 8);
+const recList = () => { if (M && C && S.mode === 'after' && C.rec && !C.rec.p && C.pL.res) recMeta(); return recListRaw(); };
+const recListRaw = () => (M && M.recs ? M.recs : []).map((r, i) => [r, i]).filter(([r]) => r.p && r.f.length > 8);
 
 // ---- highlights: a recorded course played from the pause menu or the end-of-match card, full speed, from any angle. The match state is untouched (the riders are put back on leaving).
 function openHL(idx, shot) {
@@ -3352,15 +3354,16 @@ function showReplayList() {
   $('pmenu').classList.remove('hidden'); $('pmMain').classList.add('hidden'); el.classList.remove('hidden'); $('banner').classList.add('hidden'); $('card').classList.add('hidden'); document.body.classList.add('rpl-open');
 }
 function openReplays(from) {
-  if (!M || !player || S.online) return;
+  if (!M || !player) return;
   if (R && !R.hl) endReplay();      // a replay that was playing (and paused) gives way to the list
   S.rpl = true; S.rplFrom = from;
   if (from === 'card') S.paused = true;
   showReplayList();
 }
 function showPauseMain() {
-  if (touchMode) { $('bannerTop').textContent = 'THE LISTS ARE STILL'; $('bannerMain').textContent = 'Paused'; $('bannerSub').innerHTML = ''; $('banner').classList.remove('hidden'); $('pmenu').classList.add('hidden'); }
-  else { $('pmenu').classList.remove('hidden'); $('pmMain').classList.remove('hidden'); $('pmList').classList.add('hidden'); }
+  $('pmenu').classList.remove('hidden'); $('pmMain').classList.remove('hidden'); $('pmList').classList.add('hidden'); $('banner').classList.add('hidden');
+  const fs = $('pmFs'); fs.classList.toggle('hidden', !document.fullscreenEnabled); fs.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+  pzSync();
 }
 function closeReplays() {
   S.rpl = false; document.body.classList.remove('rpl-open'); $('pmList').classList.add('hidden'); $('pmenu').classList.add('hidden');
@@ -3393,7 +3396,7 @@ function endMatch(keepLink = false) {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   voice.reset(); speech.hide(); $('ticker').classList.remove('on'); $('ticker').textContent = ''; strikeCall = null; S.yieldAsk = false; $('yieldAsk').classList.add('hidden');
   if (R) { player.replaying = false; R = null; }
-  S.hl = false; S.rpl = false; S.paused = false; document.body.classList.remove('rpl-open'); for (const id of ['pmenu', 'pmList', 'hlBack']) $(id).classList.add('hidden');
+  S.hl = false; S.rpl = false; S.paused = false; S.pmSet = false; pzClear(); $('screen').classList.remove('on'); document.body.classList.remove('rpl-open'); for (const id of ['pmenu', 'pmList', 'hlBack']) $(id).classList.add('hidden');
   if (world && world.crowd && world.crowd.spotlight) world.crowd.spotlight(-1);
   field.clear(); ceremony.clear(); flagmen.clear(); judges.clear(); life.clear(); speech.hide(); disposeRider(opp); opp = null; M = null; C = null; S.mode = 'menu'; S.timeScale = 1; fx.clear();
   rebuildPlayer();
@@ -3820,6 +3823,7 @@ function onMatchMessage(m) {
     case 'tilt': if (NET.host && C && m.n === M.course) { C.oTiltPts = clampNum(m.p, -9, 9); M.oTilts = clampNum(m.k | 0, 0, 99); } break;
     case 'again': NET.againThem = true; if (M.result && C && C.carded) rematchHint(); rematchCheck(); break;      // (a vote that comes before my card shows is kept)
     case 'cel': { const id = cleanCel(m.id), md = m.md === 'm' ? 'match' : 'course'; if (id && celOn() && Math.abs((m.n | 0) - M.course) <= 1 && celOk(opp, id, md)) { celStart(opp, id, { mode: md, tgt: md === 'match' ? ROYAL_PT : null }); if (CELEBS[id].kind === 'win') celCheer(-1, md === 'match'); } break; }      // (cosmetic: the friend's celebration plays here too)
+    case 'pz': if (NET.pz) NET.pz.receive(m, S.mode === 'charge' || !!M.result); break;
     case 'bye': netForfeit(); break;
     default: break;      // 'ka' and anything unknown
   }
@@ -4000,7 +4004,7 @@ function rematchCheck() {
 }
 function netForfeit() {
   if (!M || !S.online || M.forfeit) return;
-  M.forfeit = true;
+  M.forfeit = true; pzClear(); if (S.paused) setPaused(false);      // (a pause that stands ends with the link)
   const n = NET.net; NET.net = null; NET.token++; clearInterval(NET.ka); NET.ka = 0; if (n) { n.onOpen = n.onMessage = n.onClose = null; try { n.close(); } catch (e) { /* ignore */ } }
   if (M.result) { if (C && C.carded) $('cardHint').textContent = `Your opponent has left · ${touchMode ? 'TAP' : 'SPACE / CLICK'} to continue`; return; }      // already decided: he is only leaving the card
   if (!C || S.mode === 'intro') { endMatch(); menus.show('main'); toast('THE LISTS ARE EMPTY', 'Your opponent has left the lists.', 6); return; }
@@ -4144,6 +4148,7 @@ window.addEventListener('keydown', (e) => {
   if (typeof menus !== 'undefined' && menus.overOpen()) { if (k === 'Escape') { menus.closeOver(); e.preventDefault(); } return; }      // Settings over the pause menu: Esc closes it first, nothing else reaches the match
   freeMods.fast = e.shiftKey; freeMods.slow = e.ctrlKey || e.altKey;
   if (promptKey(k)) { e.preventDefault(); return; }      // the celebration prompt (1-4 or arrows) takes the key
+  if (S.pmSet && S.paused) { if (k === 'Escape' || k === 'Backspace') pauseSettings(false); e.preventDefault(); return; }      // Settings from the pause menu: Esc goes back to it
   if (S.yieldAsk) { if (k === 'KeyY' || k === 'Enter') doYield(); else if (k === 'KeyN' || k === 'Escape' || k === 'Backspace') closeYield(); e.preventDefault(); return; }      // the yield confirm swallows every key
   if (M && S.paused && R && R.hl) {      // a highlight playing from the pause menu
     if (rplKey(e)) { e.preventDefault(); return; }
@@ -4180,8 +4185,8 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'KeyG') ladyEye();      // not in the key hints: found by accident, or from the squire's mutter
   else if (k === 'Digit2') interlude(2);
   else if (k === 'Digit3') interlude(3);
-  else if (k === 'Escape' || k === 'KeyP') { if (M) { if (S.rpl) closeReplays(); else setPaused(!S.paused); } }
-  else if (k === 'Backspace') { if (M && S.paused) { if (M.spec) { setPaused(false); specLeave(); return; } setPaused(false); endMatch(); menus.show('main'); } }
+  else if (k === 'Escape' || k === 'KeyP') { if (M) { if (S.rpl) closeReplays(); else pauseKey(); } }
+  else if (k === 'Backspace') { if (M && S.paused) leaveLists(); }
   if (k.startsWith('Arrow') || k === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => {
@@ -4215,15 +4220,65 @@ window.addEventListener('blur', () => { skipKey = false; keys.rein = keys.left =
 
 function setPaused(v) {
   if (!v && typeof menus !== 'undefined' && menus.overOpen()) menus.closeOver();      // (the touch pause button also closes Settings)
-  if (!v) { if (R && R.hl) closeHL(); if (S.rpl) { const card = S.rplFrom === 'card'; closeReplays(); if (card) return; } }      // (the touch pause button also backs out of a highlight, and of the list)
+  if (!v) { if (R && R.hl) closeHL(); if (S.rpl) { const card = S.rplFrom === 'card'; closeReplays(); if (card) return; } if (S.pmSet) { S.pmSet = false; $('screen').classList.remove('on'); } }      // (the pause button also backs out of a highlight, the list and Settings)
   S.paused = v; const b = $('banner');
   if (M && M.spec) { ceremony.skipUI(false); $('pmLeave').textContent = 'Stop watching'; $('pmRide').innerHTML = 'Keep watching <kbd>Esc</kbd>'; }
-  if (v) { showPauseMain(); if (window.speechSynthesis && !S.online) window.speechSynthesis.pause(); }
+  if (v) { showPauseMain(); if (window.speechSynthesis) window.speechSynthesis.pause(); }
   else { S.rpl = false; document.body.classList.remove('rpl-open'); $('pmenu').classList.add('hidden'); if (S.mode !== 'intro') b.classList.add('hidden'); if (window.speechSynthesis) window.speechSynthesis.resume(); }
-  if (!S.muted && !S.online) audio.setMuted(v);
+  if (!S.muted) audio.setMuted(v);
 }
-// the pause menu's buttons (desktop), its Replays list, and the highlight's Back button
-$('pmRide').addEventListener('click', () => setPaused(false));
+/** The one pause key (Esc, P, the pause button, Resume). Offline it toggles the pause; online it calls, or ends, a shared pause (below). */
+function pauseKey() {
+  if (!M) return;
+  if (!S.online || !NET.pz || M.result) { setPaused(!S.paused); return; }      // (a decided match has nothing to freeze: the card's own local pause, for Leave)
+  if (S.paused && ((R && R.hl) || S.rpl || S.pmSet)) { if (R && R.hl) closeHL(); else if (S.pmSet) pauseSettings(false); else closeReplays(); return; }      // (backs out of a highlight, the list, Settings; one more press resumes)
+  const r = NET.pz.press(S.mode === 'charge');
+  if (r === 'requested' || r === 'already') pzNote('Pause requested', 0);
+  else if (r === 'theirs' && S.paused) pzNote(`${oppName()} has paused`);
+}
+// ---- the online pause (src/pause.js): the state machine decides; this turns it into the frozen match, the menu's clock and the notes
+const oppName = () => String((M && M.od && M.od.name) || 'Your opponent').replace(/, ".*"/, '');
+let pzTimer = 0, pzNoteT = 0;
+function pzNote(text, ms = 2400) { const el = $('pzNote'); el.textContent = text; el.classList.remove('hidden'); clearTimeout(pzNoteT); if (ms) pzNoteT = setTimeout(() => el.classList.add('hidden'), ms); }
+function pzClear() { clearInterval(pzTimer); pzTimer = 0; clearTimeout(pzNoteT); $('pzNote').classList.add('hidden'); if (NET.pz) { NET.pz.cur = null; NET.pz.want = null; } }
+function pzMake() {
+  pzClear();
+  NET.pz = new OnlinePause(NET.host, netSend, () => performance.now(), {
+    on() { clearTimeout(pzNoteT); $('pzNote').classList.add('hidden'); setPaused(true); clearInterval(pzTimer); pzTimer = setInterval(() => { if (NET.pz) NET.pz.tick(); netWatch(); pzSync(); }, 250); },
+    off() { clearInterval(pzTimer); pzTimer = 0; if (S.paused) setPaused(false); },
+    note(t) { pzNote(t); },
+    change() { pzSync(); },
+  });
+}
+/** Every frame online: the host starts a waiting request once the charge is over; the clock runs. */
+function pzFrame() {
+  const P = NET.pz; if (!P) return;
+  if (M.result && P.want) { P.want = null; $('pzNote').classList.add('hidden'); }
+  if (NET.host) P.poll(S.mode === 'charge' || (S.mode === 'after' && C && C.afterT < 1.2) || !!M.result);      // (a beat after the last blow, so that the replays have the splinters and the fall)
+  P.tick();
+}
+const clockText = (ms) => `0:${String(Math.max(0, Math.ceil(ms / 1000))).padStart(2, '0')}`;
+/** The pause menu's face: offline (or a decided match's local pause) "Paused"; online, who called it, the pauses that player has left, and the clock. */
+function pzSync() {
+  const P = S.online && NET.pz, on = !!(P && P.cur && S.paused);
+  $('pmNet').classList.toggle('hidden', !on); $('pmMain').classList.toggle('theirs', on && !P.mine());
+  $('pmTop').textContent = on ? 'A PAUSE HAS BEEN CALLED' : 'THE LISTS ARE STILL';
+  if (!on) return;
+  const n = P.left[P.cur.by], mine = P.mine(), my = P.left[P.me], pl = (k) => `${k} pause${k === 1 ? '' : 's'} left`;
+  $('pmWho').textContent = mine ? 'YOU HAVE PAUSED' : `${oppName().toUpperCase()} HAS PAUSED`;
+  $('pmClock').textContent = clockText(P.remaining());
+  $('pmLeft').textContent = mine ? pl(n) : `${pl(n)} for him · you have ${my}`;
+}
+function netWatch() { if (NET.net && NET.lastRx && performance.now() - NET.lastRx > 12000) netForfeit(); }
+function leaveLists() { if (M && (S.paused || S.online)) { setPaused(false); if (M.spec) { specLeave(); return; } endMatch(); menus.show('main'); } }      // (watching the roll: Stop watching)
+/** Settings from the pause menu: the same Settings screen, and Done comes back here. */
+function pauseSettings(on) {
+  if (!M || !S.paused) return;
+  S.pmSet = !!on;
+  if (on) { $('pmenu').classList.add('hidden'); menus.show('settings'); } else { $('screen').classList.remove('on'); showPauseMain(); }
+}
+// the pause menu's buttons, its Replays list, and the highlight's Back button
+$('pmRide').addEventListener('click', () => pauseKey());
 $('pmRpl').addEventListener('click', () => openReplays('pause'));
 /** Settings over the paused match: the same panel as the main menu; Done / Esc return to the pause menu. Difficulty is read at the start of a match (its help line says so); the rest applies live. */
 function openPauseSettings() {
@@ -4232,9 +4287,8 @@ function openPauseSettings() {
   menus.openOver(() => { document.body.classList.remove('pm-settings'); if (M && S.paused) showPauseMain(); });
 }
 $('pmSet').addEventListener('click', openPauseSettings);
-{ const fs = $('pmFs'), de = document.documentElement; const can = !!(de.requestFullscreen || de.webkitRequestFullscreen);      // desktop pause menu: a Full screen toggle
-  if (!can || touchMode) fs.remove(); else fs.addEventListener('click', () => { try { if (document.fullscreenElement) document.exitFullscreen(); else (de.requestFullscreen || de.webkitRequestFullscreen).call(de); } catch (e) { /* ignore */ } }); }
-$('pmLeave').addEventListener('click', () => { if (M && S.paused) { if (M.spec) { setPaused(false); specLeave(); return; } setPaused(false); endMatch(); menus.show('main'); } });
+$('pmFs').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else goFullscreen(); setTimeout(() => { if (S.paused && !S.rpl && !S.pmSet) showPauseMain(); }, 400); });
+$('pmLeave').addEventListener('click', () => leaveLists());
 $('hlBack').addEventListener('click', () => closeHL());
 $('rplCtl').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b || !R) return; e.stopPropagation();
@@ -4632,7 +4686,9 @@ G.step = (n = 1, dt = 1 / 60) => { G.manual = true; for (let i = 0; i < n; i++) 
 function frame(dtReal) {
   if (specDefer) { const f = specDefer; specDefer = null; f(); }      // (a watched bout ends here, between frames, never inside a ride)
   touch.update();
-  if (S.paused && !S.online) {      // (online the pause menu opens but the match goes on)
+  if (S.online && M && NET.pz) pzFrame();      // (online: the host starts a waiting pause; the clock)
+  if (S.paused) {      // (online too: S.paused is the shared pause, both screens frozen)
+    if (S.online) { netWatch(); pzSync(); }
     musicSync();      // (the pause menu has its own music)
     if (R && R.hl) { S.time += dtReal; updateReplay(dtReal, dtReal); replayDress(); updateCamera(dtReal); updateMask(); drawFrame(dtReal); }      // a highlight plays while the match stands still
     else drawFrame(0);
@@ -4718,11 +4774,11 @@ attract = createAttract({ scene, camera, fx, S, audio: new Proxy({}, { get: (_, 
   world: () => world, ready: () => bgDone && SCANS.ready && worldScans && !M && !preparing, shake: (v) => { S.shake = Math.max(S.shake, v); },
   crowd: (kind) => { const Rk = REACT[kind]; if (!Rk) return; if (!S.muted && audio.ctx) { const gasp = Rk.snd.some(x => x[0] === 'gasp'); for (const [snd, str, ld] of Rk.snd) audio.crowd(snd, str, (ld || 0) + (gasp && snd !== 'gasp' && kind !== 'near' ? 0.2 : 0), { fav: 0 }); }      // cheers and gasps (Settings > Sound > Crowd still silences them)
     S.excite = Math.max(S.excite, Rk.ex); S.scorer = 0; if (Rk.ex > 0.75) S.waveT = S.time; S.crowdEv = { id: ++crowdEvId, kind: { rouse: 'break', sandbag: 'taunt' }[kind] || kind, by: 0 }; } });
-const touch = initTouch({ S, mouse, rpl: { active: () => !!R && S.mode === 'replay', orbit: (dx, dy) => freeOrbit(dx, dy), zoom: (k) => freeZoom(k) }, openReplays: () => openReplays('pause'), settings: () => openPauseSettings(), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
+const touch = initTouch({ S, mouse, rpl: { active: () => !!R && S.mode === 'replay', orbit: (dx, dy) => freeOrbit(dx, dy), zoom: (k) => freeZoom(k) }, openReplays: () => openReplays('pause'), settings: () => openPauseSettings(), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, pauseKey, autoPause: (v) => { if (!S.online) setPaused(v); }, initAudio, setSkip: (v) => { skipKey = v; },
   guard(v) { if (v && !keys.guard && C) C.guardAge = 0; keys.guard = v; }, portraitOk: () => S.mode === 'replay' || S.rpl || !$('card').classList.contains('hidden'),
-  leave() { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } } });
+  leave() { leaveLists(); } });
 store.bindProfile(() => profile); store.onChange(() => { if (!M && player) rebuildPlayer(); });
-const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
+const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen, pauseBack: () => { if (S.pmSet) { pauseSettings(false); return true; } return false; },
   get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, startSpectate, newTable,
   setBody(b) { profile.body = cleanBody(b); if (player) applyBody(player, profile.body); saveProfile(); },      // (the Body section of the menus: looks only, so the rider is reshaped where he sits)
   online: onlineApi, account: accountApi,
@@ -4748,7 +4804,7 @@ showMusicBtn();
 G.attract = attract;
 G.drama = { conditionOf, lancesLeft, startTend, startBatter, doYield, openYield, swapHelm, dropLance: (side = 0) => dropLance(side ? opp : player, side), yieldOk, aiYields };
 G.tl = TL; G.tlReset = () => { TL.length = 0; tlSig = ""; };
-G.squireCheer = (sit) => squireCheer(sit, 0.2); initFps(); G.aftermath = afterM; G.lanceBits = () => lanceBits; G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.celFire = (who, id, mode) => celFire(who === 'opp' ? opp : player, id, mode || 'course'); G.celStop = celStop; G.celForce = (who, id, mode) => { const W = who === 'opp' ? opp : player, L = W === player ? opp : player, md = mode === 'match' ? 'match' : 'course'; celStop(); C.cel = { W, L, mode: md, t: 0, cam: true, hold: !S.online, lose: { at: 0.8 + Math.random() * 0.5 }, shot: 0 }; return celFire(W, id, md); }; G.celCourse = celCourse; G.celMatch = (w) => celMatch(w === 'opp' ? opp : player, w === 'opp' ? player : opp); G.fx = fx; G.endReplay = endReplay; G.post = post; G.startMatch = startMatch; G.startSpectate = startSpectate; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
+G.squireCheer = (sit) => squireCheer(sit, 0.2); initFps(); G.aftermath = afterM; G.lanceBits = () => lanceBits; G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.celFire = (who, id, mode) => celFire(who === 'opp' ? opp : player, id, mode || 'course'); G.celStop = celStop; G.celForce = (who, id, mode) => { const W = who === 'opp' ? opp : player, L = W === player ? opp : player, md = mode === 'match' ? 'match' : 'course'; celStop(); C.cel = { W, L, mode: md, t: 0, cam: true, hold: !S.online, lose: { at: 0.8 + Math.random() * 0.5 }, shot: 0 }; return celFire(W, id, md); }; G.celCourse = celCourse; G.celMatch = (w) => celMatch(w === 'opp' ? opp : player, w === 'opp' ? player : opp); G.fx = fx; G.endReplay = endReplay; G.post = post; G.startMatch = startMatch; G.startSpectate = startSpectate; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile }); G.pauseKey = pauseKey;
 resize();
 const firstVenue = Math.min(profile.venue || 0, VENUES.length - 1);
 // Staged loading: the menu needs only the two models (and, at medium and high, the first sky, but not for more than a few seconds).

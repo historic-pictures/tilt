@@ -59,8 +59,8 @@ body.lowui { --bw: calc(16px + var(--lz)); }
 .menu h5, .sect h5 { display: flex; align-items: baseline; }
 .sheet p, .sheet .pick p { font-size: 20px; }
 .sheet .top { border-bottom: 0; padding-bottom: 22px; position: relative; }
-.orn { position: absolute; left: 50%; bottom: -3px; width: 300px; max-width: 100%; height: 24px; transform: translateX(-50%); pointer-events: none; overflow: visible; } .orn .u-s { display: none; }
-@media (max-width: 700px), (max-height: 520px) { .orn { width: 184px; } .orn .u-l { display: none; } .orn .u-s { display: inline; } }
+.orn { position: absolute; left: 50%; bottom: -12px; width: 300px; max-width: 100%; height: auto; transform: translateX(-50%); pointer-events: none; }      /* the illuminated fleur-de-lis rule (assets/ui/divider-*.webp, 27 Nov), centred on the heading's rule line */
+@media (max-width: 700px), (max-height: 520px) { .orn { width: 200px; bottom: -5px; } }
 .purseline { margin: 2px 0 0; }
 .debt { color: var(--red); }
 .fineprint { text-align: center; font-style: italic; font-size: 17px; color: var(--ink2); margin: 10px 0 0; }
@@ -256,7 +256,7 @@ body.touch.compact #screen .sheet:not(.slim) { inset: 2.5vh 2vw; }
 body.touch.compact #screen .sheet .page { position: absolute; inset: 0; overflow-y: auto; max-height: none; }
 body.touch.compact #screen .sheet.slim { width: 96vw; } body.touch.compact #screen .sheet.slim .page { position: relative; max-height: 94vh; }
 body.touch.compact .sheet h3 { font-size: 36px; }
-body.touch.compact .sheet .top { gap: 12px; padding-bottom: 18px; } body.touch.compact .orn { height: 18px; width: 140px; bottom: -2px; }
+body.touch.compact .sheet .top { gap: 12px; padding-bottom: 18px; } body.touch.compact .orn { width: 150px; bottom: -2px; }
 body.touch.compact .sheet h5, body.touch.compact .menu h5, body.touch.compact .sect h5 { font-size: 16px; margin: 12px 0 6px; }
 body.touch.compact .sheet p, body.touch.compact .sheet .top p { font-size: 16px; line-height: 1.25; }
 body.touch.compact #screen[data-name="exhibition"] .top p { display: block; }
@@ -405,7 +405,6 @@ body.touch:not(.touch-paused) #lesson:not(.hidden) { display: block; left: calc(
 body.touch:not(.touch-paused) #lessonTitle, body.touch:not(.touch-paused) #lessonList, body.touch:not(.touch-paused) #lessonNote { display: none; }
 body.touch:not(.touch-paused) #lessonGoal { font-size: 12px; line-height: 1.2; margin: 0; padding: 0; border: 0; }
 body.touch.touch-paused #lesson:not(.hidden) { display: block; left: 50%; top: calc(var(--st) + 14px); transform: translateX(-50%); width: min(70vw, 420px); z-index: 15; zoom: .85; }
-body.touch.touch-paused #pmenu { display: none; }
 /* buttons: round, 76-88 px, inside the safe area, icon over a tiny caption */
 body.touch #touchUI button { display: none; }
 body.touch #touchUI #tSpur, body.touch #touchUI #tBrace, body.touch #touchUI #tShield { border-radius: 50%; padding: 0; flex-direction: column; align-items: center; justify-content: center; gap: 0; letter-spacing: .06em; }

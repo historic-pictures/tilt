@@ -84,7 +84,7 @@ export function initMenus(api) {
   const crests = () => root.querySelectorAll('canvas[data-arms]').forEach(c => drawCrest(c, JSON.parse(c.dataset.arms)));
   const crest = (arms, w = 40, h = 48) => `<canvas width="${w}" height="${h}" data-arms='${JSON.stringify(arms)}'></canvas>`;
   // every screen is a scroll: the skin, then the page that is written on (and scrolls)
-  const ORN = '<svg class="orn" aria-hidden="true"><use class="u-l" href="#orn" width="100%" height="100%"/><use class="u-s" href="#orn-s" width="100%" height="100%"/></svg>';      // the penwork fleur-de-lis rule under every page heading (one shared <symbol> in index.html)
+  const ORN = '<img class="orn" src="assets/ui/divider-600.webp" srcset="assets/ui/divider-600.webp 600w, assets/ui/divider-1200.webp 1200w" sizes="300px" alt="" aria-hidden="true" draggable="false">';      // the penwork fleur-de-lis rule under every page heading (one shared <symbol> in index.html)
   const scroll = (cls, html) => `<div class="${cls} scroll"><i class="paper"></i><div class="page">${html.replace(/<div class="(top|stop)"([^>]*)>/g, (m) => m + ORN)}</div><div class="helpstrip" aria-live="polite"></div></div>`;
 
   /** "Your own music": songs from the player's own computer, kept in this browser only (src/mymusic.js). */
@@ -776,6 +776,7 @@ export function initMenus(api) {
     if (d.roll !== undefined) { if (store.has('rolls') && PACKS.rolls.arms[+d.roll]) { p.arms = JSON.parse(JSON.stringify(PACKS.rolls.arms[+d.roll].arms)); api.saveProfile(); api.rebuildPlayer(); } return show('armoury'); }
     if (d.act === 'fullscreen') { if (api.fullscreen) api.fullscreen(); return; }
     if (d.go && overBack) return closeOver();      // Settings opened over the pause menu: Done (or any way out) goes back to the pause menu, not the main menu
+    if (d.go === 'main' && api.pauseBack && api.pauseBack()) return;      // Settings opened from the pause menu: Done goes back to it
     if (d.go) { dismissArm = null; if (d.go === 'online') api.online.open(); return show(d.go); }
     if (d.on) {
       const O = api.online;

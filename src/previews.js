@@ -105,7 +105,7 @@ export function createPreviews() {
     const bk = JSON.stringify(body || null), kk = JSON.stringify(kit || null);
     if (bk !== bodyKey) { bodyKey = bk; for (const it of items.values()) if (it.j && it.j.rig && body) { applyBody(it.j, body); if (it.body) { it.j.helmOff = true; it.j.update(0); } } }
     if (kk !== kitKey) { kitKey = kk; const it = items.get('body:me'); if (it && it.tt) { scene.remove(it.tt); items.delete('body:me'); } }
-    ang += dt * SPIN;
+    ang = -0.55;      // a fixed three-quarter view: the previews no longer spin (owner 27 Nov); the big preview can still be turned by hand
     // build at most one preview a frame, so opening the armoury never stalls
     for (const cv of cvs) { const k = cv.dataset.pv; if (!items.has(k)) { items.set(k, { pending: true }); queue.push(k); } }
     if (queue.length) { const k = queue.shift(), [kind, id] = k.split(':'); try { items.set(k, build(kind, id, arms)); } catch (e) { console.warn('preview failed', k, e); items.set(k, { failed: true }); } }

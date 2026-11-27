@@ -463,10 +463,6 @@ body.touch #tPause i:first-child { left: 13px; } body.touch #tPause i:last-child
 body.touch[data-tmode="ready"] #tSpur, body.touch[data-tmode="charge"] #tSpur, body.touch[data-tmode="charge"] #tBrace { display: block; }
 body.touch.touch-play #tPause { display: block; }
 body.touch.touch-paused #tSpur, body.touch.touch-paused #tBrace { display: none; }
-body.touch #tPauseMenu { display: none; position: absolute; left: 50%; top: 76%; transform: translateX(-50%); gap: 14px; }
-body.touch.touch-paused #tPauseMenu { display: flex; }
-body.touch #tPauseMenu button { position: static; display: block; padding: 14px 26px; font-size: 20px; border-radius: 4px; white-space: nowrap; }
-body.touch #tLeave { border-color: var(--red); }
 body.touch #replayKeys, body.touch #helmMask ~ #replayKeys { display: none !important; }
 body.touch #cursorDot { opacity: .9; }
 body.touch #skipHold span { font-size: 0; } body.touch #skipHold span::after { content: 'Hold the screen to skip'; font-size: 13px; }
@@ -566,7 +562,27 @@ body.touch.compact #card #cardTitle { font-size: 36px; } body.touch.compact #car
 #pmList .rfoot { margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
 #cardReplays { display: block; margin: 14px auto 0; }
 #hlBack { position: fixed; top: 12px; right: 14px; z-index: 31; }
-body.rpl-open #tPauseMenu, body.pm-settings #tPauseMenu { display: none !important; }
+/* the online pause: who called it, the clock, the pauses left; and the short notes ("Pause requested", "No pauses left") */
+#pmNet { margin: 0 auto 14px; padding: 6px 0 8px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+#pmWho { font-family: var(--caps); letter-spacing: .14em; font-size: 15px; color: var(--ink); }
+#pmClock { font-family: var(--display); font-weight: 700; font-size: 50px; line-height: 1.05; color: var(--red); font-variant-numeric: tabular-nums; }
+#pmLeft { font-style: italic; font-size: 15px; color: var(--ink2); }
+#pmMain.theirs #pmRide { display: none; }
+#pzNote { position: fixed; left: 50%; top: 13%; transform: translateX(-50%); z-index: 29; padding: 8px 20px; background: rgba(24, 14, 6, .82); color: var(--vellum3); border: 1px solid var(--gold2); border-radius: 3px; font-family: var(--caps); letter-spacing: .16em; font-size: 15px; pointer-events: none; white-space: nowrap; }
+body.touch #pmMain .btn { min-height: 48px; font-size: 21px; }
+body.touch.compact #pmenu { width: min(560px, 96vw); }
+body.touch.compact #pmMain { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; align-items: stretch; }
+body.touch.compact #pmMain > #pmTop, body.touch.compact #pmMain > h2, body.touch.compact #pmMain > #pmNet { grid-column: 1 / -1; }
+body.touch.compact #pmMain h2 { font-size: 34px; margin: 0; }
+body.touch.compact #pmMain > #pmNet { margin: 0; padding: 2px 0 4px; display: flex; align-items: baseline; justify-content: center; gap: 14px; flex-wrap: wrap; }
+body.touch.compact #pmMain > #pmNet.hidden { display: none; }
+body.touch.compact #pmClock { font-size: 34px; }
+body.touch.compact #pmMain .btn { width: 100%; margin: 0; min-height: 46px; font-size: 19px; padding: 6px 10px; }
+body.touch.compact #pmMain #pmRide.btn { font-size: 22px; }
+body.touch.compact #pmMain.theirs #pmRpl { grid-column: auto; }
+body.touch.compact #pmMain .btn.hidden { display: none; }
+body.touch.compact #pmMain #pmLeave { grid-column: 1 / -1; }
+body.touch.compact #pzNote { top: 66px; font-size: 13px; }
 body.touch #pmenu .rt { font-size: 17px; } body.touch #pmList .ra button { font-size: 13px; padding: 7px 10px; }
 body.touch #hlBack { top: 12px; right: 12px; padding: 10px 18px; font-size: 16px; background: rgba(24, 14, 6, .7); color: var(--vellum3); border-color: var(--gold2); z-index: 40; }
 
@@ -583,7 +599,7 @@ body.touch #hlBack { top: 12px; right: 12px; padding: 10px 18px; font-size: 16px
 .online input.name.code { width: 210px; text-transform: uppercase; letter-spacing: .3em; font-size: 34px; text-align: center; }
 .online .friend { display: flex; align-items: center; gap: 12px; justify-content: center; font-size: 22px; margin: 6px 0; }
 .online .friend i { color: var(--ink2); font-size: 16px; }
-body.online #pmRpl, body.online #tRpl, body.online #cardReplays { display: none !important; }
+body.online #cardReplays { display: none !important; }
 body.touch.compact .online .roomcode b { font-size: 38px; }
 body.touch.compact .online .onrow, body.touch.compact .online .joinrow { margin: 8px 0 4px; }
 body.touch.compact .online .btn.big { font-size: 17px; padding: 8px 14px; }
@@ -881,3 +897,4 @@ body.spec #crowdPanel, body.spec #horsePanel, body.spec #lancePanel, body.spec #
 body.spec #replayYou, body.spec #replayHim, body.spec #rplCtl, body.spec #replayKeys, body.spec #pmRpl, body.spec #condP, body.spec #condO, body.spec #marks, body.spec #royalCap { display: none !important; }
 #specSkipAll { position: fixed; right: 16px; top: 74px; z-index: 40; display: none; padding: 8px 16px; }
 body.touch #specSkipAll { top: auto; bottom: 18px; right: 14px; padding: 12px 20px; }
+body.touch #pmMain kbd { display: none; }
