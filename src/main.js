@@ -1228,12 +1228,15 @@ function burst() {
 
 const OTS = 1.5;      // seconds of the over-the-shoulder shot that opens each gesture (your knight from behind, looking the way he addresses), before the reaction shot
 /** Between courses: one gesture, with its own camera cut and its own price. */
+/** The horse rears up for a moment (the stands love it): between courses (key 5), and after a win. */
+function rearUp() { if (!C || !player || player.unhorsed || C.rearT > 0) return false; player.rear = Math.max(player.rear, 0.01); C.rearT = 1.6; audio.whinny(0, 3); return true; }
 function interlude(n) {
   if (M.spec || !C || S.mode !== 'ready' || C.act || C.beat || M.practice || C.rd.p) return;
   C.act = n;
   if (n === 1) { C.saluted = true; C.saluteT = 1.2; react('salute', 1); world.setRoyalMood('applaud'); C.cut = { kind: 'royal', t: 2.4 + OTS, ots: OTS }; }
   else if (n === 2) { C.saluteT = 1.2; react('rouse', 1); M.agit = clamp(M.agit + (1 - player.horseDef.nerve) * 0.2 * DF().nerve, 0, 1); C.cut = { kind: 'commons', t: 2.4 + OTS, ots: OTS }; }
   else if (n === 3) { react('taunt', 1, false); C.o.rattled = 1.2; C.cut = { kind: 'opp', t: 2.2 + OTS, ots: OTS }; say('You level your lance. He will ride angry.', 'THE COMMONS', 2, { prompt: true, phases: 'ready' }); }
+  else if (n === 5) { rearUp(); react('rouse', 1); M.agit = clamp(M.agit + 0.08, 0, 1); say('Your horse rears up and paws the air. The commons roar.', 'THE COMMONS', 2, { prompt: true, phases: 'ready' }); }      // a show for the stands: it frets him a little
   else if (n === 4) { M.agit = clamp(M.agit - 0.3, 0, 1); M.stamina = clamp(M.stamina + 0.12, 0, 1); audio.snort(0); C.cut = { kind: 'horse', t: 2.0 + OTS, ots: OTS }; say('You steady your horse with a quiet word.', 'THE GROOM', 2, { prompt: true, phases: 'ready' }); }
 }
 
@@ -1547,6 +1550,10 @@ function updateRide(dt, dtReal) {
   else if (touchMode && !isAuto()) C.couchHeld = S.mode === 'charge' && gap < 36 && !C.pL.done;      // touch: the lance lowers by itself, and rises the moment the stroke is done (the quick-raise credit)
   if (live && keys.rein) { C.reinT += dtReal; if (C.reinT > 0.28) { C.reinT = 0; C.tier = Math.max(0, C.tier - 1); if (gap < 28 && C.tier < 3) C.checked = true; } } else C.reinT = 0.2;
   if (looseHorse(player, dt)) { /* no rider: the horse runs on and stops by itself */ }
+  else if (after && M.result && (C.lapDone || C.carded)) {      // the match is decided and the lap (if any) is over: he stands where he is (no cantering on the spot under the card); 5 still rears him
+    player.speed = damp(player.speed, 0, 4, dt);
+    if (C.rearT > 0) { C.rearT -= dt; player.rear = damp(player.rear, C.rearT > 0.3 ? 1 : 0, 6, dt); } else player.rear = damp(player.rear, 0, 8, dt);
+  }
   else if (after && (!M.result || C.turn.p.init && C.turn.p.stage === 'run')) rideOut(player, C.turn.p, dt);      // (once begun, the ride-out is finished even if the match ends under it)
   else {
     let target;
@@ -1666,6 +1673,7 @@ function updateRide(dt, dtReal) {
       if (Math.random() < M.kit.shy * clamp((opp.agit - PHYS.kit.shyAt) * PHYS.kit.shyGain, 0, PHYS.kit.shyMax) * (1.3 - (HORSES[od.horse].nerve ?? 0.6))) { opp.speed *= PHYS.kit.shyPace; O.knock.x += (Math.random() < 0.5 ? -1 : 1) * 0.3; M.shyN[1]++; }
     }
     if (!O.retarget && gap < 14) { O.retarget = true; if (player.guard > 0.5 && O.zone === 'helm') O.zone = 'body'; else if (player.guard > 0.5 && O.zone === 'shield' && Math.random() < od.skill) O.zone = 'body'; }
+  } else if (after && M.result && (C.lapDone || C.carded) && !M.practice) { opp.speed = damp(opp.speed, 0, 4, dt);
   } else if (after && (!M.result || C.turn.o.init && C.turn.o.stage === 'run') && !M.practice) { rideOut(opp, C.turn.o, dt); opp.brace = damp(opp.brace, 0, 6, dt); opp.guard = damp(opp.guard, 0, 5, dt); opp.liftStep(dt, lanceOf(false).kg); }
   else {
     const tgt = S.mode === 'ready' || M.practice ? 0 : (opp.z * opp.dir > START_Z - 5 ? 0 : 4.5);
@@ -4179,6 +4187,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'KeyM') setSound(S.muted);
   else if (k === 'KeyN') { if (S.mode === 'menu' && !e.repeat) musicNext(); }
   else if (k === 'KeyR') { if (M && S.paused && !S.rpl) openReplays('pause'); else if (M && !S.paused && M.result && C && C.carded && S.mode === 'after') openReplays('card'); else if (C && S.mode === 'after' && C.replayed && C.rec.f.length > 20 && !C.cut && !R && !S.online) startReplay({ frozen: true }); }
+  else if (k === 'Digit5') { if (S.mode === 'ready') interlude(5); else if (C && S.mode === 'after' && M.result && (C.lapDone || C.carded) && !M.spec && !S.paused && rearUp()) react('rouse', 1, false); }      // rear your horse: before a course, or after the match is decided
   else if (k === 'KeyE' || k === 'Digit4') { if (S.mode === 'ready') interlude(4); else if (C && player.speed < 2.6 && C.patCd <= 0 && S.mode === 'charge') { C.patCd = 1.2; M.agit = clamp(M.agit - 0.22, 0, 1); audio.snort(0); } }
   else if (k === 'KeyX' || k === 'Digit1') { if (S.mode === 'ready') interlude(1); else if (C && S.mode === 'after' && opp && opp.unhorsed && !C.courtesy) { C.courtesy = true; react('salute', 1, false); discover('courtesy'); withFeats(() => courtesyFeat(profile)); say('You salute your fallen foe. The gallery approves.', 'THE GALLERY', 2, { prompt: true, phases: 'after' }); } }
   else if (k === 'KeyY') openYield();
@@ -4346,7 +4355,7 @@ function updateHud(force) {
   const dot = $('rhythmDot'); dot.style.width = dot.style.height = `${8 + pulse * 38}px`; dot.style.opacity = 0.35 + pulse * 0.65;
   // prompt
   let pr = '';
-  if (S.mode === 'ready') pr = C.rd.sig ? `Tap <kbd>W</kbd> to ride` : C.rd.p ? `Your lance is up. Wait for the marshal…` : `Tap <kbd>W</kbd> to raise your lance` + (M.practice || C.act ? '' : ` &nbsp;·&nbsp; or first: <kbd>1</kbd> salute the gallery <kbd>2</kbd> rouse the commons <kbd>3</kbd> taunt him <kbd>4</kbd> steady your horse`) + ` &nbsp;·&nbsp; <kbd>H</kbd> ${player.visor ? 'visor' : 'helm on or off'}`;
+  if (S.mode === 'ready') pr = C.rd.sig ? `Tap <kbd>W</kbd> to ride` : C.rd.p ? `Your lance is up. Wait for the marshal…` : `Tap <kbd>W</kbd> to raise your lance` + (M.practice || C.act ? '' : ` &nbsp;·&nbsp; or first: <kbd>1</kbd> salute the gallery <kbd>2</kbd> rouse the commons <kbd>3</kbd> taunt him <kbd>4</kbd> steady your horse <kbd>5</kbd> rear`) + ` &nbsp;·&nbsp; <kbd>H</kbd> ${player.visor ? 'visor' : 'helm on or off'}`;
   else if (S.mode === 'charge' && !C.pL.done) {
     if (C.tier < 3 && C.t > 1.2) pr = `Tap <kbd>W</kbd> again — walk, trot, canter, gallop`;
     else if (C.couch < 0.2 && tti < couchLead() + 0.55 && tti > 0.35) pr = `Hold <kbd>LEFT MOUSE</kbd> — lower your lance now`;
