@@ -15,6 +15,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { celStep, celBody, celLance, celArms } from './celebrate.js';
 import { RIG, KS, riderWanted, figureFor, buildRigRider, poseRig, armsRig, rideStep, fitLegs, legsRig, posePose, rideSave, rideLoad } from './rider_rig.js';
+import { applyBody } from './body_types.js';
 
 // The rigged horse (Quaternius, CC0). Loaded once; every rider gets his own skinned copy.
 // If it is missing the code-built horse is used instead.
@@ -264,6 +265,7 @@ function hipsAt(c, t, out, k, o) { const h = c.hipsRel_m || {}; return o.set(cli
 const _v4 = new THREE.Vector3(), _bq = new THREE.Quaternion(), _bv = new THREE.Vector3(), _bp = new THREE.Vector3(), _we = new THREE.Euler(), _wq = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0), XA = new THREE.Vector3(1, 0, 0);
+const _lvI = new THREE.Quaternion(), _lvA = new THREE.Vector3(), _lvB = new THREE.Vector3(), _lvC = new THREE.Vector3(), _lvD = new THREE.Vector3(), _lvP = new THREE.Quaternion();
 const _hm = new THREE.Matrix4(), _hm2 = new THREE.Matrix4(), _dv = new THREE.Vector3(), _hit = new Hit(), _cs = new Cap();
 const _he = new THREE.Euler(), _hq = new THREE.Quaternion(), _hv = new THREE.Vector3(), _hp = new THREE.Vector3();
 const _ua = new THREE.Quaternion(), _ub = new THREE.Quaternion(), _uc = new THREE.Quaternion(), _uv = new THREE.Vector3();      // (aim-share undo in tipWorld)
@@ -332,7 +334,8 @@ export class Jouster {
     this.lanceLower = 0; this.lean = 0; this.recoil = 0; this.recoilV = 0; this.sideRecoil = 0; this.sideRecoilV = 0;
     this.brace = 0; this.unhorsed = false; this.lanceBroken = false; this.rear = 0;
     this.twist = 0; this.twistV = 0; this.headK = 0; this.headV = 0; this.shK = 0; this.shV = 0; this.stag = 0; this.stagV = 0;
-    this.aimLocal = new THREE.Vector3(0.3, 0.05, 1).normalize();
+    this.aimLocal = new THREE.Vector3(0.18, 0, 1).normalize();      // the couch yaw (10 deg): footage lances sit 8-12 deg across the horse's neck
+    this.aimEase = 1; this.gripUp = 0; this.carry = 0; this._lf = null;
     this.prevLegPhase = [0, 0, 0, 0];
     this.onHoof = null; this.time = Math.random() * 10;
     this.fall = null; this.caps = [];
@@ -348,6 +351,7 @@ export class Jouster {
     this.body.scale.set(gx, this.hs, this.hs); this.mount.scale.set(1 / gx, 1 / this.hs, 1 / this.hs);
     this.seatY = 1.71 * this.hs; if (this.hasModel) { if (this.newHorse) this._seatOnNew(); else this._seatOnBack(); }
     this._buildRider();
+    applyBody(this, this.arms.body);      // sex, height, build and face: drawn only, the skeleton and the hit volumes stay standard (src/body_types.js)
     this.setPose(0);
   }
 
@@ -1418,18 +1422,45 @@ export class Jouster {
   /** Set desired lance direction in world space; clamped to what an arm can do. */
   setAim(dirWorld) {
     _v.copy(dirWorld); if (this.dir < 0) { _v.x = -_v.x; _v.z = -_v.z; }
-    const yaw = clamp(Math.atan2(_v.x, _v.z), 0.14, 1.15);
-    const pitch = clamp(Math.asin(clamp(_v.y, -1, 1)), -0.22, 0.32);
+    // Footage (overhead drone): 10 deg across the horse at the couch, about 20 at the meeting, never over 30; both riders alike, so the two lances lie parallel in plan.
+    // aimEase (0 at the couch .. 1 at the meeting, set by main from the gap) takes the yaw from the couch value to the one the target needs.
+    const AIM = PHYS.aim, want = clamp(Math.atan2(_v.x, _v.z), AIM.yawMin, AIM.yawMax), e = this.aimEase;
+    const yaw = AIM.yawCouch + (want - AIM.yawCouch) * e;
+    const pitch = clamp(Math.asin(clamp(_v.y, -1, 1)), AIM.pitchMin, AIM.pitchMax);
     this.aimLocal.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+  }
+
+  /**
+   * The lift after the stroke, one call per frame while the lance is going up (it replaces an exponential damp of lanceLower). A damped spring on lanceLower:
+   * 0.08 s before the butt leaves the rest, then S-shaped, about 0.45 s to 90%, a little overshoot (w 7, zeta 0.65 at the reference mass; a heavy lance is lazier).
+   * The pose it rises to is the CARRY (about 50 deg up, 35 deg to the left of the line of travel), held about a second, then upright as the horse slows (`carry`, read by applyLance).
+   * The spring's velocity goes into the tip's lag (`lw`). Looks only: the strike has been decided; lanceLower stays the single value that is sent and recorded.
+   */
+  liftStep(dt, kg = 5.5) {
+    const L = PHYS.lift; this._liftFrame = true;
+    let f = this._lf;
+    if (!f || Math.abs(this.lanceLower - f.out) > 1e-4) f = this._lf = { x: this.lanceLower, v: 0, t: 0, out: this.lanceLower, top: Math.max(this.speed, this._peak || 0), cOn: this.lanceLower > 0.4 };      // (anything else having moved lanceLower starts the lift afresh)
+    f.t += dt;
+    if (f.t > L.delay) {
+      const w = L.w * Math.sqrt(PHYS.lanceArm.refKg / Math.max(2, kg)), n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
+      for (let i = 0; i < n; i++) { f.v += (w * w * (0 - f.x) - 2 * L.zeta * w * f.v) * h; f.x += f.v * h; }
+    }
+    this.lanceLower = clamp(f.x, 0, 1); f.out = this.lanceLower;
+    this.liftV = f.v; this.liftX = f.x;
+    const hold = f.t < L.hold || (this.speed > L.slowAt * f.top && f.t < 3.5);
+    this.carry = damp(this.carry, f.cOn && hold ? 1 : 0, L.carryRate, dt);
+    // the tip lags the hand: with the lance rising (v < 0) it trails below its line; the spring's overshoot (x < 0) tips it past
+    const lw = clamp(-L.whip * f.v * 0.3 + Math.min(0, f.x) * -0.5, -0.2, 0.2); this.lw = damp(this.lw || 0, lw, 30, dt);
   }
 
   /** The lance tip in the world, as the STRIKE sees it. The visible stride bob (PHYS.ride.aimTip) is drawn in full, but only PHYS.ride.aimShare of it moves this point: `_aimUndo` turns the tip back about the grip. */
   tipWorld(out) {
     this.lance.localToWorld(out.set(0, 0, this.reach));
-    if (this._aimUndo) {
+    if (this._aimUndo || this._lvR) {
       this.lance.getWorldPosition(_uv); out.sub(_uv);
-      this.torso.getWorldQuaternion(_ua); _ub.copy(_ua).invert(); _uc.copy(_ua).multiply(this._aimUndo).multiply(_ub);
-      out.applyQuaternion(_uc).add(_uv);
+      if (this._lvR) out.applyQuaternion(_lvI.copy(this._lvR).invert());      // the lance-over-lance dip (applyLance) is for the eye: the strike does not see it
+      if (this._aimUndo) { this.torso.getWorldQuaternion(_ua); _ub.copy(_ua).invert(); _uc.copy(_ua).multiply(this._aimUndo).multiply(_ub); out.applyQuaternion(_uc); }
+      out.add(_uv);
     }
     return out;
   }
@@ -1440,22 +1471,24 @@ export class Jouster {
    * (across the neck) until the shaft clears the horse's head and neck. By the time the lances meet the true line is wider than that anyway.
    */
   _clearHorse(v) {
-    let need = 0;
+    let need = 0, stillThrough = false;
     if (this.lanceLower > 0.05 && this.hb) {
-      this.lance.getWorldPosition(_v2); this.root.worldToLocal(_v2);
+      this.lance.getWorldPosition(_v2); this.root.worldToLocal(_v2); _v2.y += this.gripUp;
       // Own horse: the steady head and neck markers (spheres) as before the capsule rebuild. The capsules, and the model's bobbing head,
       // made the couched lance swing out and jerk from side to side at every stride (13 Nov); the other man's lance still hits the capsules.
       const yaw0 = Math.atan2(v.x, v.z), pitch = Math.asin(clamp(v.y, -1, 1));
-      for (let k = 0; k < 16; k++) {
+      const clearMax = PHYS.aim.clearYaw;      // capped: the real lance lies over the neck above the ears, so what is left is cleared by lifting the grip, not by swinging wide
+      for (let k = 0; k < Math.ceil(clearMax / 0.03); k++) {
         const yaw = yaw0 + need; _v3.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
         let through = false;
         for (let i = 4; i < 6 && !through; i++) {
           const z = this.zones[i]; z.o.getWorldPosition(_v4); this.root.worldToLocal(_v4); _v4.sub(_v2);
           const t = clamp(_v4.dot(_v3), 0, this.reach); if (_v4.addScaledVector(_v3, -t).length() < z.r * PHYS.shaft.horse + 0.03) through = true;
         }
-        if (!through) break; need += 0.03;
+        if (!through) { stillThrough = false; break; } need += 0.03; stillThrough = true;
       }
     }
+    this.gripUp += ((stillThrough ? PHYS.aim.gripUp : 0) - this.gripUp) * 0.12;
     this.clearNeed = need;
     this.clearYaw = (this.clearYaw || 0) + (need - (this.clearYaw || 0)) * 0.3;      // eased, so the horse's nodding head does not jerk the lance
     if (this.clearYaw > 0.002) { const yaw = Math.atan2(v.x, v.z) + this.clearYaw, pitch = Math.asin(clamp(v.y, -1, 1)); v.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)); }
@@ -2249,6 +2282,8 @@ export class Jouster {
   // ------------------------------------------------------------ update
   update(dt) {
     this._dt = dt;
+    this._peak = Math.max(this.speed, (this._peak || 0) - 0.3 * dt);      // (the pace he came down the lists at: the carry ends when he has slowed well below it)
+    if (!this._liftFrame) { this._lf = null; this.carry = damp(this.carry, 0, 5, dt); this.lw = damp(this.lw || 0, 0, 12, dt); } this._liftFrame = false;      // (liftStep, main.js, runs before update on the frames the lance is going up)
     this.time += dt; const t = this.time;
     if (this.cel) celStep(this, dt);
     const sp = this.speed;
@@ -2482,17 +2517,48 @@ export class Jouster {
     this.root.updateMatrixWorld(true);
   }
 
+  /**
+   * Two lances never go through each other: if the shafts would interpenetrate the tips are pushed apart in the vertical plane only, one over the other
+   * (the lower man's tip dips, the higher man's rises, each half the way: the footage shows them passing one over the other).
+   * Cosmetic: main.js calls this once a frame AFTER the strikes have been resolved (the next applyLance starts again from the true pose), and tipWorld undoes it (_lvR) for anything
+   * that asks in between, so no stroke, score or net message sees it. Eased in and out.
+   */
+  lanceOver() {
+    const F = this.foe; let want = 0;
+    if (F && F.lance && this.lanceLower > 0.5 && F.lanceLower > 0.5 && !F.lanceBroken && !this.lanceBroken && !F.unhorsed && !this.unhorsed) {
+      this.lance.updateMatrixWorld(true); F.lance.updateWorldMatrix(true, false);
+      this.lance.getWorldPosition(_lvA); this.lance.localToWorld(_lvB.set(0, 0, this.reach));
+      F.lance.getWorldPosition(_lvC); F.lance.localToWorld(_lvD.set(0, 0, F.reach));
+      const d = closestSegSeg(_lvA.x, _lvA.y, _lvA.z, _lvB.x, _lvB.y, _lvB.z, _lvC.x, _lvC.y, _lvC.z, _lvD.x, _lvD.y, _lvD.z), SH = PHYS.shaft, lack = SH.across + 0.06 - d;
+      if (lack > 0) {
+        const s = Math.max(0.5, SS.s * this.reach), a = Math.min(0.3, lack / 2 / s);      // an angle at the contact's distance along the shaft; half each
+        want = (SS.y1 > SS.y2 || (SS.y1 === SS.y2 && this.dir > 0) ? -1 : 1) * a;      // negative: this tip rises (rotation about up x lance lowers a tip for a positive angle)
+      }
+    }
+    this.lvA = (this.lvA || 0) + (want - (this.lvA || 0)) * (1 - Math.exp(-14 * (this._dt || 0.016)));
+    if (Math.abs(this.lvA) < 0.002) { this._lvR = null; return; }
+    _lvB.subVectors(this.lance.localToWorld(_lvD.set(0, 0, 1)), this.lance.getWorldPosition(_lvA)).normalize();      // the shaft's direction
+    _lvC.set(0, 1, 0).cross(_lvB); if (_lvC.lengthSq() < 1e-6) { this._lvR = null; return; } _lvC.normalize();
+    this._lvR = (this._lvR || new THREE.Quaternion()).setFromAxisAngle(_lvC, this.lvA);
+    this.torso.getWorldQuaternion(_lvP);
+    _q.copy(_lvP).invert().multiply(this._lvR).multiply(_lvP); this.lance.quaternion.premultiply(_q); this.lance.updateMatrixWorld(true);
+  }
+
   /** Point the lance along aimLocal (blended with the upright carry). Safe to call again after re-aiming. */
   applyLance() {
+    this._lvR = null;      // (the lance-over-lance dip of the last frame is gone with the pose it was added to: see lanceOver)
     this.root.updateMatrixWorld(true);
     if (this.rig) { poseRig(this, this.rig); if (this.cel) celBody(this); }
     if (!(this.replaying ? this.snapUnhorsed : this.unhorsed)) {
       _v.copy(this.aimLocal); this._clearHorse(_v);                          // the lance is carried across the neck, never through it
+      if (this.rig && this.gripUp > 0.001) this.lance.position.y += this.gripUp * smoothstep(0, 0.6, this.lanceLower);      // (poseRig has just reset the grip: this is added once per call)
       _v.applyQuaternion(this.root.quaternion);                              // world
       this.torso.getWorldQuaternion(_q).invert();
       _v.applyQuaternion(_q);                                                // torso-local
       _q2.setFromUnitVectors(Z, _v.normalize());
-      this.lance.quaternion.copy(this.lanceRestQ).slerp(this.lanceUpQ, smoothstep(0, 1, this.raise)).slerp(_q2, smoothstep(0, 1, this.lanceLower));
+      if (!this.carryQ) { const L = PHYS.lift, cp = Math.cos(L.carryPitch); this.carryQ = new THREE.Quaternion().setFromUnitVectors(Z, new THREE.Vector3(Math.sin(L.carryYaw) * cp, Math.sin(L.carryPitch), Math.cos(L.carryYaw) * cp).normalize()); }      // (torso frame: +x is his left)
+      this.lance.quaternion.copy(this.lanceRestQ); if (this.carry > 0.001) this.lance.quaternion.slerp(this.carryQ, smoothstep(0, 1, this.carry));
+      this.lance.quaternion.slerp(this.lanceUpQ, smoothstep(0, 1, this.raise)).slerp(_q2, smoothstep(0, 1, this.lanceLower));
       this._aimUndo = null;
       if (this.rig && this._aimWob) {
         const sh = PHYS.ride.aimShare, w0 = this._aimWob[0], w1 = this._aimWob[1];
@@ -2503,13 +2569,13 @@ export class Jouster {
           this._aimUndo = (this._aimUndo || new THREE.Quaternion()).copy(_uc).multiply(_ua).multiply(_ub).multiply(_uc.invert());
         }
       }      // the lance's real bob in the hand (PHYS.ride.aimTip), from the stride phase
-      if (this.wX || this.wY || this.jX || this.jY) { _we.set(clamp(this.wX + this.jY * 0.3, -0.5, 0.5), clamp(this.wY + this.jX * 0.3, -0.5, 0.5), 0); this.lance.quaternion.multiply(_wq.setFromEuler(_we)); }      // the whip of a lance that struck, the jolt of the arm that was struck
+      if (this.wX || this.wY || this.jX || this.jY || this.lw) { _we.set(clamp(this.wX + this.jY * 0.3 + (this.lw || 0), -0.5, 0.5), clamp(this.wY + this.jX * 0.3 + (this.lw || 0) * 0.4, -0.5, 0.5), 0); this.lance.quaternion.multiply(_wq.setFromEuler(_we)); }      // the whip of a lance that struck, the jolt of the arm that was struck
       if (this.pin && !this.replaying) this._pinLance();      // the point stays on the man it struck (pinLance)
       if (this.replaying && this.snapLR) this._lanceFromRel(this.snapLR);      // a replay shows the recorded pose, not a recomputed one
       if (this.cel) celLance(this);      // (a celebration points the lance where it wants: celebrate.js)
       this.lance.updateMatrixWorld(true);
     }
-    if (this.rig) { armsRig(this, this.rig, this.replaying); if (this.cel) celArms(this); this._fallPose(); if (this.rag && (this.replaying ? this.snapUnhorsed && this._ragSnap : this.unhorsed)) this._ragPose(); this._clipUpdate(); this._stirUpdate(); }
+    if (this.rig) { armsRig(this, this.rig, this.replaying); if (this.cel) celArms(this); if (this.rig.body) this.rig.body.update(); this._fallPose(); if (this.rag && (this.replaying ? this.snapUnhorsed && this._ragSnap : this.unhorsed)) this._ragPose(); this._clipUpdate(); this._stirUpdate(); }
     // reins: bit -> bridle hand (or the saddle bow once the rider is gone)
     const tgt = (this.replaying ? this.snapUnhorsed : this.unhorsed) ? this.pommel : this.hand;
     tgt.getWorldPosition(_v2); this.root.worldToLocal(_v2);

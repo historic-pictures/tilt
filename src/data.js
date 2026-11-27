@@ -191,6 +191,7 @@ export const DEFAULT_PROFILE = {
   horse: 'rouncey', armour: 'mail', helm: 'greathelm', lance: 'standard', venue: 0, table: null, firstPerson: false, bond: {},
   caparison: 'livery', gold: 60, owned: { horses: ['rouncey'], armours: ['mail'], helms: ['greathelm'], caparisons: ['livery', 'none'] }, difficulty: 1, herald: true, celebs: [], arts: {}, lesson: 0,
   renown: 0, skills: {}, retinue: { squire: 1 }, courses: 5,
+  body: { sex: 'm', h: 1.73, build: 'medium', face: 0, skin: 1, hair: 1 },      // the knight's body (src/body_types.js): drawn only, it changes nothing in play
   achievements: {}, stats: {},      // achievements: id -> date earned; stats: running counts for them (see src/achievements.js)
 };
 
@@ -433,6 +434,12 @@ export const PHYS = {
   lanceBeam: { rest: 0.25, tip: 2.7, from: 1.05, to: 2.5, flaw: 0.3 },
   // The shaft is solid. horse: share of the horse's head and neck hit-spheres the shaft must stay outside (it is carried across the neck).
   // rail: clearance above the tilt rail (m). kick: how far up an unbroken lance is thrown by its own stroke (0 = stays level, 1 = upright).
+  // Lance geometry (docs/lance-geometry.md, drone footage): aim yaw across the horse (rad) from 0.18 at the couch to what the foe needs at the meeting, 0.10..0.66 (6-38 deg; footage 18-25 at the meeting, never over 30: the margin is for a helm or body stroke when the horses have swayed apart), same for both riders so the lances lie parallel in plan.
+  // clearYaw: the most the shaft is swung further left to clear its own horse's head (the rest by lifting the grip gripUp metres). easeFar / easeNear: gap (m) where the yaw leaves the couch value / reaches the meeting value.
+  aim: { yawMin: 0.10, yawMax: 0.66, yawCouch: 0.18, pitchMin: -0.12, pitchMax: 0.20, clearYaw: 0.12, gripUp: 0.05, easeFar: 12, easeNear: 3.5 },
+  // The lift after the stroke (a damped spring; footage: S-curve over 0.5-0.7 s after ~0.1 s, ~5% overshoot, +-4 deg sway). w: rad/s at refKg, zeta: damping, delay: s before the butt leaves the rest.
+  // carry: the pose held after the lift (pitch / yaw to the left, rad) for hold seconds, then upright once the horse is below slowAt of its pace; whip: spring velocity into the tip whip. couchT: seconds to couch (both riders; footage 2-3 s, was 0.85 / 0.95).
+  lift: { w: 7, zeta: 0.65, delay: 0.08, carryPitch: 0.87, carryYaw: 0.61, hold: 1.0, slowAt: 0.7, carryRate: 5, whip: 0.15, couchT: 1.5 },
   shaft: { horse: 0.5, horseOwn: 0.5, rail: 0.07, kick: 0.6, foe: 0.92, hand: 0.4, point: 0.55, across: 0.09, acrossSpeed: 4, brush: 0.015 },
   // ---- hit volumes (src/collide.js). Plain data, metres, in the frame of the part each is fixed to (`on`: helm, torso, rider, shield, head, neck,
   // root = the horse). shape 'cap': capsule from a to b with radius r (a == b is a sphere). shape 'obb': box with centre c, half-extents h

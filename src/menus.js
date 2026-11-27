@@ -27,6 +27,7 @@ import { PAY } from './config.js';
 import { PACKS, allowedArms, skuOfCharge, ROLL_CHARGES } from './cosmetics.js';
 const ownedSkus = () => ['herald', 'rolls', 'patron', 'finishes', 'charter'].filter((k) => store.has(k));      // the packs this account holds (heraldry gating)
 import { openUpsell, maybeAuto, exhibitionAllowed } from './upsell.js';      // the "unlock the full game" popup
+import { FACES, SKINS, HAIRS, BUILDS, cleanBody } from './body_types.js';
 let buyOk = false;   // set for the one re-dispatched click after a purchase is confirmed
 
 const el = (id) => document.getElementById(id);
@@ -180,6 +181,24 @@ export function initMenus(api) {
 
   /** A name typed by a player: no markup, at most 22 characters, never empty. */
   const cleanName = (v) => (v || '').replace(/[<>&"`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 22) || 'Sir Nameless';
+  /**
+   * The Body section (welcome screen and Armoury): sex, build, face, skin and hair. Plain markup: .row, .chip, .select, .sw.
+   * It is looks only (src/body_types.js): the same seat, reach and hit volumes for every body.
+   */
+  const BUILD_NAMES = { skinny: 'Lean', medium: 'Medium', heavy: 'Heavy' };
+  const bodyBlock = (p) => {
+    const b = p.body = cleanBody(p.body), chip = (k, v, t) => `<span class="chip ${b[k] === v ? 'sel' : ''}" data-body="${k}|${v}">${t}</span>`;
+    const sws = (k, list) => list.map((c, i) => `<div class="sw ${b[k] === i ? 'sel' : ''}" title="${c.name}" style="background:${c.hex}" data-body="${k}|${i}"></div>`).join('');
+    return `<section class="body"><h5>Your Body <small>how you look, helm on or off; it changes nothing in the lists</small></h5>
+      <div class="arms-row body-row"><canvas class="pv bodypv" data-pv="body:me" width="300" height="380" style="width:150px;height:190px"></canvas><div>
+        <div class="row swatches"><span class="lbl">Sex</span>${chip('sex', 'm', 'Man')}${chip('sex', 'f', 'Woman')}</div>
+        <div class="row swatches"><span class="lbl">Build</span>${BUILDS.map(x => chip('build', x, BUILD_NAMES[x])).join('')}</div>
+        <div class="row swatches"><span class="lbl">Face</span><select class="select" id="bodyFace">${FACES.map((f, i) => (f.sex === b.sex ? `<option value="${i}" ${b.face === i ? 'selected' : ''}>${f.name}</option>` : '')).join('')}</select></div>
+        <div class="row swatches"><span class="lbl">Skin</span>${sws('skin', SKINS)}</div>
+        <div class="row swatches"><span class="lbl">Hair</span>${sws('hair', HAIRS)}</div>
+      </div></div></section>`;
+  };
+  root.addEventListener('change', (e) => { if (e.target.id === 'bodyFace') { const p = api.profile; p.body = cleanBody(Object.assign({}, p.body, { face: +e.target.value })); api.ui('click'); api.setBody(p.body); } });
   /** First visit: take your name and your colours before anything else. */
   let wDraft = null;
   const NOFILL = 'autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-form-type="other"';
@@ -194,8 +213,8 @@ export function initMenus(api) {
         ${sw('c1')}${sw('c2')}
         <div class="swatches"><span class="lbl">Ordinary</span>${PATTERNS.map(x => `<div class="chip ${a.pattern === x ? 'sel' : ''}" data-pat="${x}">${x}</div>`).join('')}</div>
         </div></div>
-      <!-- slot: Body (build and height options are added here by the character-creation module; it is also offered in the Armoury under Knight) -->
-      <section class="sect" data-slot="body"></section>
+      <!-- slot: Body (the Body section: sex, build, face; height is not a choice) -->
+      ${bodyBlock(p)}
       <button class="plaque big" data-act="welcome">Enter the Lists${tip('Your name and colours', 'The herald cries your name when you ride in.|You can change all of this later in the Armoury.', 'tonly')}</button>`);
     drawCrest(el('wCrest'), a);
     const inp = el('wName'); inp.addEventListener('input', () => { wDraft = inp.value; });
@@ -435,7 +454,7 @@ export function initMenus(api) {
       <h5>Celebrations <small>pick up to ${MAX_FAVS}: one of these plays when you win (you may choose another on the day)</small></h5>${celebrationsHtml(p)}
       <h5>Blazon <small>your arms go on your shield, surcoat, trapper, banner and the roll</small></h5>${blazon}
       <!-- slot: Body (build and height options are added here by the character-creation module) -->
-      <section class="sect" data-slot="body"></section>`;
+      ${bodyBlock(p)}`;
     }
     root.innerHTML = scroll('sheet armscr', `<div class="top"><div><h3>Armoury</h3><p class="purseline"><b>${purseText(p.gold)}</b>${(p.honours || []).length ? ` · ${career.honoursLine(p)}` : ''}${broke ? ' <span class="debt">· no buying while in debt</span>' : ''}</p></div>
       <div class="actions"><button class="btn primary" data-go="main">Done</button></div></div>
@@ -613,7 +632,7 @@ export function initMenus(api) {
   };
   let serverOk = false;      // set for the one re-run of a click whose purchase the server has made
   const onClick = (e) => {
-    const t = e.target.closest('[data-cel],[data-artab],[data-tt],[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-fld],[data-ord],[data-bord],[data-lay],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-on],[data-onv],[data-onm],[data-onc],[data-stcap],[data-stcapset],[data-skill],[data-ac],[data-lock],[data-fin],[data-roll]');
+    const t = e.target.closest('[data-cel],[data-artab],[data-tt],[data-go],[data-cc],[data-cm],[data-act],[data-col],[data-pat],[data-chg],[data-fld],[data-ord],[data-bord],[data-lay],[data-horse],[data-stable],[data-stbuy],[data-armour],[data-helm],[data-lance],[data-hire],[data-train],[data-dismiss],[data-hist],[data-exv],[data-exo],[data-exm],[data-exc],[data-on],[data-onv],[data-onm],[data-onc],[data-stcap],[data-stcapset],[data-skill],[data-ac],[data-lock],[data-fin],[data-roll],[data-body]');
     if (!t) return;
     const p = api.profile, d = t.dataset;
     if (buyOk) buyOk = false;
@@ -658,6 +677,7 @@ export function initMenus(api) {
     if (d.onv !== undefined) return api.online.setRoom('v', +d.onv);
     if (d.onm) return api.online.setRoom('m', d.onm);
     if (d.onc) return api.online.setRoom('c', +d.onc);
+    if (d.body) { const [k, v] = d.body.split('|'); p.body = cleanBody(Object.assign({}, p.body, { [k]: k === 'skin' || k === 'hair' ? +v : v }, k === 'sex' ? { face: -1 } : {})); api.ui('click'); api.setBody(p.body); return show(root.dataset.name === 'welcome' ? 'welcome' : 'armoury'); }
     if (d.act === 'welcome') { p.name = cleanName(wDraft); p.named = true; wDraft = null; api.saveProfile(); api.rebuildPlayer(); return show('main'); }
     if (root.dataset.name === 'welcome' && (d.col || d.pat)) { if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; } else p.arms.pattern = d.pat; api.saveProfile(); api.rebuildPlayer(); return show('welcome'); }
     if (d.act === 'ride') { const t = career.ensureTournament(p), cm = circMode(p), opp = career.myOpponent(t); if (!opp) return; return api.startMatch(t.v, opp, true, false, cm, fixedCourses(cm) || p.courses || 5); }

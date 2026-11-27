@@ -6,12 +6,13 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Jouster } from './jouster.js';
 import { RIG, preloadRider, HARNESSES, HELMS } from './rider_rig.js';
 import { HORSES, ARMOURS, LANCES, harness } from './data.js';
+import { applyBody } from './body_types.js';
 
 const BW = 560, BH = 360;            // drawing buffer; every preview is drawn into a corner of it
 const SPIN = 0.55;                   // radians per second
 
 export function createPreviews() {
-  let askedRig = false, renderer = null, scene, cam, items = new Map(), queue = [], armsKey = '', ang = 0, skip = 0, lanceJ = null;
+  let askedRig = false, renderer = null, scene, cam, items = new Map(), queue = [], armsKey = '', ang = 0, skip = 0, lanceJ = null, bodyNow = null, bodyKey = '', kitNow = null, kitKey = '';
   const _t = new THREE.Vector3();
 
   function init() {
@@ -42,7 +43,7 @@ export function createPreviews() {
       const k = LANCES[id].scale;
       return { tt, look: [0, 0, 0], dist: 4.5, fov: 20, pre: () => { tt.add(lanceJ.tilt); lanceJ.lance.children[0].scale.set(k, k, 1); lanceJ.lanceFore.scale.set(k, k, 1); } };
     }
-    const j = new Jouster(scene, Object.assign({}, arms), 1, 0, kind === 'horse' ? HORSES[id] : HORSES.rouncey, kind === 'armour' ? harness(id) : kind === 'helm' ? harness('milanese', id) : Object.assign(harness('mail'), kind === 'horse' ? { noRig: true } : {}));
+    const j = new Jouster(scene, Object.assign({}, arms, { body: bodyNow }), 1, 0, kind === 'horse' ? HORSES[id] : HORSES.rouncey, kind === 'body' ? harness((kitNow || {}).armour || 'mail', (kitNow || {}).helm) : kind === 'armour' ? harness(id) : kind === 'helm' ? harness('milanese', id) : Object.assign(harness('mail'), kind === 'horse' ? { noRig: true } : {}));
     if (j.rig) j.rig.legs = null;      // (on the stand there is no horse to straddle: the legs hang as the clips pose them)
     j.update(0); tt.add(j.root); j.root.position.set(0, 0, 0);
     if (kind === 'horse') {
@@ -61,6 +62,11 @@ export function createPreviews() {
       j.root.updateMatrixWorld(true);
       onlyShow(j, o => under(o, j.helm));
       return Object.assign({ tt, j, fov: 24, lift: 0.1 }, frame(j, j.helm, 1.0));
+    }
+    if (kind === 'body') {      // you, with your helm off: the Body section of the menus (the code-built rider of the low tier shows its one body)
+      j.helmOff = true; j.lance.visible = false; j.lance.scale.setScalar(1e-4); j.update(0); j.root.updateMatrixWorld(true);
+      onlyShow(j, o => under(o, j.rider));
+      const f = frame(j, j.rider, 0.8); return Object.assign({ tt, j, fov: 24, lift: 0.05, body: true }, f, { look: [0, f.look[1] + f.h * 0.3, 0], h: f.h * 0.56, wide: f.wide * 0.62 });      // (the upper half: the face and the shoulders)
     }
     if (j.rig) {      // the rigged rider on the stand, helm and all (no lance)
       j.lance.visible = false; j.lance.scale.setScalar(1e-4); j.update(0); j.root.updateMatrixWorld(true);      // (no lance: out of sight and out of the measuring)
@@ -86,13 +92,18 @@ export function createPreviews() {
   }
 
   /** Call every frame while the armoury is open. root: the element holding the cards; arms: the player's blazon. */
-  function update(dt, root, arms) {
+  function update(dt, root, arms, body, kit) {
     const cvs = root.querySelectorAll('canvas.pv');
     if (!cvs.length) return;
     if (!renderer) init();
     if (!askedRig) { askedRig = true; preloadRider({ armour: HARNESSES, helm: HELMS, lance: ['standard'] }); }      // every harness and helm the armoury shows
     const key = JSON.stringify(arms) + (RIG.ready ? '|rig' + RIG.figs.size + RIG.helms.size : '');      // (the rigged rider arrives in the background: build the cards again when it has)
     if (key !== armsKey) { armsKey = key; drop(); }
+    // the body: the riders already on their stands are reshaped where they are (no rebuild); a change of harness or helm rebuilds only the Body card
+    bodyNow = body || null; kitNow = kit || null;
+    const bk = JSON.stringify(body || null), kk = JSON.stringify(kit || null);
+    if (bk !== bodyKey) { bodyKey = bk; for (const it of items.values()) if (it.j && it.j.rig && body) { applyBody(it.j, body); if (it.body) { it.j.helmOff = true; it.j.update(0); } } }
+    if (kk !== kitKey) { kitKey = kk; const it = items.get('body:me'); if (it && it.tt) { scene.remove(it.tt); items.delete('body:me'); } }
     ang += dt * SPIN;
     // build at most one preview a frame, so opening the armoury never stalls
     for (const cv of cvs) { const k = cv.dataset.pv; if (!items.has(k)) { items.set(k, { pending: true }); queue.push(k); } }

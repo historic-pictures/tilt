@@ -5,6 +5,7 @@
 // The friend's own world is that world turned 180 degrees about the middle of the lists (the origin), so his rider is shown at (-x, y, -z), yawed by PI, riding the other way
 // (dir = -dir). Local quantities (lance lowering, aim, brace, guard, speed, the horse's gait) are in the rider's own frame and copy across unchanged.
 import * as THREE from 'three';
+import { cleanBody } from './body_types.js';
 import { filterName } from './namefilter.js';
 import { HORSES, ARMOURS, HELMS, CAPARISONS, LANCES, MODES, VENUES, bondLevel, rankOf, RANKS } from './data.js';
 
@@ -29,7 +30,7 @@ export const onlineModeIds = () => Object.values(MODES).filter(m => !m.bridge &&
 export function packProfile(p) {
   const a = p.arms || {};
   return { t: 'hi', v: PROTOCOL, name: cleanName(p.name), arms: JSON.parse(JSON.stringify({ c1: a.c1, c2: a.c2, c3: a.c3, pattern: a.pattern, charge: a.charge, over: a.over })), horse: p.horse, armour: p.armour, helm: p.helm, lance: p.lance || 'standard',
-    cap: p.caparison || 'livery', bond: bondLevel((p.bond || {})[p.horse]), land: RANKS[rankOf(p.renown)].name };
+    cap: p.caparison || 'livery', bond: bondLevel((p.bond || {})[p.horse]), land: RANKS[rankOf(p.renown)].name, body: cleanBody(p.body) };      // (body: sex, height, build, face: drawn only, see src/body_types.js)
 }
 const cleanArms = (a) => {
   a = a || {};
@@ -43,12 +44,12 @@ export function cleanProfile(m) {
   const horse = HORSES[m.horse] ? m.horse : 'rouncey', armour = ARMOURS[m.armour] ? m.armour : 'mail';
   const helm = HELMS[m.helm] ? m.helm : ARMOURS[armour].helm;
   return { rid: typeof m.rid === 'string' && /^[0-9a-f]{16}$/.test(m.rid) ? m.rid : '', name: safeName(m.name), arms: cleanArms(m.arms), horse, armour, helm, lance: LANCES[m.lance] ? m.lance : 'standard', cap: CAPARISONS[m.cap] ? m.cap : 'livery', bond: num(m.bond | 0, 1, 4, 1),
-    land: typeof m.land === 'string' ? m.land.replace(/[^\p{L} .'’\-]/gu, '').slice(0, 30) : '' };
+    land: typeof m.land === 'string' ? m.land.replace(/[^\p{L} .'’\-]/gu, '').slice(0, 30) : '', body: cleanBody(m.body) };
 }
 /** The friend as an opponent record (what the roster's knights are in src/data.js), so that the rest of the game can treat him like one. */
 export function onlineOd(f, ovrOf) {
   const H = HORSES[f.horse], A = ARMOURS[f.armour];
-  const od = { id: 'friend', name: f.name, short: f.name, land: f.land || 'the lists', arms: f.arms, horse: f.horse, armour: f.armour, helm: f.helm, lance: f.lance, cap: f.cap, online: true,
+  const od = { id: 'friend', name: f.name, short: f.name, land: f.land || 'the lists', arms: f.arms, horse: f.horse, armour: f.armour, helm: f.helm, lance: f.lance, cap: f.cap, body: f.body, online: true,
     skill: 0.42 + 0.07 * (f.bond - 1), seat: A.protection * 0.85, drive: (H.top - 7.2) / 2 };
   od.bio = `${H.name}, ${(HELMS[f.helm] || {}).name || 'helm'}`;
   return od;

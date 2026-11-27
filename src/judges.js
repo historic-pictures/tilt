@@ -36,7 +36,7 @@ export function createJudges(scene) {
     mesh(G.book, '#e8dcc0', s, 1.15, 1.23, 0.45);                                                                          // the scorer's roll
     const seat = (x, robe, hat, scribe) => {
       old(mesh(G.stool, '#5b4332', s, x, 0.62, -0.25));
-      const p = person(s, { hose: '#2a2622', coat: robe, hat }); p.g.position.set(x, 0.07, -0.25); p.g.scale.setScalar(0.96);
+      const p = person(s, { close: true, hose: '#2a2622', coat: robe, hat, garb: 'cotehardie', sleeve: 'sleeve_fur', fat: scribe ? -0.2 : 0.35 + 0.3 * ((x * 7.3) % 1 + 1) % 1, face: scribe ? 'm_young' : ['m_old', 'm_fat', 'm_fullbeard'][Math.abs(Math.round(x * 5)) % 3], hair: scribe ? '#4a3524' : '#9a958c' }); p.g.position.set(x, 0.07, -0.25); p.g.scale.setScalar(0.96);
       mesh(G.robe, robe, p.torso, 0, -0.35, 0.02).scale.set(1.05, 1, 1.05);
       p.legL.rotation.x = p.legR.rotation.x = -1.35; p.legL.scale.y = p.legR.scale.y = 0.6;                                // seated: thighs forward, hidden under the table
       return p;

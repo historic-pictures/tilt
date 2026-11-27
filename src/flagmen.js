@@ -37,7 +37,7 @@ export function createFlagmen(scene) {
     const spots = training ? [[1, 39]] : [[1, -40], [-1, 40]];
     for (const [sx, z0] of spots) {
       const x = sx * SPOT_X, z = z0 - Math.sign(z0) * SPOT_IN;
-      const p = person(root, { hose: training ? '#5a4a36' : c1, coat: training ? '#7a6a52' : c2, tab: training ? null : c1, hat: training ? '#6b5a40' : c1 });
+      const p = person(root, { hose: training ? '#5a4a36' : c1, coat: training ? '#7a6a52' : c2, tab: training ? null : c1, hat: training ? '#6b5a40' : c1, close: true });
       p.g.position.set(x, 0, z); p.yaw = Math.atan2(-x, -z * 0.25); p.g.rotation.y = p.yaw;
       p.pole = grp(p.g, 0.3, 1, 0.12); mesh(POLE, '#6b4f30', p.pole); mesh(KNOB, "#d9b23c", p.pole, 0, 2.22, 0);
       p.flag = cloth(c1, c2); p.flag.position.set(0.03, 1.75, 0); p.pole.add(p.flag);

@@ -6,6 +6,7 @@ import { LISTS } from './lists.js';
 import { clamp, lerp, smoothstep, drawCrest, drawFace } from './util.js';
 import { ANNOUNCER } from './drama_lines.js';
 import { SPEECH } from './channels.js';
+import { dressFigure, ARM_AT } from './people.js';
 
 export const INTRO_END = 37.5;       // seconds of the full intro
 export const SKIP_HOLD = 0.8;        // seconds the key is held to skip
@@ -27,13 +28,21 @@ export const mat = (c, o) => mats[c + (o ? 'd' : '')] || (mats[c + (o ? 'd' : ''
 export const mesh = (g, c, parent, x = 0, y = 0, z = 0, dbl) => { const m = new THREE.Mesh(g, mat(c, dbl)); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
 export const grp = (parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 
-/** A person facing local +z: legs, a tabard torso, head, two arms; hat: a colour for the toque, or null for none. */
-export function person(parent, { hose, coat, tab, skin = '#e0ac84', hat = '#1d3f8a', plume = '#d8222a' }) {
-  const g = grp(parent), body = grp(g), legL = grp(body, -0.09, 0.85), legR = grp(body, 0.09, 0.85), torso = grp(body, 0, 0.85), head = grp(torso, 0, 0.66);
-  mesh(GEO.leg, hose, legL); mesh(GEO.leg, hose, legR); mesh(GEO.torso, coat, torso); mesh(GEO.head, skin, head, 0, 0.12, 0);
-  if (tab) { mesh(GEO.tab, tab, torso, 0, 0.3, 0.22); mesh(GEO.tab, tab, torso, 0, 0.3, -0.22); }
-  if (hat) { mesh(GEO.toque, hat, head, 0, 0.27, 0); mesh(GEO.feather, plume, head, 0.1, 0.4, 0); }
-  const armL = grp(torso, -0.27, 0.57), armR = grp(torso, 0.27, 0.57); mesh(GEO.arm, coat, armL); mesh(GEO.arm, coat, armR);
+/**
+ * A person facing local +z, jointed at the hips, shoulders and neck: legs, a tunic (a tabard over it if `tab` is a colour), head, two arms; hat: a colour
+ * for his chaperon, or null for none. The parts are the modelled ones of src/people.js, dressed from the clothing atlas:
+ * garb (which tunic), face (which face), hair, fat (-0.4 thin .. 1 heavy), sleeve, hatKind ('hat' chaperon | 'cap' | 'coif' | 'hood' | 'straw'),
+ * close (the camera goes close to him: he gets the modelled head with hair and beard, see dressFigure).
+ * The joints (p.legL, p.legR, p.torso, p.head, p.armL, p.armR) are what every animation turns: a mocap clip in per-limb angles drives them directly.
+ */
+const FACES_M = ['m_young', 'm_plain', 'm_beard', 'm_moustache', 'm_dark', 'm_fullbeard'], HAIRS_M = ['#2a211a', '#4a3524', '#6b4a2a', '#8a5a2c', '#8a3a1c'];
+let personN = 0;
+export function person(parent, { hose, coat, tab, skin = '#e0ac84', hat = '#1d3f8a', plume = '#d8222a', garb, face, hair, fat = 0, sleeve, hatKind = 'hat', close = false }) {
+  const g = grp(parent), body = grp(g), legL = grp(body, -0.09, 0.85), legR = grp(body, 0.09, 0.85), torso = grp(body, 0, 0.85), head = grp(torso, 0, 0.66), k = personN++;
+  const D = dressFigure({ hose, coat, tab, skin, garb, sleeve, fat, close, face: face || FACES_M[k % FACES_M.length], hair: hair || HAIRS_M[(k * 3) % HAIRS_M.length], hat: hat ? { kind: hatKind, color: hat } : null });
+  legL.add(D.legL); legR.add(D.legR); torso.add(D.torso); D.head.position.y = 0.12; head.add(D.head);
+  if (hat && plume && hatKind === 'hat') mesh(GEO.feather, plume, head, 0.1, 0.3, -0.02);
+  const armL = grp(torso, -ARM_AT[0], ARM_AT[1]), armR = grp(torso, ARM_AT[0], ARM_AT[1]); armL.add(D.armL); armR.add(D.armR);
   return { g, body, legL, legR, torso, head, armL, armR, ph: Math.random() * 6 };
 }
 
@@ -71,7 +80,7 @@ export function createCeremony(scene) {
     // six more along the barrier on the judges' side, three each side of the judges' stand: they blow before the flags drop on the first and the last course
     for (const z of [-7.6, -5.6, -3.6, 3.6, 5.6, 7.6]) { const p = trumpeter(root, c1, c2, true); p.g.position.set(8.9, 0, z); p.g.rotation.y = -Math.PI / 2; p.ph += z; T.line.push(p); }
     T.lineUp = false; T.lineT = 0;
-    const h = T.H = person(root, { hose: '#1d3f8a', coat: '#8a1d2b', tab: '#d9b23c', skin: '#e0b896', hat: '#8a1d2b' });
+    const h = T.H = person(root, { hose: '#1d3f8a', coat: '#8a1d2b', tab: '#d9b23c', skin: '#e0b896', hat: '#8a1d2b', close: true, face: 'm_beard', hair: '#6b4a2a', fat: 0.3 });
     h.staff = grp(h.armL, 0, -0.6, 0); mesh(GEO.staff, '#e8e0c8', h.staff);      // the herald's white baton
     // his scroll (the roll of arms): a rolled parchment in the right hand that hangs open while he cries. Built from person() + two meshes, so a new body model (src/body_types.js) only has to supply the arm group.
     h.scroll = grp(h.armR, 0, -0.6, 0); mesh(GEO.roll, '#e8dcc0', h.scroll); h.sheet = mesh(GEO.sheet, '#efe4c8', h.scroll, 0, 0, 0.0, true); h.sheet.castShadow = false; h.sheet.scale.y = 0.05; h.sheet.visible = false; h.sk = 0;

@@ -2,6 +2,7 @@
 // Plain ES module, procedural geometry + canvas textures only.
 import * as THREE from 'three';
 import { GFX } from './gfx.js';
+import { dressFigure, figure, ARM_AT } from './people.js';
 
 /* ------------------------------------------------------------------ utils */
 function mulberry32(a) {
@@ -150,248 +151,78 @@ const SKINS = ['#e8bf9c', '#d9a27c', '#c98d66', '#f0cfb0', '#b07a55'];
 const HAIRS = ['#3a2616', '#5a3b1c', '#8a6a34', '#1e1a16', '#a2512a', '#c8b07a'];
 
 /* ----------------------------------------------------------------- figures */
-function armParts(a, o) {
-  const b = o.bend;
-  const cb = Math.cos(b);
-  const sb = Math.sin(b);
-  const hy = -0.3 - 0.28 * cb;
-  const hz = 0.28 * sb;
-  a.sph(0.062, 0, 0, 0, o.sleeve);
-  a.between([0, 0, 0], [0, -0.3, 0], 0.055, 0.047, o.sleeve, 7);
-  a.sph(0.047, 0, -0.3, 0, o.sleeve, 1, 1, 1, 6, 5);
-  a.between([0, -0.3, 0], [0, hy, hz], 0.047, 0.04, o.sleeve, 7);
-  a.between([0, hy + 0.04 * cb, hz - 0.04 * sb], [0, hy, hz], 0.044, 0.044, o.cuff, 7);
-  a.sph(0.043, 0, hy - 0.015 * cb, hz + 0.015 * sb, o.skin, 1, 1, 1, 6, 5);
-  const hand = [0, hy, hz];
-  const f = [0, -cb, sb];
-  if (o.extra) o.extra(a, hand, f);
-  return { hand, f };
+/** An arm of the jointed figure (src/people.js) with the elbow bent: the forearm turned forward by `bend`, the hand ends 0.275 from the elbow. */
+function bentArm(geo, bend) {
+  const g = geo.clone(), P = g.attributes.position, N = g.attributes.normal, EL = -0.325, c = Math.cos(bend), sn = Math.sin(bend);
+  for (let i = 0; i < P.count; i++) {
+    const y = P.getY(i) - EL; if (y >= 0) continue;
+    const z = P.getZ(i); P.setY(i, EL + y * c + z * sn); P.setZ(i, -y * sn + z * c);
+    const ny = N.getY(i), nz = N.getZ(i); N.setY(i, ny * c + nz * sn); N.setZ(i, -ny * sn + nz * c);
+  }
+  return g;
 }
+const FIG_FACES = ['m_young', 'm_plain', 'm_beard', 'm_moustache', 'm_dark', 'm_fullbeard'];
 
-const SHOULDER_X = 0.24;
-const SHOULDER_Y = 1.4;
-
+/**
+ * The staff of the lists: the herald and two trumpeters on the dais, the marshal, the squires with the spare lances and the grooms.
+ * The figures are the modelled, dressed parts of src/people.js (a short gown and hose, a tabard, the marshal's long robe; a face, hair, a chaperon,
+ * a hood or a coif) hung on the same frame as before: fig.root, fig.sway, and fig.armP / fig.armM, the arms that are animated (animFigure below).
+ */
 export function makeFigure(style, colors, rnd) {
   colors = colors || ['#1f4690', '#e0b83c'];
   rnd = rnd || Math.random;
-  const ca = C(colors[0]);
-  const cb = C(colors[1]);
   const pick = (arr) => arr[Math.floor(rnd() * arr.length) % arr.length];
-  const skin = C(pick(SKINS));
-  const hair = C(pick(HAIRS));
-  const dark = C('#2a2018');
-  const white = C('#ece8dc');
-  const gold = C('#d1a93a');
-  const robe = C('#25211f');
-  const brown = C('#6e4e2e');
-  const linen = C('#e8e2d0');
-
-  const B = new Acc();
-  let hose0 = ca;
-  let hose1 = cb;
-  let sleeve = ca;
-  let cuff = cb;
-  let bendP = 0.5;
-  let poseP = [-0.1, 0.1];
-  let poseM = [-0.05, -0.1];
-  let animP = false;
-  let animM = false;
-  let extraP = null;
-
+  const ca = colors[0], cb = colors[1], skin = pick(SKINS), hair = pick(HAIRS), white = C('#ece8dc'), gold = C('#d1a93a'), dark = C('#2a2018');
+  let bendP = 0.5, poseP = [-0.1, 0.1], poseM = [-0.05, -0.1], animP = false, animM = false, extraP = null;
+  // what he wears: o for dressFigure()
+  let o = { coat: ca, hose: ca, hose2: cb, skin, hair, face: pick(FIG_FACES), fat: -0.2 + rnd() * 0.5, close: style === 'herald' || style === 'marshal' };
   switch (style) {
-    case 'herald':
-      sleeve = linen;
-      cuff = cb;
-      animP = true;
-      break;
-    case 'squire':
-      hose0 = cb;
-      hose1 = ca;
-      sleeve = ca;
-      cuff = cb;
-      bendP = 0.7;
-      poseP = [-0.15, 0.28];
-      animM = true;
-      break;
+    case 'herald': Object.assign(o, { tab: ca, coat: '#e8e2d0', sleeve: 'sleeve_linen', hose: cb, hose2: cb, hat: { kind: 'hat', color: cb }, face: 'm_beard', fat: 0.35 }); animP = true; break;
+    case 'squire': Object.assign(o, { garb: 'doublet', hose: cb, hose2: ca, hat: { kind: 'hood', color: cb }, face: 'm_young', fat: -0.3 }); bendP = 0.7; poseP = [-0.15, 0.28]; animM = true; break;
     case 'marshal':
-      sleeve = robe;
-      cuff = C('#d9d2c0');
-      bendP = 0.6;
-      animP = true;
-      extraP = (a, h, f) => {
+      Object.assign(o, { robe: 'robe_judge', coat: '#2b2624', sleeve: 'sleeve_fur', hat: { kind: 'hat', color: '#25211f' }, face: 'm_old', hair: '#b8b4ab', fat: 0.55 }); bendP = 0.6; animP = true;
+      extraP = (a, h, f) => {      // his white staff of office, tipped with gold
         a.between([h[0] - f[0] * 0.1, h[1] - f[1] * 0.1, h[2] - f[2] * 0.1], [h[0] + f[0] * 0.42, h[1] + f[1] * 0.42, h[2] + f[2] * 0.42], 0.013, 0.013, white, 6);
         a.between([h[0] + f[0] * 0.4, h[1] + f[1] * 0.4, h[2] + f[2] * 0.4], [h[0] + f[0] * 0.47, h[1] + f[1] * 0.47, h[2] + f[2] * 0.47], 0.018, 0.018, gold, 6);
       };
       break;
-    case 'groom':
-      hose0 = hose1 = C('#4b3a2a');
-      sleeve = brown;
-      cuff = C('#cfc4a6');
-      bendP = 0.44;
-      poseP = [-0.12, 0.12];
-      break;
-    case 'trumpeter':
-      sleeve = cb;
-      cuff = ca;
-      bendP = 1.22;
-      animP = true;
-      break;
-    default:
-      break;
+    case 'groom': Object.assign(o, { garb: 'tunic_plain', coat: '#6e4e2e', hose: '#4b3a2a', hose2: '#4b3a2a', sleeve: 'sleeve_rolled', hat: { kind: 'coif', color: '#e8e2d0' }, fat: 0.1 + rnd() * 0.6 }); bendP = 0.44; poseP = [-0.12, 0.12]; break;
+    case 'trumpeter': Object.assign(o, { garb: 'parti', coat: cb, sleeve: 'sleeve_wool', hose: ca, hose2: cb, hat: { kind: 'cap', color: cb } }); o.tab = null; o.coat = ca; bendP = 1.22; animP = true; break;
+    default: break;
   }
-
-  // legs and shoes
-  for (let i = 0; i < 2; i++) {
-    const sx = i ? 1 : -1;
-    if (style !== 'marshal') B.between([sx * 0.09, 0.07, 0], [sx * 0.09, 0.92, 0], 0.052, 0.072, i ? hose1 : hose0, 7);
-    B.box(0.1, 0.07, 0.22, sx * 0.09, 0.035, 0.05, dark);
-  }
-
-  // torso
-  const beltY = 0.95;
-  if (style === 'herald') {
-    B.cylPart = null;
-    const parts = [
-      [0.2, 0.26, 0.5, 0.77, 0, ca, cb],
-      [0.17, 0.2, 0.46, 1.23, 0, cb, ca],
-    ];
-    // lower band: +x half = cb, -x half = ca ; upper band: +x half = ca, -x half = cb
-    B.prim(new THREE.CylinderGeometry(0.2, 0.26, 0.5, 10, 1, false, 0, Math.PI), cb, 0, 0.77, 0, 0, 0, 0, 1, 1, 0.74);
-    B.prim(new THREE.CylinderGeometry(0.2, 0.26, 0.5, 10, 1, false, Math.PI, Math.PI), ca, 0, 0.77, 0, 0, 0, 0, 1, 1, 0.74);
-    B.prim(new THREE.CylinderGeometry(0.17, 0.2, 0.46, 10, 1, false, 0, Math.PI), ca, 0, 1.23, 0, 0, 0, 0, 1, 1, 0.72);
-    B.prim(new THREE.CylinderGeometry(0.17, 0.2, 0.46, 10, 1, false, Math.PI, Math.PI), cb, 0, 1.23, 0, 0, 0, 0, 1, 1, 0.72);
-    void parts;
-    B.cyl(0.205, 0.215, 0.05, 0, beltY + 0.02, 0, gold, 10, 0, 0, 0, 1, 0.76);
-  } else if (style === 'marshal') {
-    B.cyl(0.17, 0.3, 1.0, 0, 0.97, 0, robe, 10, 0, 0, 0, 1, 0.78);
-    B.cyl(0.3, 0.305, 0.05, 0, 0.5, 0, C('#d9d2c0'), 10, 0, 0, 0, 1, 0.78);
-    B.cyl(0.115, 0.14, 0.08, 0, 1.47, 0, C('#d9d2c0'), 8, 0, 0, 0, 1, 0.9);
-    B.cyl(0.19, 0.2, 0.05, 0, 1.0, 0, dark, 10, 0, 0, 0, 1, 0.78);
-    // chain of office
-    B.geo(new THREE.TorusGeometry(0.15, 0.012, 5, 14), gold, 0, 1.34, 0.01, Math.PI / 2 - 0.5, 0, 0);
-    B.sph(0.03, 0, 1.2, 0.15, gold, 1, 1, 0.5, 6, 5);
-  } else {
-    B.cyl(0.17, 0.2, 0.62, 0, 1.14, 0, ca === cb ? ca : style === 'groom' ? brown : ca, 8, 0, 0, 0, 1, 0.72);
-    B.cyl(0.2, 0.27, 0.34, 0, 0.74, 0, style === 'groom' ? brown : ca, 8, 0, 0, 0, 1, 0.75);
-    B.cyl(0.205, 0.215, 0.06, 0, beltY, 0, dark, 8, 0, 0, 0, 1, 0.76);
-    B.box(0.05, 0.05, 0.02, 0, beltY, 0.16, gold);
-    if (style === 'squire') {
-      B.cyl(0.19, 0.22, 0.09, 0, 1.45, 0, cb, 8, 0, 0, 0, 1, 0.8); // cowl
-    }
-    if (style === 'trumpeter') {
-      B.cyl(0.17, 0.2, 0.1, 0, 1.38, 0, cb, 8, 0, 0, 0, 1, 0.74); // yoke in second colour
-    }
-  }
-
-  // neck + head
-  B.cyl(0.045, 0.05, 0.1, 0, 1.5, 0, skin, 6);
-  B.sph(0.105, 0, 1.62, 0, skin, 1, 1.08, 1, 10, 8);
-  B.sph(0.02, 0, 1.605, 0.103, skin, 1, 1, 1, 5, 4);
-  B.sph(0.011, -0.04, 1.64, 0.094, dark, 1, 1, 1, 4, 3);
-  B.sph(0.011, 0.04, 1.64, 0.094, dark, 1, 1, 1, 4, 3);
-  B.sph(0.04, 0, 1.585, 0.09, C('#b5705d'), 1.3, 0.35, 0.5, 5, 3);
-
-  switch (style) {
-    case 'herald':
-      B.sph(0.112, 0, 1.655, -0.03, hair, 1, 0.92, 1);
-      B.sph(0.1, 0, 1.56, -0.075, hair, 1, 1, 0.9);
-      B.cyl(0.1, 0.125, 0.07, 0, 1.75, 0, ca, 8);
-      B.cyl(0.128, 0.128, 0.025, 0, 1.725, 0, cb, 8);
-      B.between([0.07, 1.775, -0.04], [0.2, 1.94, -0.14], 0.014, 0.002, white, 5);
-      B.between([0.07, 1.775, -0.04], [0.15, 1.9, -0.17], 0.012, 0.002, cb, 5);
-      break;
-    case 'trumpeter':
-      B.sph(0.108, 0, 1.65, -0.02, hair, 1, 0.9, 1);
-      B.cyl(0.09, 0.115, 0.06, 0, 1.745, 0, cb, 8);
-      B.between([-0.06, 1.765, 0], [-0.17, 1.9, -0.08], 0.012, 0.002, white, 5);
-      break;
-    case 'squire':
-      B.sph(0.125, 0, 1.655, -0.045, cb, 1, 0.95, 1);
-      B.cyl(0.001, 0.05, 0.18, 0, 1.72, -0.17, cb, 6, -0.9);
-      break;
-    case 'marshal': {
-      const grey = C('#b8b4ab');
-      B.sph(0.108, 0, 1.655, -0.025, grey, 1, 0.85, 1);
-      B.sph(0.065, 0, 1.55, 0.075, grey, 1, 1.25, 0.8);
-      B.sph(0.13, 0, 1.745, 0, robe, 1, 0.42, 1);
-      B.cyl(0.12, 0.125, 0.04, 0, 1.715, 0, C('#d9d2c0'), 8);
-      break;
-    }
-    default: // groom
-      B.sph(0.112, 0, 1.655, -0.025, hair, 1, 0.92, 1);
-      B.sph(0.115, 0, 1.665, -0.03, C('#cfc4a6'), 1, 0.6, 1);
-      break;
-  }
-
-  // arms: static ones merged into the body, animated ones become pivoting groups
-  const armOpt = (bend, extra) => ({ sleeve, cuff, skin, bend, extra });
-  const fig = {
-    kind: style,
-    root: new THREE.Group(),
-    sway: new THREE.Group(),
-    armP: null,
-    armM: null,
-    trumpet: null,
-    qLow: null,
-    qHigh: null,
-    ph: rnd() * 6.2832,
-    k: 0,
-    base: 0,
-  };
+  const D = dressFigure(o), F = figure();
+  const fig = { kind: style, root: new THREE.Group(), sway: new THREE.Group(), armP: null, armM: null, trumpet: null, qLow: null, qHigh: null, ph: rnd() * 6.2832, k: 0, base: 0 };
   fig.root.add(fig.sway);
-
-  const bucketHand = style === 'groom';
-  // +x arm
-  if (animP) {
-    const A = new Acc();
-    armParts(A, armOpt(bendP, extraP));
-    const m = meshOf(A, null);
-    fig.armP = new THREE.Group();
-    fig.armP.position.set(SHOULDER_X, SHOULDER_Y, 0);
-    fig.armP.add(m);
-    fig._armPMesh = m;
-  } else {
-    B.push(SHOULDER_X, SHOULDER_Y, 0, poseP[0], 0, poseP[1]);
-    const r = armParts(B, armOpt(bendP, null));
-    if (bucketHand) {
-      const h = r.hand;
-      B.between([h[0], h[1] + 0.01, h[2]], [h[0], h[1] - 0.14, h[2]], 0.008, 0.008, dark, 4);
-    }
-    B.pop();
-    if (bucketHand) {
-      // hand ends near (0.306, 0.868, 0.183) with the pose above
-      B.cyl(0.11, 0.085, 0.22, 0.306, 0.62, 0.183, C('#5a3d22'), 8);
-      B.cyl(0.112, 0.112, 0.02, 0.306, 0.68, 0.183, dark, 8);
-      B.cyl(0.095, 0.095, 0.01, 0.306, 0.725, 0.183, C('#3d6f86'), 8);
-      B.cyl(0.088, 0.088, 0.02, 0.306, 0.55, 0.183, dark, 8);
-    }
+  const G = fig.bodyG = new THREE.Group(), at = (m, x, y, z) => { m.position.set(x, y, z); G.add(m); return m; };
+  at(D.torso, 0, 0.85, 0);
+  if (D.legL) { at(D.legL, -0.09, 0.85, 0); at(D.legR, 0.09, 0.85, 0); }
+  at(D.head, 0, 0.85 + 0.66 + 0.12, 0);
+  if (style === 'herald') {      // the plume in his chaperon
+    const A = new Acc(); A.between([0.07, 1.78, -0.04], [0.2, 1.95, -0.14], 0.014, 0.002, white, 5); A.between([0.07, 1.78, -0.04], [0.15, 1.91, -0.17], 0.012, 0.002, C(cb), 5); fig._bodyAcc = A;
   }
-  // -x arm
-  if (animM) {
-    const A = new Acc();
-    armParts(A, armOpt(bendP, null));
-    const m = meshOf(A, null);
-    fig.armM = new THREE.Group();
-    fig.armM.position.set(-SHOULDER_X, SHOULDER_Y, 0);
-    fig.armM.add(m);
-    fig._armMMesh = m;
-  } else {
-    B.push(-SHOULDER_X, SHOULDER_Y, 0, poseM[0], 0, poseM[1]);
-    armParts(B, armOpt(0.35, null));
-    B.pop();
-  }
-
-  fig._bodyAcc = B;
+  // arms: the animated ones are groups at the shoulder; the others are set in their pose
+  const SY = 0.85 + ARM_AT[1], arm = (src, bend) => { const m = new THREE.Mesh(bentArm(F.arm, bend), src.material); m.castShadow = true; return m; };
+  const hand = (bend) => ({ hand: [0, -0.325 - 0.275 * Math.cos(bend), 0.275 * Math.sin(bend)], f: [0, -Math.cos(bend), Math.sin(bend)] });
+  const one = (sx, anim, pose, bend, src, extra) => {
+    const g = new THREE.Group(); g.position.set(sx * ARM_AT[0], SY, 0); g.add(arm(src, bend));
+    if (extra) { const A = new Acc(), h = hand(bend); extra(A, h.hand, h.f); const m = meshOf(A, null); g.add(m); fig[sx > 0 ? '_armPMesh' : '_armMMesh'] = m; }
+    if (anim) return g;
+    g.rotation.set(pose[0], 0, pose[1]); G.add(g); return null;
+  };
+  const bucket = style === 'groom' ? (A, h) => {      // the groom's bucket hangs from his hand
+    A.between([h[0], h[1] + 0.01, h[2]], [h[0], h[1] - 0.14, h[2]], 0.008, 0.008, dark, 4);
+    A.cyl(0.11, 0.085, 0.22, h[0], h[1] - 0.25, h[2], C('#5a3d22'), 8); A.cyl(0.112, 0.112, 0.02, h[0], h[1] - 0.19, h[2], dark, 8); A.cyl(0.095, 0.095, 0.01, h[0], h[1] - 0.145, h[2], C('#3d6f86'), 8);
+  } : null;
+  fig.armP = one(1, animP, poseP, bendP, D.armR, extraP || bucket);
+  fig.armM = one(-1, animM, poseM, animM ? bendP : 0.35, D.armL, null);
   fig.bendP = bendP;
   return fig;
 }
 
 /* Finalise a figure: give it the shared material (called by buildProps). */
 function finishFigure(fig, mat, trumpetColors) {
-  const body = meshOf(fig._bodyAcc, mat);
-  fig.body = body;
-  fig.sway.add(body);
-  fig._bodyAcc = null;
+  fig.body = fig.bodyG; fig.sway.add(fig.bodyG);
+  if (fig._bodyAcc) { fig.sway.add(meshOf(fig._bodyAcc, mat)); fig._bodyAcc = null; }      // (the few plain-coloured extras: a plume)
   for (const key of ['_armPMesh', '_armMMesh']) {
     if (fig[key]) {
       fig[key].material = mat;

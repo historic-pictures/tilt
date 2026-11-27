@@ -14,12 +14,14 @@ import { GFX } from './gfx.js';
  * The grade runs after tone mapping, on the display image, so these read like a colourist's controls.
  */
 export const GRADE = {
-  saturation: 0.88,                    // 1 = as rendered
-  curve: 0.22,                         // mild S-curve on luma (0 = none); darks are eased down a little, never crushed
+  // Natural colour (owner, 27 Nov: "get rid of the desaturation, it was more normal natural colours before"): full saturation, no split-tone tint,
+  // a gentler curve and vignette. Was: saturation 0.88, curve 0.22, warmAmount 0.7, coolAmount 0.6, vignette 0.15.
+  saturation: 1.0,                     // 1 = as rendered
+  curve: 0.1,                          // mild S-curve on luma (0 = none); darks are eased down a little, never crushed
   warm: [1.040, 1.005, 0.945],         // highlight tint (multiplied in over the top half of the tones)
   cool: [0.965, 0.995, 1.040],         // shadow tint (over the bottom third)
-  warmAmount: 0.7, coolAmount: 0.6,    // how much of each tint is applied (0..1)
-  vignette: 0.15,                      // darkening at the very corners (0.15 = 15%)
+  warmAmount: 0, coolAmount: 0,        // how much of each tint is applied (0..1)
+  vignette: 0.08,                      // darkening at the very corners (0.08 = 8%)
   grain: 0.012,                        // film grain amplitude (fraction of the image, under 2%), refreshed 24 times a second
   // depth of field (cinematic cameras only, high tier)
   dofBlur: 4.5,                        // largest blur radius in pixels at 900 px tall (scales with the screen)

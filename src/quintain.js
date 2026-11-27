@@ -48,7 +48,7 @@ export class Quintain {
   setSide(d) { this.root.position.x = d * (this.lane + 0.75); this.base = d > 0 ? 0 : Math.PI; this.spin = 0; this.ang = 0; this.arm.rotation.y = this.base; this.root.updateMatrixWorld(true); }
   snapshot() { return { ang: this.ang, spin: this.spin, px: this.root.position.x, base: this.base }; }
   applySnap(s) { this.ang = s.ang; this.root.position.x = s.px; this.base = s.base; this.arm.rotation.y = this.base + this.ang; this.bag.rotation.z = Math.min(1.1, Math.abs(s.spin) * 0.07); this.root.updateMatrixWorld(true); }
-  setAim() {} applyLance() {} breakLance() { return null; } unhorse() {}
+  setAim() {} applyLance() {} liftStep() {} lanceOver() {} breakLance() { return null; } unhorse() {}
   tipWorld(out) { return out.set(999, -50, 999); }
   gripWorld(out) { return this.root.getWorldPosition(out); }
   zoneWorld(name, out) { return this.zones[0].o.getWorldPosition(out); }

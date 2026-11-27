@@ -46,7 +46,7 @@ export function createLife(scene, opts = {}) {
   function buildBand() {
     const pf = new THREE.Mesh(G.platform, new THREE.MeshLambertMaterial({ color: '#6b4f30' })); pf.position.set(11.0, 0.15, 7.9); pf.receiveShadow = true; pf.userData.cheapList = true; pf.visible = !LISTS.on; root.add(pf);      // (the modelled dais reaches under the band, src/lists.js)
     BAND.forEach((c, i) => {
-      const p = person(root, { hose: c.hose, coat: c.coat, tab: null, skin: SKIN[(i * 2 + 1) % SKIN.length], hat: c.hat });
+      const p = person(root, { hose: c.hose, coat: c.coat, tab: null, skin: SKIN[(i * 2 + 1) % SKIN.length], hat: c.hat, garb: i % 2 ? 'parti' : 'doublet', fat: [0.5, -0.3, 0.1, 0.8][i % 4] });
       p.g.position.set(11.0, 0.3, c.z); p.g.rotation.y = -Math.PI / 2; p.type = c.type; p.k = 0; p.ph = i * 1.9;
       if (c.type === 'drum') {
         p.prop = grp(p.torso, 0, 0.12, 0.32); p.prop.rotation.x = 0.2; mesh(G.drum, '#a0613a', p.prop); mesh(G.brim, '#e8e0c8', p.prop, 0, 0.1, 0).scale.set(0.95, 1, 0.95);
@@ -71,7 +71,7 @@ export function createLife(scene, opts = {}) {
   }
   function buildVendors() {
     VENDORS.forEach((c, i) => {
-      const p = person(root, { hose: c.hose, coat: c.coat, tab: null, skin: SKIN[(i * 3) % SKIN.length], hat: null });
+      const p = person(root, { hose: c.hose, coat: c.coat, tab: null, skin: SKIN[(i * 3) % SKIN.length], hat: null, garb: c.type === 'wine' ? 'tunic_plain' : 'tunic_apron', sleeve: 'sleeve_rolled', fat: [0.7, -0.2, 0.3][i % 3] });
       const hd = p.head;
       if (c.hat === 'straw') { mesh(G.brim, '#cfa95c', hd, 0, 0.2, 0); mesh(G.crown, '#cfa95c', hd, 0, 0.26, 0); }
       else if (c.hat === 'cap') mesh(G.cap, '#6b4a32', hd, 0, 0.14, 0);

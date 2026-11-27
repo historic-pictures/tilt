@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { drawCrest } from './util.js';
 import { LANE_X, START_Z } from './world.js';
+import { dressFigure, ARM_AT } from './people.js';
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const ease = (k) => k * k * (3 - 2 * k);
@@ -65,18 +66,21 @@ function makeSide(scene, isLate) {
   function build(id, rec, c1, c2, extras) {
     const sk = SKIN[hash(rec.name) % SKIN.length], g = grp(endG), body = grp(g), a = { id, rec, g, body, o: 0, f: 0, yaw: 0, q: [], pose: 'idle', k: 0, ph: (hash(rec.name) % 628) / 100, wph: 0, moving: false, walkYaw: 0, pend: null, talkT: 0, ang: { aL: 0, aR: 0, lean: 0, drop: 0, hd: 0 }, home: HOME[id] };
     const legL = a.legL = grp(body, -0.09, 0.85), legR = a.legR = grp(body, 0.09, 0.85);
-    mesh(G.leg, c1, legL); mesh(G.leg, c2, legR);                      // parti-coloured hose
-    const torso = a.torso = grp(body, 0, 0.85); mesh(G.torso, c1, torso);
-    const head = a.head = grp(torso, 0, 0.66); mesh(G.head, sk, head, 0, 0.12, 0);
-    const armL = a.armL = grp(torso, -0.27, 0.57), armR = a.armR = grp(torso, 0.27, 0.57); mesh(G.arm, c1, armL); mesh(G.arm, c1, armR);
+    // the modelled parts of src/people.js on the same joints: parti-coloured hose, a tunic in your first colour (the pursuivant a tabard in your second, the
+    // smiths a leather apron), a face and a build of his own
+    const hh = hash(rec.name), D = dressFigure({ close: true, coat: c1, hose: c1, hose2: c2, skin: sk, tab: id === 'pursuivant' ? c2 : null, garb: id === 'armourer' || id === 'farrier' ? 'tunic_apron' : id === 'groom' ? 'tunic_plain' : id === 'master' ? 'cotehardie' : 'doublet',
+      sleeve: id === 'armourer' || id === 'farrier' ? 'sleeve_rolled' : 'sleeve_wool', face: ['m_young', 'm_plain', 'm_beard', 'm_moustache', 'm_fullbeard', 'm_old'][id === 'squire' ? 0 : (hh >> 3) % 6], hair: ['#2a211a', '#4a3524', '#6b4a2a', '#8a5a2c', '#8a3a1c'][(hh >> 6) % 5],
+      fat: id === 'squire' ? -0.25 : id === 'armourer' ? 0.6 : ((hh >> 9) % 100) / 100 * 0.9 - 0.3 });
+    legL.add(D.legL); legR.add(D.legR);
+    const torso = a.torso = grp(body, 0, 0.85); torso.add(D.torso);
+    const head = a.head = grp(torso, 0, 0.66); D.head.position.y = 0.12; head.add(D.head);
+    const armL = a.armL = grp(torso, -ARM_AT[0], ARM_AT[1]), armR = a.armR = grp(torso, ARM_AT[0], ARM_AT[1]); armL.add(D.armL); armR.add(D.armR);
     a.handR = grp(armR, 0, -0.6); a.handL = grp(armL, 0, -0.6);
     const cap = { squire: () => mesh(G.dome, c2, head, 0, 0.17, 0), groom: () => { mesh(G.brim, c2, head, 0, 0.2, 0); mesh(G.crown, c2, head, 0, 0.25, 0); },
       armourer: () => mesh(G.dome, '#d9d0b6', head, 0, 0.15, 0).scale.set(1.12, 1.1, 1.12), farrier: () => { const m = mesh(G.cone, '#6b4a32', head, 0, 0.33, -0.02); m.rotation.x = 0.25; },
       pursuivant: () => { mesh(G.toque, c2, head, 0, 0.27, 0); mesh(G.feather, '#d8222a', head, 0.1, 0.4, 0); },
       master: () => { mesh(G.brim, '#3a3029', head, 0, 0.2, 0); mesh(G.crown, '#3a3029', head, 0, 0.25, 0); mesh(G.feather, '#d9d0b6', head, 0.1, 0.33, 0); } }[id];
     cap();
-    if (id === 'armourer' || id === 'farrier') mesh(G.apron, '#5b4332', torso, 0, 0.3, 0.22);
-    if (id === 'pursuivant') { mesh(G.tabard, c2, torso, 0, 0.3, 0.22); mesh(G.tabard, c2, torso, 0, 0.3, -0.22); }
     // what he carries
     if (id === 'squire') {
       a.lanceP = grp(a.handR); lance(a.lanceP, c1, c2).position.y = -0.5; a.lanceP.visible = false;

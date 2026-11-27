@@ -113,7 +113,17 @@ export const ytmusic = {
     this.title = (d && d.title) || ''; const n = document.getElementById('ytnow'); if (n) n.textContent = this.title || 'YouTube'; this._emit('now');
   },
   _load() { try { const id = this.curId; if (id) this.player.loadVideoById(id); } catch (e) { /* ignore */ } },
-  next() { const n = this.ids.length; if (!n) return; this.idx = (this.idx + 1) % n; this._setNote(''); if (this.ready) this._load(); },
+  // Shuffle (owner, 27 Nov): the session still opens on the first track of the list; after that each next track is drawn from a shuffled bag,
+  // so every song plays once before any repeats and the same song never plays twice in a row.
+  next() {
+    const n = this.ids.length; if (!n) return;
+    if (n > 1) {
+      const cur = this.idx % n;
+      if (!this._bag || !this._bag.length || this._bagN !== n) { this._bagN = n; this._bag = Array.from({ length: n }, (_, i) => i).filter(i => i !== cur); for (let i = this._bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [this._bag[i], this._bag[j]] = [this._bag[j], this._bag[i]]; } }
+      this.idx = this._bag.pop(); if (this.idx === cur && this._bag.length) this.idx = this._bag.pop();
+    }
+    this._setNote(''); if (this.ready) this._load();
+  },
   /** Show the box and start (or resume) playing. The first call must come from a user gesture. */
   async start() {
     this.wantPlay = true;

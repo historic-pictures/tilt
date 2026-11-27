@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { GFX } from './gfx.js';
 import { buildFlora } from './flora.js';
 import { touchMode } from './touch.js';
+import { figure, fitGeo, partGeo, shareGeo, partMaterial, garment, faceUV, patchUV } from './people.js';
+import { headFor } from './people_heads.js';
 import { buildCrowd } from './crowd.js';
 import { makePBR } from './texgen.js';
 import { buildProps } from './props.js';
@@ -15,7 +17,9 @@ import { skyNow, loadSky, skyFromPhoto } from './scans.js';
 import { rng, TAU, box, limb, grassTexture, sandTexture, woodTexture, stoneTexture, stripeTexture, armsTexture, canvasTex, photoSet, photoTex, worldUV, detailWorld } from './util.js';
 
 export const LIST_HALF = 32;      // half-length of the tilt barrier
-export const LANE_X = 0.95;       // rider offset from the tilt
+export const LANE_X = 0.62;       // rider offset from the tilt
+// Where a horse touches the tilt (its cloth is +-0.17, the barrel 0.31 wide: 0.5 is the flank brushing it) and the riding line's good, close and wide limits, all on the rider's offset from the tilt (was 0.7 / 0.8 / 0.84 / 1.3 with the lane at 0.95).
+export const BARRIER_X = 0.5, LAT_CLOSE = 0.56, LAT_SHAVE = 0.58, LAT_WIDE = 1.0;
 export const START_Z = 40;        // riders start at +-START_Z
 
 const BANNER_ARMS = [
@@ -258,16 +262,17 @@ export function buildWorld(scene, renderer, venue = {}) {
     [-0.9, 0.9].forEach((z, i) => {
       cg.add(box([16.0, 3.3, z], [0.25, 1.9, 1.0], woodDark));
       const fig = new THREE.Group(); fig.position.set(15.5, 2.4, z); fig.rotation.y = -Math.PI / 2;
-      const robeMat = new THREE.MeshStandardMaterial({ color: robe[i], roughness: 0.8 }), skinMat = new THREE.MeshStandardMaterial({ color: 0xe0b896, roughness: 0.8 });
-      const ermine = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9 });
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.4, 1.12, 14), robeMat); body.position.y = 0.56; body.castShadow = true; fig.add(body);
-      const cape = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.3, 0.2, 14), ermine); cape.position.y = 1.06; fig.add(cape);
+      // the king and the queen: the modelled, dressed parts of src/people.js (a long robe of black velvet sewn with gold stars and ermine; a gown of blue-and-gold
+      // lion brocade), the close-up head of src/people_heads.js, a crown; seated (the robe is drawn 0.8 of its height, as the cylinder it replaces was)
+      const skin = i ? '#efcdae' : '#e0b38c', F = figure(), fat = i ? 0.1 : 0.7;
+      const body = new THREE.Mesh(i ? fitGeo('gown_npc_hi', 1, 0.8, 1) : fitGeo('robe_npc_hi', 1, 0.8, 1), partMaterial(i ? '#213f78' : '#24211f', skin, garment(i ? 'gown_brocade' : 'houppelande_brocade').uv, fat)); body.castShadow = true; fig.add(body);
       const head = new THREE.Group(); head.position.y = 1.3; fig.add(head);
-      const skull = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 12), skinMat); head.add(skull);
-      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.125, 0.13, 12, 1, true), gold); crown.position.y = 0.15; head.add(crown);
-      if (i === 1) { const veil = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.5, 10, 1, true), ermine); veil.position.set(0, -0.12, -0.08); head.add(veil); }
-      else { const beard = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1 })); beard.position.set(0, -0.1, 0.07); beard.scale.set(1, 1.1, 0.8); head.add(beard); }
-      const arms = [-1, 1].map(sx => { const a = new THREE.Group(); a.position.set(sx * 0.27, 1.02, 0); a.add(limb([0, 0, 0], [0, -0.5, 0.06], 0.07, 0.055, robeMat, 8)); const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), skinMat); hand.position.set(0, -0.54, 0.07); a.add(hand); fig.add(a); return a; });
+      const hd = GFX.tier === 'low' ? new THREE.Mesh(F.head, partMaterial(skin, i ? '#8a5a2c' : '#9a958c', faceUV(i ? 'f_fair' : 'm_fullbeard'), fat)) : headFor(i ? 7 : 2, i ? 'f' : 'm', i ? 'medium' : 'heavy', skin, i ? '#8a5a2c' : '#9a958c');
+      hd.position.y = 0.02; head.add(hd);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.098, 0.088, 0.075, 12, 1, true), gold); crown.position.y = 0.115; head.add(crown);
+      if (i === 1) { const veil = new THREE.Mesh(shareGeo(partGeo('veil_hi')), partMaterial('#ece6d6', '#ece6d6', patchUV('veil'), 0)); veil.position.y = 0.02; head.add(veil); }
+      const sl = partMaterial(i ? '#213f78' : '#8a1616', skin, patchUV('sleeve_fur'), 0);
+      const arms = [-1, 1].map(sx => { const a = new THREE.Group(); a.position.set(sx * 0.2, 1.06, 0); const m = new THREE.Mesh(F.arm, sl); m.castShadow = true; m.rotation.x = -0.12; a.add(m); fig.add(a); return a; });
       g.add(fig); world.royals.push({ fig, head, arms, y0: 2.4, ph: i * 1.7 });
     });
     world.royal = { kind: 'idle', t0: -99 };
