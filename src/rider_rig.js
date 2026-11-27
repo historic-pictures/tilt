@@ -444,7 +444,17 @@ export function fitLegs(J, R, cloth, o = {}) {
 
 const _gm = new THREE.Matrix4(), _hq = new THREE.Quaternion(), _sq = new THREE.Quaternion(), _t = new THREE.Vector3(), _lw = new THREE.Vector3(), _ld = new THREE.Vector3();
 /** Right fist on the lance grip, left hand with the shield. Call after the lance is aimed (its world matrix is final). */
+const _tv = new THREE.Vector3(), _tq = new THREE.Quaternion();
+/** The throw (a simple swing, owner 27 Nov): while the hand is empty after the stump is thrown, the lance arm swings out and down to the side away from the tilt in 0.4 s and hangs there. */
+function throwArm(J, R) {
+  const k0 = Math.min(1, Math.max(0, (performance.now() / 1000 - J.throwAt) / 0.4)), k = k0 * k0 * (3 - 2 * k0), B = R.bones;
+  J.root.updateWorldMatrix(true, true);
+  B.RightHand.getWorldPosition(_v); B.RightArm.getWorldPosition(_t); B.RightHand.getWorldQuaternion(_hq);
+  J.root.getWorldQuaternion(_tq); _tv.set(-0.45, -0.75, 0.1).applyQuaternion(_tq).add(_t);      // out to the rider's right (away from the tilt) and down
+  _v.lerp(_tv, k); solveArm(B.RightArm, B.RightForeArm, B.RightHand, _v, _hq); R.root.updateMatrixWorld(true);
+}
 export function armsRig(J, R, replay) {
+  if (!replay && J.throwAt != null && !J.lance.visible && !J.unhorsed && R.w.stand <= 0.5) { throwArm(J, R); return; }
   if (J.unhorsed && !replay) return; if ((replay ? J.snapUnhorsed : J.unhorsed) || !J.lance.visible || R.w.stand > 0.5) return;
   const B = R.bones, ls = B.LanceSocket;
   // the hand turns so the socket's long axis (+Y) lies along the shaft (+Z of the lance); the roll about the shaft stays as the pose has it

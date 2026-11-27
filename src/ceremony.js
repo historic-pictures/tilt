@@ -10,8 +10,8 @@ import { SPEECH } from './channels.js';
 export const INTRO_END = 37.5;       // seconds of the full intro
 export const SKIP_HOLD = 0.8;        // seconds the key is held to skip
 // [from, to, shot]: wide lists, trumpets, royal box, warm-up (a canter along each side), line-up before the royal box (visors up, lance dips, the salute between the knights),
-// the announcer, the judges' box (they put their heads together while he calls the names), the announcer again, the opponent's herald boasts, your man boasts, "to your marks" at the starting ends
-export const SHOTS = [[0, 2, 'wide'], [2, 5.6, 'trump'], [5.6, 8.5, 'royal'], [8.5, 10.25, 'warmP'], [10.25, 12, 'warmO'], [12, 19, 'lineup'], [19, 22.4, 'herald'], [22.4, 23.9, 'judges'], [23.9, 25.5, 'judges2'], [25.5, 26, 'herald'], [26, 30.5, 'him'], [30.5, 35, 'you'], [35, INTRO_END, 'marks']];
+// the announcer, the opponent's herald boasts, your man boasts, "to your marks" at the starting ends (the original intro, restored at the owner's request: 27 Nov)
+export const SHOTS = [[0, 2, 'wide'], [2, 5, 'trump'], [5, 8.5, 'royal'], [8.5, 10.25, 'warmP'], [10.25, 12, 'warmO'], [12, 19, 'lineup'], [19, 26, 'herald'], [26, 30.5, 'him'], [30.5, 35, 'you'], [35, INTRO_END, 'marks']];
 export const MOVE = { t0: 8.5, tStop: 15.5, turnBox: [14.8, 16.2], dip1: [16.2, 17.4], turnEach: [17.4, 18.2], dip2: [18.2, 19.0], end: 35 };   // the riders' choreography
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
@@ -125,11 +125,10 @@ export function createCeremony(scene) {
     if (id === 'wide') { want.set(0.5, lerp(5.6, 3.8, u), lerp(-50, -45, u)); look.set(2, 2.2, 0); fov = 56; }
     else if (id === 'trump') { want.set(lerp(1.5, 3.2, u), 1.9, lerp(-0.6, 0.6, u)); look.set(10.8, 2.2, 0); fov = 44; }
     else if (id === 'royal') { want.set(lerp(7.0, 8.4, u), lerp(3.4, 3.9, u), lerp(4.2, 2.6, u)); look.set(15.5, 3.6, 0); fov = 34; }
-    else if (id === 'herald') { want.set(lerp(4.6, 5.6, u), 1.5, HZ - 0.1); look.set(T.H ? T.H.x : X0, 1.5, HZ); fov = 27; }      // head on from the lists, waist up, scroll in view
-    else if (id === 'judges' || id === 'judges2') { fov = T.judgesCam ? T.judgesCam(id === 'judges' ? 'box' : 'mid', u, want, look) : 36; }
+    else if (id === 'herald') { want.set(lerp(4.6, 5.6, u), 1.5, HZ - 0.1); look.set(T.H ? T.H.x : X0, 1.5, HZ); fov = 27; }      // head on from the lists, waist up (kept from the framing review: the modelled lists put the judges' stand at z = 0)
     else if (id === 'warmP') { const c = player.root.position; want.set(-5.8, 1.6, c.z - 1.5); look.set(c.x, player.seatY + 0.07, c.z + 3); fov = 40; }
     else if (id === 'warmO') { const c = opp.root.position; want.set(5.8, 1.6, c.z + 1.5); look.set(c.x, opp.seatY + 0.07, c.z - 3); fov = 40; }
-    else if (id === 'lineup') { want.set(lerp(7.6, 6.7, u), 2.4, 0); look.set(0, 1.9, 0); fov = 54; }      // the host's view: both knights ride in from the ends and face the box
+    else if (id === 'lineup') { want.set(lerp(7.6, 6.7, u), 2.4, 0); look.set(0, 1.9, 0); fov = 54; }      // (kept: the modelled judges' stand is where the old position was)      // the host's view: both knights ride in from the ends and face the box
     else if (id === 'him' || id === 'you') {      // a slow push-in on the knight, from in front of his horse
       const on = id === 'him' ? opp : player, c = on.root.position, yaw = on.root.rotation.y, fx = Math.sin(yaw), fz = Math.cos(yaw), an = -0.95 + u * 0.25, R = lerp(7.0, 4.9, smoothstep(0, 1, u));
       want.set(c.x + fx * Math.cos(an) * R + fz * Math.sin(an) * R, 1.55 + u * 0.3, c.z + fz * Math.cos(an) * R - fx * Math.sin(an) * R); look.set(c.x, 1.85, c.z); fov = 38;

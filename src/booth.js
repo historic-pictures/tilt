@@ -8,6 +8,7 @@
 // a budget of turns per course, filler only in a long quiet. Phases: the charge allows only 'away' and 'charge.*', the strike only 'exclaim.*', the replay no filler.
 // Pools never repeat until used up (a session-wide history), so a match never hears the same line twice.
 import { BOOTH, BOOTH_CAST } from './booth_lines.js';
+import { BOOTH as SW } from './channels.js';
 
 const strip = (s) => String(s).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
 const words = (s) => strip(s).split(/\s+/).filter(Boolean).length;
@@ -43,7 +44,9 @@ export function createBooth(host) {
     if (!cand.length) { const last = u[u.length - 1]; u.length = 0; cand = pool.map((_, i) => i).filter(i => i !== last); if (!cand.length) cand = [0]; }
     cand.sort(() => Math.random() - 0.5);
     for (const i of cand) {
-      const e = pool[i], turns = (isTurn(e) ? [e] : e).map(([spk, text, nf]) => ({ spk, text: fill(text, vars) ?? (nf ? fill(nf, vars) : null) }));
+      const e = pool[i];
+      if (!SW.drewe && (isTurn(e) ? [e] : e).some(([spk, text, nf]) => spk === 'C' || /Walter|Drewe/.test(text + (nf || '')))) { u.push(i); continue; }      // Sir Walter is off (src/channels.js BOOTH): no exchange with him, no Pell line that speaks to him
+      const turns = (isTurn(e) ? [e] : e).map(([spk, text, nf]) => ({ spk, text: fill(text, vars) ?? (nf ? fill(nf, vars) : null) }));
       const total = turns.reduce((a, x) => a + (x.text ? sayTime(x.text) + 0.3 : 99), 0);
       if (turns.every(x => x.text) && sayTime(turns[0].text) <= fit && total <= fit + 1.5) { u.push(i); return turns; }      // fit: a line (or an exchange) that can be said in the quiet there is
     }

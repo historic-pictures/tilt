@@ -12,6 +12,12 @@ export const SPEECH = { booth: true,
   marshal: false,       // the marshal's and judges' spoken calls
   vendors: false };     // the sellers in the stands
 
+/** BOOTH: which of the two commentators speak (voice and subtitles). Owner, 27 Nov: one single voice. Sir Walter's lines stay in src/booth_lines.js; any exchange that has him in it, and any Pell line that names him, is skipped while he is off. */
+export const BOOTH = { pell: true, drewe: false };
+
+/** The squire's rare encouragement between courses (src/main.js squireCheer): the only retinue voice that is on. */
+export const SQUIRE = { cheer: true, chance: 0.4 };
+
 /** TEXT: a line of dialogue is shown (ticker / floating label / bubble) for this channel. */
 export const TEXT = {
   herald: false, retinue: false, host: false, master: false, marshal: false, rival: false, vendors: false, lady: false,
@@ -22,10 +28,10 @@ export const TEXT = {
 
 /** UI: essential information, shown as plain UI text and never spoken. */
 export const UI = {
-  courseNumber: true,       // "Course 2 of 5" before each course
+  courseNumber: false,      // OFF (27 Nov, one text line at a time): "Course 2 of 5" before each course; the top bar already says COURSE n/N
   rideSignal: true,         // "Ride!" at the marshal's signal
   prompts: true,            // "Put your helm on first (H)", "Wait for the marshal"
-  judgesBand: true,         // the judges' result band (#royalCap / #ticker.scrollcall: the prize, the judges' marks)
+  judgesBand: false,        // OFF (owner, 27 Nov: the score is at the top and the hit diagram explains it) - the judges' result band (#royalCap / #ticker.scrollcall: the prize, the judges' marks)
   injury: true,             // the surgeon's yield / unfit prompt that needs a decision
   lessonGoals: true,        // training lesson panel and goals
   callouts: true };         // Combo B callouts: "Lance broken", "Unhorsed!" (own DOM, not part of the voice director)
@@ -37,6 +43,7 @@ export const CROWD = { sound: true, shouts: true, shoutExcite: 0.6, maxShoutLabe
 export function channelOf(o) {
   const w = String(o.who || '').toUpperCase();
   if (o.ui) return { ui: o.ui };
+  if (o.cheer) return { cheer: true };
   if (/^THE (JUDGES|SCORER)/.test(w)) return { ui: 'judgesBand' };
   if (/SURGEON/.test(w)) return { text: 'master' };
   if (/MASTER OF ARMS/.test(w)) return { text: 'master' };
@@ -51,6 +58,7 @@ export function channelOf(o) {
 /** Is this ticker line shown? Returns { show, speak }. */
 export function gate(o) {
   const c = channelOf(o);
+  if (c.cheer) return { show: !!SQUIRE.cheer, speak: !!SQUIRE.cheer && !!o.speak };
   if (c.ui) return { show: !!UI[c.ui], speak: false };
   return { show: !!TEXT[c.text], speak: !!(SPEECH[c.text] && o.speak) };
 }

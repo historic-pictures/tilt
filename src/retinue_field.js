@@ -138,8 +138,8 @@ function makeSide(scene, isLate) {
   /** The rider throws his broken stump down beside his horse: it tumbles out and lies on the grass until the squire fetches it. */
   F.throwStump = function throwStump() {
     if (!gs || !men.squire) return false;
-    const o0 = lo + 0.3, f0 = lf + 0.2, o1 = lo + 1.5, f1 = lf - 0.7, T = 0.7, y0 = 1.5;
-    Object.assign(gs, { active: true, t: 0, T, o0, f0, o1, f1, y0, vy: (0.05 - y0 + 4.905 * T * T) / T, spin: (3 + Math.random() * 2) * Math.PI, yaw: (Math.random() - 0.5) * 0.7, spot: [o1, f1 + 0.35] });
+    const o0 = lo + 0.1, f0 = lf + 0.35, o1 = lo + 1.5, f1 = lf - 0.7, T = 0.7, y0 = 2.0;      // starts at the rider's hand, leaves it 0.2 s into the arm's swing
+    Object.assign(gs, { active: true, thud: false, t: 0, T, o0, f0, o1, f1, y0, vy: (0.05 - y0 + 4.905 * T * T) / T, spin: (3 + Math.random() * 2) * Math.PI, yaw: (Math.random() - 0.5) * 0.7, spot: [o1, f1 + 0.35] });
     gs.mesh.visible = true; return true;
   };
   /** The squire's service on arrival; `swap` runs at the moment a fresh lance reaches the rider's hand. Returns false when he is not there (the caller then does the swap itself).
@@ -150,12 +150,12 @@ function makeSide(scene, isLate) {
     if (!broken) { if (Math.random() < 0.5 && !a.q.length && !serving) go(a, [{ walk: SPOT.stirrup }, { act: 'check', dur: 1.1 }, home(a)]); return true; }
     const done = () => { if (swap) { const f = swap; swap = null; f(); } serving = 0; };
     if (how === 'hand') {      // you hand the broken lance straight to him: he takes it, lays it on the pile, and gives you a fresh one
-      const hand = () => { a.lanceP.visible = false; done(); };
+      const hand = () => { a.lanceP.visible = false; if (F.onHand) F.onHand(a.g.getWorldPosition(new THREE.Vector3())); done(); };
       go(a, [{ walk: SPOT.stirrup }, { act: 'take', dur: 0.9, at: 0.5, mid() { if (took) took(); a.stump.visible = true; } },
         { fn() { a.stump.visible = false; showPile(); a.lanceP.visible = true; putRack(false); } }, { act: 'present', dur: 1.2, at: 0.6, mid: hand }, { hold: 'idle', until: () => false, max: 0.3 }, home(a)], done); serving = 1;
       return true;
     }
-    const fresh = () => { a.lanceP.visible = true; putRack(false); }, hand = () => { a.lanceP.visible = false; done(); };
+    const fresh = () => { a.lanceP.visible = true; putRack(false); }, hand = () => { a.lanceP.visible = false; if (F.onHand) F.onHand(a.g.getWorldPosition(new THREE.Vector3())); done(); };
     go(a, [{ fn: fresh }, { walk: SPOT.stirrup }, { act: 'present', dur: 1.2, at: 0.6, mid: hand }, { hold: 'idle', until: () => false, max: 0.3 },
       { walk: gs ? gs.spot : SPOT.stirrup }, { act: 'pick', dur: 1.0, at: 0.55, mid() { hideGround(); a.stump.visible = true; } },
       { walk: SPOT.pile }, { act: 'lay', dur: 0.9, at: 0.5, mid() { a.stump.visible = false; showPile(); } }, home(a)], done); serving = 1;
@@ -265,7 +265,8 @@ function makeSide(scene, isLate) {
     // where you are, in the frame of your end (for looking)
     const dx = (env.px - endG.position.x) * (tD > 0 ? 1 : -1), dz = (env.pz - endG.position.z) * (tD > 0 ? 1 : -1); lo = -dx; lf = dz;
     if (gs && gs.active && gs.t < gs.T + 1) {      // the thrown stump: a short arc, tumbling, then it lies flat
-      gs.t += dt; const u = Math.min(1, gs.t / gs.T), tt = Math.min(gs.t, gs.T);
+      gs.t += dt; const u = Math.max(0, Math.min(1, gs.t / gs.T)), tt = Math.max(0, Math.min(gs.t, gs.T));
+      if (!gs.thud && gs.t >= gs.T) { gs.thud = true; if (F.onThud) F.onThud(gs.mesh.getWorldPosition(new THREE.Vector3())); }
       gs.mesh.position.set(-(gs.o0 + (gs.o1 - gs.o0) * u), Math.max(0.05, gs.y0 + gs.vy * tt - 4.905 * tt * tt), gs.f0 + (gs.f1 - gs.f0) * u);
       gs.mesh.rotation.set(gs.spin * (1 - u) * (1 - u), gs.yaw * u, 0);
     }
@@ -310,6 +311,8 @@ export function createField(scene, isLate) {
     serve: (broken, swap, w, how, took) => side(w).serve(broken, swap, how, took),
     wave: () => mine.wave(), fitHelm: (s, m) => mine.fitHelm(s, m), cheer: () => mine.cheer(), release: () => mine.release(), where: (id, out) => mine.where(id, out),
     serving: () => mine.serving() || his.serving(),
+    /** sound hooks: fn(worldPos) when a thrown stump lands / when the squire's hands reach the rider with the fresh lance */
+    set onThud(f) { mine.onThud = his.onThud = f; }, set onHand(f) { mine.onHand = his.onHand = f; },
     /** env: as for one end, plus ox, oz (the opponent in the world). */
     update(dt, env) {
       mine.update(dt, env);

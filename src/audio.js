@@ -436,6 +436,10 @@ export class GameAudio {
       this._play('kit_rattle', o({ db: 0, delay: 0.05 })); this._play('kit_rattle', o({ db: -4, delay: 0.3 }));
     });
   }
+  /** A broken stump thrown down hits the turf: one low wooden thud (the shipped wood_debris samples, the longest ones, slowed). */
+  lanceThud(dist = 5, pan = 0) { this._run(() => { this._play('wood_debris', { stem: 'impact', dist, pan, db: -4, rate: 0.7, pick: 'long' }); }); }
+  /** The squire hands up the fresh lance: a soft rattle of wood and leather (the shipped kit_rattle samples). */
+  lanceHand(dist = 5, pan = 0) { this._run(() => { this._play('kit_rattle', { stem: 'impact', dist, pan, db: -9, rate: 1.05, pick: 'short' }); }); }
   whinny(pan = 0, dist = 3) { this._run(() => this._play('horse_whinny', { stem: 'horse', dist, pan })); }
   snort(pan = 0, dist = 2.5) { this._run(() => this._play('horse_snort', { stem: 'horse', dist, pan })); }
   /** Heels to the horse: a creak of harness and a grunt of effort. */

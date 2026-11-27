@@ -2313,6 +2313,10 @@ export class Jouster {
     this.head.rotation.z = Math.sin(t * 8.5) * 0.16 * ag * (0.5 + 0.5 * Math.sin(t * 1.3)); this.neck.rotation.y = Math.sin(t * 3.1) * 0.1 * ag;
     this.neck.rotation.x -= Math.max(0, Math.sin(t * 2.2)) * 0.12 * ag + this.toss * 0.5; this.body.rotation.x += this.chk * 0.06; this.head.rotation.x -= this.toss * 0.4;
     if (this._neck) { if (this._neck[0]) this._neck[0].rotation.x += this.toss * 0.25; if (this._neck[1]) this._neck[1].rotation.x += this.toss * 0.35; }
+    if (this._neck) {      // anatomical limit, live and replay: the horse's neck and poll never turn more than ~60 degrees to either side (nor roll) of its body, whatever drives them
+      if (this._headB === undefined) this._headB = this.model.getObjectByName('Head') || null;
+      for (const b of [this._neck[0], this._neck[1], this._headB]) if (b) { b.rotation.y = clamp(b.rotation.y, -1.05, 1.05); b.rotation.z = clamp(b.rotation.z, -1.05, 1.05); }
+    }
     this.tail.rotation.x = lerp(0.08, 0.95, g * amp) + Math.sin(cyc + 1) * 0.1 * amp + Math.sin(t * 1.3) * 0.04;
     this.tail.rotation.z = Math.sin(t * 2.1) * 0.08 + Math.sin(cyc * 0.5) * 0.1 * amp;
 

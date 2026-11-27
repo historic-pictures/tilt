@@ -413,13 +413,13 @@ export const PHYS = {
     // stride (roll partly at half the stride), scaled walk -> canter -> gallop. The clip's own pitch (about 6 deg p-p) is already in the total.
     synth: 0.1,            // share kept of the old synthetic posting (3.5 cm) and torso rock (1.7 deg) of the rigged rider: the chain and the horse's body give the motion now
     horseFollow: 1.0,      // the saddle (tack, cloth, rider) turns with the clip's own back line (croup to withers, ~12 deg p-p at the gallop); the skin already shows it. 0 = the old level saddle
-    horsePitch: 0.012,     // rad amplitude of extra pitch at the gallop on skin and saddle alike, over that
-    horseRoll: 0.063,      // rad amplitude of the roll at the gallop
+    horsePitch: 0.009,     // rad amplitude of extra pitch at the gallop on skin and saddle alike, over that (toned down ~25% for comfort (owner, 27 Nov); was 0.012)
+    horseRoll: 0.048,      // rad amplitude of the roll at the gallop (toned down ~25% for comfort (owner, 27 Nov); was 0.063)
     horsePivot: [0.0, 0.62, 0.25],   // the point (x, y as a share of the horse's withers height, z m) the body turns about: near the centre of mass, so the hooves stay put
     horseWalk: 0.14,       // share of it left at the walk (the canter, halfway up the gait, gets about 0.55)
     horsePhase: [2.6, 0.9, 0.4],     // phase (rad, of the stride cycle) of the pitch, the roll once per stride, the roll once per two strides
     // The camera gets a share of that body motion (smoothed): 0 = a locked camera, 1 = bolted to the saddle. Too much makes the chase view sick-making.
-    camShare: 0.4, camDamp: 9,
+    camShare: 0.25, camDamp: 9,   // camShare toned down for comfort (owner, 27 Nov); was 0.4. The camera following the horse's pitch and roll was the main nausea source
   },
   // The angle of the stroke. A point that meets a surface more obliquely than this many degrees from square skids instead of biting
   // (a three-pronged coronel grips less well than a sharp point). zone values shift that limit; a helm's own `deflect` lowers it further.
@@ -576,9 +576,10 @@ export const PHYS = {
   // Drop: a lance that holds (no break) on a stroke of dropPower or more, with the arm jarred to dropArm (or, for the struck man, thrown back dropLean of the way to going over): chance dropChance, scaled up by how far past; dropMax per man per match.
   // Daze: seconds = dazeBase + dazePower * power (x dazeHelm on the helm), capped dazeMax; dazeAim: extra aim sway (x) while dazed (you), oppDaze: the same for the AI; dazeBlur: screen blur/wobble strength.
   drama: { heavyHelm: 0.62, heavyBody: 0.8, battered: 2.1, batterGap: 2,
-    unfitBody: 0.18, unfitArm: 0.9, unfitWind: 0.9, doubtBody: 0.42, doubtArm: 0.75, doubtWind: 0.7, heavyN: 3, heavyBody2: 0.6,
+    unfitBody: 0.02, unfitArm: 0.98, unfitWind: 0.98, unfitArmBody: 0.12,      // UNFIT (the yield) is very rare (owner, 27 Nov): was unfitBody 0.18, arm/wind 0.9 with no body condition; now body 0.02, and the arm/wind route also needs the body at 0.12 or less
+    doubtBody: 0.42, doubtArm: 0.75, doubtWind: 0.7, heavyN: 3, heavyBody2: 0.6,
     tendPower: 1.0, tendBody: 0.2, tend: 6, helmSwapAt: 0.7,
-    aiYield: 0.35, aiBehind: 3, spares: 3,
+    aiYield: 0.06,      /* was 0.35: the AI that is DOUBTFUL and far behind yields only very rarely (owner, 27 Nov) */ aiBehind: 3, spares: 3,
     dropPower: 0.7, dropArm: 0.5, dropLean: 0.8, dropChance: 0.45, dropMax: 1,
     dazeBase: 0.9, dazePower: 1.1, dazeHelm: 1.35, dazeMax: 3, dazeAim: 2.2, oppDaze: 1.6, dazeBlur: 0.8 },
   lanceArm: { wnLoose: 5.5, wnSet: 11.5, zetaLoose: 0.35, zetaSet: 0.68, refKg: 5.5, lever: 0.36, tremor: 0.5, tremorFatigue: 2.6, tremorAgit: 1.4 },

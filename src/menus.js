@@ -149,6 +149,7 @@ export function initMenus(api) {
           ${row('Difficulty', DIFFICULTY.map((d, i) => opt((p.difficulty ?? 1) === i, 'diff', d.name, `data-v="${i}"`)).join(''), 'Squire is gentle: wide hit zones, a slow opponent.|Champion is a hard ride.')}
           ${row('View', opt(!p.firstPerson, 'view', 'Third person', 'data-v="0"') + opt(!!p.firstPerson, 'view', 'First person', 'data-v="1"'), 'Third person watches over your shoulder.|First person looks through the helm.')}
           ${row('After a pass', opt(p.autoRide !== false, 'autoride', 'Ride back for me', 'data-v="1"') + opt(p.autoRide === false, 'autoride', 'By hand', 'data-v="0"'), 'The horse can take you back to your mark.|By hand: W/S set the gait, A/D steer.')}
+          ${row('Replays', [['short', 'Short'], ['standard', 'Standard'], ['full', 'Full'], ['off', 'Off']].map(([v, l]) => opt((api.replaysMode ? api.replaysMode() : 'standard') === v, 'replays', l, `data-v="${v}"`)).join(''), 'After a hit the camera replays the strike.|Short: one angle. Standard: two angles, one from each knight. Full: four passes. Off: none.|Hold Space to skip.')}
         </section>
         <section class="sect"><h5>Sound</h5>
           ${row('Commentary', opt(comm, 'commentary', 'On', 'data-v="1"') + opt(!comm, 'commentary', 'Off', 'data-v="0"'), 'Master Pell and Sir Walter in the booth: the one voice in the game, with small subtitles.')}
@@ -671,6 +672,7 @@ export function initMenus(api) {
     if (d.act === 'herald') { p.herald = d.v !== undefined ? d.v === '1' : p.herald === false; api.saveProfile(); return show('settings'); }
     if (d.act === 'musicon') { if (api.setMusicOff) api.setMusicOff(d.v === '0'); return show('settings'); }
     if (d.act === 'commentary') { api.setCommentary(d.v !== undefined ? d.v === '1' : !(api.commentaryOn ? api.commentaryOn() : true)); return show('settings'); }
+    if (d.act === 'replays') { if (api.setReplays) api.setReplays(d.v || 'standard'); return show('settings'); }
     if (d.act === 'chatter') { api.setChatter(d.v !== undefined ? d.v === '1' : !(api.chatterOn ? api.chatterOn() : true)); return show('settings'); }
     if (d.act === 'voices') { api.setVoices(d.v !== undefined ? d.v === '1' : !(api.voicesOn ? api.voicesOn() : true)); return show('settings'); }
     if (d.act === 'diff') { p.difficulty = d.v !== undefined ? +d.v : ((p.difficulty ?? 1) + 1) % DIFFICULTY.length; api.saveProfile(); return show('settings'); }
