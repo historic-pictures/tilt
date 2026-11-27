@@ -215,9 +215,9 @@ export const LANCES = {
 //   couchT: seconds to couch the lance.  assist: aim magnetism, the point eases toward the nearest valid mark (helm, shield, body) when within assistR metres of its edge, up to this share of the way.
 //   fatigue: how fast the arm tires (x; also how long it holds).  nerve: how much the crowd, the salute and big blows fret the horse (x).  seat: added to your own seat when struck (0..1);
 //   hold: x the cantle's hold on you (a harder blow is needed to unhorse you).  oHelm: x the chance the opponent goes for the helm.  oPow: x how much of him goes into the opponent's stroke (coupling), so fewer clean breaks on you.
-export const DIFFICULTY = [
-  { name: 'Squire',   sway: 0.4, ai: -0.2,  zone: 1.5, couchT: 0.9, assist: 0.85, assistR: 0.3, fatigue: 0.5,  nerve: 0.5, seat: 0.2,  hold: 1.35, oHelm: 0.3, oPow: 0.85 },
-  { name: 'Knight',   sway: 1.0,  ai: -0.02, zone: 1.1, couchT: 1.0, assist: 0.5, assistR: 0.15, fatigue: 0.8, nerve: 0.8, seat: 0.08, hold: 1.1,  oHelm: 0.8, oPow: 1.0 },
+export const DIFFICULTY = [      // (27 Nov: the lance's wander cut by a quarter on Squire and Knight, owner: "make it easier to control the mouse, 25% easier")
+  { name: 'Squire',   sway: 0.3, ai: -0.2,  zone: 1.5, couchT: 0.9, assist: 0.85, assistR: 0.3, fatigue: 0.5,  nerve: 0.5, seat: 0.2,  hold: 1.35, oHelm: 0.3, oPow: 0.85 },
+  { name: 'Knight',   sway: 0.75, ai: -0.02, zone: 1.1, couchT: 1.0, assist: 0.5, assistR: 0.15, fatigue: 0.8, nerve: 0.8, seat: 0.08, hold: 1.1,  oHelm: 0.8, oPow: 1.0 },
   { name: 'Champion', sway: 1.55, ai: 0.12,  zone: 0.8, couchT: 1.5, assist: 0,    assistR: 0,    fatigue: 1.0, nerve: 1.0, seat: 0,    hold: 1.0,  oHelm: 1.0, oPow: 1.0 },
 ];
 export const purse = (vIdx, result, circuit) => { const base = circuit ? 90 + 45 * vIdx : 35; return result.startsWith('win') ? base + (result === 'win-unhorse' && !circuit ? 30 : 0) : result === 'draw' ? Math.round(base / 2) : result === 'practice' ? 0 : Math.round(base / 5); };
