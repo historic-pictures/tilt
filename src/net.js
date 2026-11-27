@@ -6,7 +6,7 @@
 //   net.onClose = () => {};             // the other side left, or the link dropped
 //   await net.host(code)                // register the room (resolves once it can be found; rejects with Error('taken') if the code is in use)
 //   await net.join(code)                // connect to a room (resolves when connected; rejects with Error('notfound' | 'timeout' | 'unreachable'))
-//   net.send(obj); net.close();
+//   net.send(obj, unreliable = false); net.close();     // unreliable: for the 30 Hz rider-state stream (a second, unordered, no-retransmit data channel when the browser connection has one; else the main one)
 //
 // STUN only unless src/netcfg.js has a TURN credentials URL: some networks block direct connections, and then join() fails with 'timeout' after JOIN_TIMEOUT.
 import { iceServers } from './netcfg.js';
@@ -21,6 +21,7 @@ export const makeCode = () => { let s = ''; for (let i = 0; i < CODE_LEN; i++) s
 export const cleanCode = (v) => String(v || '').toUpperCase().replace(/[^A-Z]/g, '').split('').filter(c => ALPHABET.includes(c)).join('').slice(0, CODE_LEN);
 export const validCode = (c) => typeof c === 'string' && c.length === CODE_LEN && [...c].every(ch => ALPHABET.includes(ch));
 export const useLocal = () => { try { return new URLSearchParams(location.search).get('net') === 'local'; } catch (e) { return false; } };
+const NETSIM = (() => { try { const v = new URLSearchParams(location.search).get('netsim'); if (!v) return null; const [lat, jit, loss] = v.split(',').map(Number); return { lat: lat || 0, jit: jit || 0, loss: (loss || 0) / 100 }; } catch (e) { return null; } })();
 export const FAIL_TEXTS = {
   notfound: 'No room with that code. Check the letters, and make sure your friend is still on the waiting screen (on a phone, switching apps can close the room).',
   timeout: "Found your friend's room but couldn't connect. One of your networks blocks direct connections.",
@@ -66,7 +67,7 @@ function watchIce(c, who) {
 }
 
 class PeerNet extends Base {
-  constructor() { super(); this.kind = 'peer'; this.peer = null; this.conn = null; this.code = ''; this.cfg = null; this.Peer = null; this._vis = null; }
+  constructor() { super(); this.kind = 'peer'; this.peer = null; this.conn = null; this.udc = null; this.uok = false; this.code = ''; this.cfg = null; this.Peer = null; this._vis = null; }
   async host(code) {
     this.Peer = await loadPeerJS(); this.code = code; this.cfg = rtcConfig(await iceServers());
     await this._hostPeer();
@@ -119,20 +120,39 @@ class PeerNet extends Base {
     });
   }
   _attach(c) {
-    this.conn = c;
-    const go = () => this._opened();
+    this.conn = c; this.udc = null; this.uok = false;
+    const go = () => { this._opened(); this._openState(c); };
     if (c.open) go(); else c.on('open', go);
-    c.on('data', (d) => this._msg(d));
+    c.on('data', (d) => { if (d && d.t === '_udc') { this.uok = !!this.udc; return; } this._msg(d); });      // (the friend has made his end of the state channel: ours is ready too)
     c.on('close', () => { if (this.conn === c) this._closed(); });
     c.on('error', () => { if (this.conn === c) this._closed(); });
   }
-  send(obj) { try { if (this.conn && this.conn.open) this.conn.send(obj); } catch (e) { /* the link is going */ } }
+  /** A second, UNRELIABLE data channel for the rider-state stream (30 messages a second that go stale in 100 ms): unordered, no retransmits, so one lost packet costs one sample
+   *  and never holds up the ones behind it (the PeerJS channel is reliable and ordered: a single loss freezes the friend for a retransmit time, then everything arrives at once).
+   *  Negotiated by hand (same id on both sides, no signalling); used only after each side has told the other (reliably) that its end exists. If any of this fails, state goes the old way. */
+  _openState(c) {
+    try {
+      const pc = c.peerConnection; if (!pc || typeof pc.createDataChannel !== 'function') return;
+      const dc = pc.createDataChannel('state', { ordered: false, maxRetransmits: 0, negotiated: true, id: 7 });
+      dc.onmessage = (e) => { if (typeof e.data !== 'string' || e.data.length > 4000) return; let d; try { d = JSON.parse(e.data); } catch (x) { return; } this._msg(d); };
+      dc.onclose = () => { if (this.udc === dc) { this.udc = null; this.uok = false; } };
+      this.udc = dc;
+      const tell = () => { try { c.send({ t: '_udc' }); } catch (e) { /* ignore */ } };
+      if (dc.readyState === 'open') tell(); else dc.onopen = tell;
+    } catch (e) { console.warn('[net] no state channel, using the main one:', e && e.message); }
+  }
+  send(obj, unreliable = false) {
+    try {
+      if (unreliable && this.uok && this.udc && this.udc.readyState === 'open') { if (this.udc.bufferedAmount < 16384) this.udc.send(JSON.stringify(obj)); return; }      // (a backed-up buffer: this sample is dropped, the next one is fresher)
+      if (this.conn && this.conn.open) this.conn.send(obj);
+    } catch (e) { /* the link is going */ }
+  }
   close() { this._dead = true; this.open = false; if (this._vis) document.removeEventListener('visibilitychange', this._vis); try { if (this.conn) this.conn.close(); } catch (e) { /* ignore */ } try { if (this.peer) this.peer.destroy(); } catch (e) { /* ignore */ } this.conn = this.peer = null; }
 }
 
 // ------------------------------------------------------------------ BroadcastChannel (?net=local): two tabs of one browser
 class LocalNet extends Base {
-  constructor() { super(); this.kind = 'local'; this.ch = null; this.id = Math.random().toString(36).slice(2); this.peerId = null; this.role = ''; this._bye = () => { try { if (this.ch) this.ch.postMessage({ k: 'bye', from: this.id }); } catch (e) { /* ignore */ } }; }
+  constructor() { super(); this.kind = 'local'; this.stats = { sent: 0, dropped: 0 }; this.ch = null; this.id = Math.random().toString(36).slice(2); this.peerId = null; this.role = ''; this._bye = () => { try { if (this.ch) this.ch.postMessage({ k: 'bye', from: this.id }); } catch (e) { /* ignore */ } }; }
   _open(code) {
     this.ch = new BroadcastChannel('tilt-room-' + code);
     this.ch.onmessage = (e) => this._rx(e.data);
@@ -172,6 +192,18 @@ class LocalNet extends Base {
     if (m.k === 'msg') this._msg(m.d);
     else if (m.k === 'bye') { this._closed(); this.peerId = null; }
   }
-  send(obj) { try { if (this.ch && this.open) this.ch.postMessage({ k: 'msg', from: this.id, d: obj }); } catch (e) { /* ignore */ } }
+  /** ?netsim=latency,jitter,loss (ms, ms, percent) - a test hook: the link is slowed like a real internet path. A reliable send that is "lost" is retransmitted late and holds everything behind it
+   *  (an ordered TCP-like channel); an unreliable one is simply dropped (a real unordered, no-retransmit data channel). */
+  send(obj, unreliable = false) {
+    try {
+      if (!this.ch || !this.open) return;
+      const post = () => { try { if (this.ch && this.open) this.ch.postMessage({ k: 'msg', from: this.id, d: obj }); } catch (e) { /* ignore */ } };
+      const sim = NETSIM; if (!sim) { post(); return; }
+      this.stats.sent++; const now = performance.now(); let d = sim.lat + (Math.random() * 2 - 1) * sim.jit;
+      if (unreliable) { if (Math.random() < sim.loss) { this.stats.dropped++; return; } }
+      else { while (Math.random() < sim.loss) d += Math.max(200, 2 * sim.lat + sim.jit); d = Math.max(now + d, this._lastDue || 0) - now; this._lastDue = now + d; }
+      setTimeout(post, Math.max(0, d));
+    } catch (e) { /* ignore */ }
+  }
   close() { this._bye(); this._dead = true; this.open = false; window.removeEventListener('pagehide', this._bye); try { if (this.ch) this.ch.close(); } catch (e) { /* ignore */ } this.ch = null; }
 }

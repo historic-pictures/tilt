@@ -64,7 +64,7 @@ export class FX {
     const pm = pieceMat(), nS = GFX.tier === 'low' ? 90 : GFX.tier === 'medium' ? 150 : 220;
     this.splR = new Rods(scene, splinterGeo(), pm, nS, this); this.foreR = new Rods(scene, foreGeo(), pm, 16, this); this.crownR = new Rods(scene, crownGeo(), pm, 6, this);
     this.chipP = new Puffs(scene, 360, false); this.onClack = null; this.tiltTop = 0; this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._c = new THREE.Vector3();
-    this.woodCol = new THREE.Color(0xe2cfa4); this.paintCol = new THREE.Color();
+    this.woodCol = new THREE.Color(0xe2cfa4); this.paintCol = new THREE.Color(); this.paintCol2 = new THREE.Color();
   }
   setScale(px) { this.chipP.mat.uniforms.uScale.value = px; this.dustP.mat.uniforms.uScale.value = px; this.sparkP.mat.uniforms.uScale.value = px; this.petalP.mat.uniforms.uScale.value = px; }
   /** Ribbons and petals thrown from a seat at p down onto the sand: they arc toward the lists (x = 0), flutter and fall. */
@@ -168,7 +168,7 @@ export class FX {
     const I = PHYS.impact, rnd = seeded(o.seed | 0), pw = o.power ?? 0.6, K = pw >= I.shatterAt ? I.shatter : pw >= I.cleanAt ? I.clean : I.crack;
     const tier = GFX.tier === 'low' ? 0.5 : GFX.tier === 'medium' ? 0.75 : 1, pk = Math.min(1.3, 0.55 + pw * 0.6), cls = K === I.shatter ? 2 : K === I.clean ? 1 : 0;
     const a = o.a, d = this._a.subVectors(o.b, a), L = d.length(); if (L < 0.2) return cls; const dn = d.clone().divideScalar(L);
-    const dir = o.dir ? o.dir.clone().normalize() : dn.clone(), paint = this.paintCol.set(o.paint ?? 0xb23a2a), vel = o.v ? o.v.clone() : new THREE.Vector3(), hv = o.hv || new THREE.Vector3();
+    const dir = o.dir ? o.dir.clone().normalize() : dn.clone(), paint = this.paintCol.set(o.paint ?? 0xb23a2a), paint2 = this.paintCol2.set(o.paint2 ?? o.paint ?? 0xe8dcc0), vel = o.v ? o.v.clone() : new THREE.Vector3(), hv = o.hv || new THREE.Vector3();
     // The pieces go on with the lance's momentum (dir: its axis) and, the more oblique the stroke (o.sinT), along the face it was sliding over (o.tan);
     // a little comes back off the face (o.n points out of it). The struck man's own motion (hv) carries them a share of the way with him.
     if (o.tan || o.n) {
@@ -189,7 +189,7 @@ export class FX {
       cuts.push(fl); cuts.sort((x, y) => x - y);
       for (let i = 0; i < nB; i++) {
         const t0 = cuts[i], t1 = cuts[i + 1], ln = Math.max(0.12, t1 - t0), mid = (t0 + t1) / 2, head = i === nB - 1, r = r0 * (1 - 0.3 * mid / Math.max(L, 0.5));
-        q.setFromUnitVectors(_Z, dn); const b = this.foreR.spawn(tmp.copy(a).addScaledVector(dn, mid), q, sc.set(r, r, ln), I.keep, paint, I.fade);
+        q.setFromUnitVectors(_Z, dn); const b = this.foreR.spawn(tmp.copy(a).addScaledVector(dn, mid), q, sc.set(r, r, ln), I.keep, paint, I.fade, paint2);
         b.rad = r * 0.8; b.e = 0.2; b.mu = 0.7;
         // on with the lance (a share of the striker's pace and of the stroke), the head section kicked back and up off the face it struck
         // (they were pressed against his face: they leave with a share of both men's pace, a little on along the lance, back off the face and up)

@@ -842,3 +842,7 @@ body.touch #skipHold svg { width: 64px; height: 64px; } body.touch #skipHold cir
 .online .onrow.invite .btn { font-size: 20px; padding: 8px 26px; }
 /* the result card is up: the ready-phase prompt lines stay out from under it */
 body:has(#verdict:not(.hidden)) :is(#prompt, .tCoach) { visibility: hidden; }
+
+.online .onrow.invite .btn.big { font-size: 26px; padding: 14px 40px; }
+.online .invlink { text-align: center; margin-top: 6px; }
+.online .invnote { text-align: center; font-style: italic; }

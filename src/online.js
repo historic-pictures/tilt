@@ -81,21 +81,60 @@ export function cleanState(m) {
 }
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerp = (a, b, k) => a + (b - a) * k;
-/** The interpolation buffer: samples in the sender's own clock; shown INTERP_DELAY behind the newest, advanced by our own frame time. */
+/** The stream on the wire: one flat array (about 110 bytes of JSON, a third of the keyed object) sent over the unreliable channel.
+ *  [ts, n, md, flags, ...FIELDS, (unhorsed: rp x3, rq x4, tx)]; flags: 1 = riding the other way (d = -1), 2 visor up, 4 helm off, 8 lance broken, 16 unhorsed, 32 lance raised. */
+export function packState(o) {
+  const f = (o.d === -1 ? 1 : 0) | (o.vu ? 2 : 0) | (o.ho ? 4 : 0) | (o.lb ? 8 : 0) | (o.u ? 16 : 0) | (o.rP ? 32 : 0);
+  const a = [o.ts, o.n, o.md, f]; for (const k of FIELDS) a.push(o[k]);
+  if (o.u && o.rp && o.rq) a.push(o.rp[0], o.rp[1], o.rp[2], o.rq[0], o.rq[1], o.rq[2], o.rq[3], o.tx);
+  return a;
+}
+/** The array back into the keyed object cleanState checks; null if it is not one. */
+export function unpackState(a) {
+  const n = 4 + FIELDS.length; if (!Array.isArray(a) || a.length < n) return null;
+  const f = a[3] | 0, o = { t: 's', ts: a[0], n: a[1], md: a[2], d: f & 1 ? -1 : 1, vu: f & 2, ho: f & 4, lb: f & 8, u: f & 16, rP: f & 32 };
+  FIELDS.forEach((k, i) => { o[k] = a[4 + i]; });
+  if (a.length >= n + 8) { o.rp = a.slice(n, n + 3); o.rq = a.slice(n + 3, n + 7); o.tx = a[n + 7]; }
+  return o;
+}
+const nowS = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+/** The interpolation buffer. Samples carry the sender's own wall clock; the offset between the two clocks is the lowest (arrival - ts) seen, i.e. the fastest the path has been, so the
+ *  friend is shown at "his now, minus a small delay" that adapts to the stream's real spacing and jitter (about 50 ms on a clean path, more on a rough one), not a fixed 100 ms on top
+ *  of the whole trip. Past the newest sample (a late or lost packet) he is carried on along his own velocity for up to EXTRAP seconds, then held. The shown time is nudged, never jumped. */
+export const EXTRAP = 0.25;
 export class Remote {
   constructor() { this.reset(); }
-  reset() { this.buf = []; this.newest = -1; this.rt = 0; this.has = false; this.cur = null; }
-  push(s) {
-    const b = this.buf; if (b.length && s.ts <= b[b.length - 1].ts) return;
+  reset() { this.buf = []; this.newest = -1; this.rt = 0; this.has = false; this.cur = null; this.off = null; this.ivl = 1 / SEND_HZ; this.jit = 0.01; this.lastRx = 0; this.lastNow = 0; this.delay = INTERP_DELAY; this.ext = 0; this.stat = { n: 0, ext: 0, snaps: 0, maxExt: 0 }; }
+  push(s, now = nowS()) {
+    const b = this.buf; if (b.length && s.ts <= b[b.length - 1].ts) return;      // (an old or repeated sample: dropped)
+    const d = now - s.ts;
+    if (this.off === null || d < this.off) this.off = d; else this.off += (d - this.off) * 0.002;      // (lets go of a lucky fast sample slowly)
+    this.jit += (Math.min(0.3, d - this.off) - this.jit) * 0.05;
+    if (this.lastRx) this.ivl += (Math.min(0.3, now - this.lastRx) - this.ivl) * 0.1;
+    this.lastRx = now;
     b.push(s); if (b.length > 120) b.shift(); this.newest = s.ts;
-    if (!this.has) { this.has = true; this.rt = s.ts - INTERP_DELAY; }
+    if (!this.has) { this.has = true; this.rt = now - this.off - this.delay; this.lastNow = now; }
   }
-  /** Move the shown time on by dt and return the sample for it (a fresh object; null before anything has arrived). */
-  step(dt) {
+  /** The sample to show at `now` (seconds on the local clock; a fresh object, null before anything has arrived). */
+  step(dt, now = nowS()) {
     if (!this.has) return null;
-    this.rt += dt; const lag = this.newest - this.rt;
-    if (lag > 0.3 || lag < 0) this.rt = this.newest - INTERP_DELAY; else if (lag < 0.03) this.rt = this.newest - 0.03;
-    const b = this.buf, t = this.rt; let i = b.length - 1;
+    const el = Math.min(0.25, Math.max(0, now - this.lastNow)); this.lastNow = now;
+    this.delay = Math.min(0.25, Math.max(0.04, 0.02 + this.ivl + 1.5 * this.jit));
+    this.rt += el; const err = (now - this.off - this.delay) - this.rt;
+    if (Math.abs(err) > 0.5) { this.rt += err; this.stat.snaps++; } else this.rt += err * Math.min(1, el * 4);
+    const b = this.buf, t = this.rt, last = b[b.length - 1]; let i = b.length - 1;
+    this.stat.n++;
+    if (t >= last.ts) {      // past the newest: carry on along his velocity, then hold
+      const e = Math.min(EXTRAP, t - last.ts), o = Object.assign({}, last); this.ext = t - last.ts;
+      if (e > 0) { this.stat.ext++; this.stat.maxExt = Math.max(this.stat.maxExt, t - last.ts); }
+      const p = b.length > 1 ? b[b.length - 2] : null;
+      if (e > 0 && p && p.d === last.d && p.n === last.n && !last.u && last.ts > p.ts) {
+        const gap = last.ts - p.ts, vx = Math.max(-40, Math.min(40, (last.x - p.x) / gap)), vz = Math.max(-40, Math.min(40, (last.z - p.z) / gap)), k = Math.max(0, 1 - e / (EXTRAP * 1.2));
+        o.x += vx * e * k; o.z += vz * e * k;
+      }
+      return (this.cur = o);
+    }
+    this.ext = 0;
     while (i > 0 && b[i - 1].ts > t) i--;       // b[i-1].ts <= t (or i = 0)
     const a = b[Math.max(0, i - 1)], c = b[i];
     let k = c.ts > a.ts ? (t - a.ts) / (c.ts - a.ts) : 1; k = Math.min(1, Math.max(0, k));

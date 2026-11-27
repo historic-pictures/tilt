@@ -164,7 +164,7 @@ export function createAttract(ctx) {
       const at = Aj.clampBreak(Aj.reach * rnd(0.5, 0.72)), cls = power >= 0.9 ? 2 : power >= 0.75 ? 1 : 0;
       Aj.bendLance({ kind: 'break', tb: 0.025, load: 1, side: tan, seed, onBreak: () => {
         const seg = Aj.breakLance(at);
-        if (seg) fx.lanceBurst({ a: seg.a.clone(), b: seg.b.clone(), dir: dir.clone(), v: new THREE.Vector3(0, 0, Aj.dir * Aj.speed), hv: new THREE.Vector3(0, 0, Bj.dir * Bj.speed), power, zone, paint: Aj.arms && Aj.arms.c1 || 0xb23a2a, seed, r0: seg.r, tan: tan.clone(), n: n.clone(), sinT: 0.25 });
+        if (seg) fx.lanceBurst({ a: seg.a.clone(), b: seg.b.clone(), dir: dir.clone(), v: new THREE.Vector3(0, 0, Aj.dir * Aj.speed), hv: new THREE.Vector3(0, 0, Bj.dir * Bj.speed), power, zone, paint: Aj.arms && Aj.arms.c1 || 0xb23a2a, paint2: Aj.arms && Aj.arms.c2 || 0xe8dcc0, seed, r0: seg.r, tan: tan.clone(), n: n.clone(), sinT: 0.25 });
         sound('lanceBreak', power, tip, { cls, zone });
       } });
     } else { A.stats.glances++; Aj.bendLance({ kind: 'hold', tc: 0.12, load: 0.7, side: tan, seed }); }

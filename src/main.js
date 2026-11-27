@@ -5,6 +5,7 @@ import { cleanBody, bodyFor, applyBody } from './body_types.js';
 import { preloadRider, rigHas, RIG } from './rider_rig.js';
 import { CELEBS, celStart, celClear, celActive, celCam, aiPick, aiLoser, favourites, promptChoices, showPrompt, hidePrompt, promptKey, cleanCel, heraldLine } from './celebrate.js';
 import { FX } from './fx.js';
+import { cachedPiece, lanceBitMat } from './lance_bits.js';
 import { clamp, lerp, damp, smoothstep, wobble, drawCrest, TAU } from './util.js';
 import { loadHeraldry, tinctureName } from './heraldry.js';
 import { EQUAL_GEAR } from './config.js';
@@ -49,7 +50,7 @@ import * as account from './account.js';
 import * as signin from './signin.js';
 import * as store from './store.js';      // purchases: the Knight's Charter, the packs (the server decides; src/store.js)
 import { PACKS } from './cosmetics.js';
-import { cleanName, Remote, SEND_HZ, packProfile, cleanProfile, onlineOd, cleanRoom, onlineModeIds, packRider, cleanState, applyRider, mirrorVec, MIRROR_RESULT, cleanRes, cleanNear, clampNum } from './online.js';
+import { cleanName, Remote, SEND_HZ, packProfile, cleanProfile, onlineOd, cleanRoom, onlineModeIds, packRider, packState, unpackState, cleanState, applyRider, mirrorVec, MIRROR_RESULT, cleanRes, cleanNear, clampNum } from './online.js';
 
 const $ = (id) => document.getElementById(id);
 const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -1050,6 +1051,7 @@ function beginCourse(first = false) {
   };
   C.rec.n = M.course; (M.recs || (M.recs = [])).push(C.rec);      // every course's recording is kept for the match (the pause menu's Replays)
   if (!M.online) { const b = profile.bond, id = profile.horse, before =bondLevel(b[id]); b[id] = (b[id] || 0) + 1; saveProfile(); M.bondUp = bondLevel(b[id]) > before; }
+  mouse.set(0, 0); aimMouse.set(0, 0); aimRebase = true;      // every course starts with the aim centred (the next pointer move is taken as the centre; touch drags start from it too)
   dropLanceBits(false); flagmen.raise(); judges.drop();      // flags up for this course; the judges' flags are down
   if (first) { player.setPose(-START_Z, 1); if (M.practice) opp.setSide(1); else opp.setPose(START_Z, -1); }
   else { player.fresh(); opp.fresh(); if (M.practice) opp.setSide(dirP()); }
@@ -1191,10 +1193,10 @@ function ladyEye() {
 }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _tip = new THREE.Vector3(), _rel = new THREE.Vector3(), _p = new THREE.Vector3(), _zc = new THREE.Vector3();
-const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2(0.12, 0.05); const keys = {};
+const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2(0, 0); const keys = {};
 let focusHeld = false;
 const arm = new LanceArm();          // your lance arm
-const aimMouse = new THREE.Vector2(0.12, 0.05);
+const aimMouse = new THREE.Vector2(0, 0), aimOrigin = new THREE.Vector2(0, 0); let aimRebase = true;
 const _dm = new THREE.Vector2();
 const bobHist = { y: 0, v: 0, a: 0 };  // vertical motion of your saddle, for the lance to feel
 
@@ -1596,8 +1598,10 @@ function updateRide(dt, dtReal) {
     // work in the rider's own frame so the same code serves both directions of travel
     let cmdYaw = Math.atan2(_c.x * D, _c.z * D), cmdPitch = Math.asin(clamp(_c.y, -1, 1));
     {      // the lance can only swing inside the cone Jouster.setAim already holds it to (PHYS.aim): the reticle and the mouse/touch point stop at its edge instead of drifting past it
-      const AM = PHYS.aim, cy = clamp(cmdYaw, AM.yawMin, AM.yawMax), cp = clamp(cmdPitch, AM.pitchMin, AM.pitchMax);
-      C.aimEdge = cmdYaw <= AM.yawMin + 0.01 || cmdYaw >= AM.yawMax - 0.01 || cmdPitch <= AM.pitchMin + 0.01 || cmdPitch >= AM.pitchMax - 0.01;      // (at the stop: the point is held on it, so test with a hair of slack)
+      // (far out the shaft is held at the couch angle whatever you point at, so the cone only closes in as the lances near: a centred aim is not at an edge on the run-up)
+      const AM = PHYS.aim, ke = aimEaseOf(gap2), yLo = lerp(-0.7, AM.yawMin, ke), yHi = lerp(1.3, AM.yawMax, ke), pLo = lerp(-0.6, AM.pitchMin, ke), pHi = lerp(0.6, AM.pitchMax, ke);
+      const cy = clamp(cmdYaw, yLo, yHi), cp = clamp(cmdPitch, pLo, pHi);
+      C.aimEdge = ke > 0.15 && (cmdYaw <= yLo + 0.01 || cmdYaw >= yHi - 0.01 || cmdPitch <= pLo + 0.01 || cmdPitch >= pHi - 0.01);      // (at the stop: the point is held on it, so test with a hair of slack)
       if (C.aimEdge && !G.auto) {
         const r = _a.distanceTo(_b);
         _c.set(D * Math.sin(cy) * Math.cos(cp), Math.sin(cp), D * Math.cos(cy) * Math.cos(cp)); _a.copy(_b).addScaledVector(_c, r).project(camera);
@@ -1615,6 +1619,7 @@ function updateRide(dt, dtReal) {
     C.sway = arm.err;
     const yaw = cmdYaw + arm.yaw, pitch = cmdPitch + arm.pitch;
     _c.set(D * Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), D * Math.cos(yaw) * Math.cos(pitch));
+    (C.aimDir || (C.aimDir = new THREE.Vector3())).copy(_c);      // where you mean the point to go (the reticle shows this)
     player.aimEase = opp.aimEase = aimEaseOf(gap2); player.setAim(_c); player.applyLance();
   }
   if (S.mode === 'charge' && !C.oL.done && gap2 > 0.5 && !S.online) {
@@ -1982,10 +1987,13 @@ function dropLanceBits(on) {
   if (lanceBits) { scene.remove(lanceBits); lanceBits = null; }
   if (!on || !C || !C.meet) return;
   lanceBits = new THREE.Group(); lanceBits.position.set(C.meet.x, 0, C.meet.z);
-  const cols = [profile.arms.c1, profile.arms.c2, '#c9a56a', profile.arms.c1, '#c9a56a'], lens = [1.15, 0.8, 0.35, 0.55, 0.22];
-  cols.forEach((c, i) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.04, lens[i], 6), new THREE.MeshLambertMaterial({ color: c })); m.castShadow = true;
-    m.rotation.set(0, i * 1.9 + M.course, Math.PI / 2 + (i % 2 ? 0.08 : -0.05)); m.position.set((i - 2) * 0.32, 0.045 + (i % 2) * 0.02, ((i * 5) % 3 - 1) * 0.28); lanceBits.add(m);
+  // the real lance's pieces, lying where it broke: the fore piece with its coronel, a middle length, the butt with the vamplate, two short ends (src/lance_bits.js)
+  const mat = lanceBitMat(profile.arms.c1, profile.arms.c2);
+  const pcs = [{ a: 1.5, b: 2.7, jagA: true, crown: true, seed: 3 }, { a: 0.5, b: 1.25, jagA: true, jagB: true, seed: 5 }, { a: -0.4, b: 1.0, jagB: true, vamp: true, seed: 7 }, { a: 1.0, b: 1.28, jagA: true, jagB: true, seed: 11 }, { a: 1.2, b: 1.4, jagA: true, jagB: true, seed: 13 }];
+  const put = [[-0.55, 0.0, 0.7], [0.25, 0.42, -0.2], [0.05, -0.38, 0.12], [-0.2, -0.25, 2.4], [0.65, -0.1, -1.1]];
+  pcs.forEach((o, i) => {
+    const m = new THREE.Mesh(cachedPiece(o), mat); m.castShadow = true;
+    m.rotation.set(0, put[i][2] + M.course * 0.7, i % 2 ? 0.04 : -0.03); m.position.set(put[i][0], 0.05 + (i === 0 ? 0.01 : 0), put[i][1]); lanceBits.add(m);
   });
   scene.add(lanceBits);
 }
@@ -2231,7 +2239,7 @@ function looseHorse(j, dt) {
 }
 /** A lance breaks (the whole burst: fore part, splinters, chips, crown; see FX.lanceBurst and PHYS.impact). Recorded with its seed, so a replay throws the same splinters. Returns the class 0 crack / 1 clean / 2 shatter. */
 function fxBurst(Aj, Bj, seg, dir, power, zone, ex = {}) {
-  const o = { a: seg.a.clone(), b: seg.b.clone(), dir: dir.clone(), v: new THREE.Vector3(0, 0, Aj.dir * Aj.speed), hv: new THREE.Vector3(0, 0, Bj.dir * Bj.speed), power, zone, paint: Aj.arms && Aj.arms.c1 || 0xb23a2a, seed: ex.seed ?? ((Math.random() * 1e9) | 0), r0: seg.r,
+  const o = { a: seg.a.clone(), b: seg.b.clone(), dir: dir.clone(), v: new THREE.Vector3(0, 0, Aj.dir * Aj.speed), hv: new THREE.Vector3(0, 0, Bj.dir * Bj.speed), power, zone, paint: Aj.arms && Aj.arms.c1 || 0xb23a2a, paint2: Aj.arms && Aj.arms.c2 || 0xe8dcc0, seed: ex.seed ?? ((Math.random() * 1e9) | 0), r0: seg.r,
     tan: ex.tan ? ex.tan.clone() : null, n: ex.n ? ex.n.clone() : null, sinT: ex.sinT || 0 };
   const cls = fx.lanceBurst(o); if (C && !R) C.rec.ev.push({ t: C.t, k: 'lb', o });
   return cls;
@@ -3311,7 +3319,7 @@ function doBrace() { if (S.mode !== 'charge' || C.braceCd > 0) return; C.braceT 
 // The HOST decides every stroke with the ordinary strike code (his rider against the interpolated friend) and tells the guest ('st' per stroke, 'course' when both are spent);
 // the guest never collides: he shows what he is told, mirrored (netApplyStroke, netApplyCourse). The host also gives the marshal's signal ('plan', 'sig') and starts each next course
 // ('next') once the guest says he is at his mark ('rdy'). Messages: hi (profile) · room / start (host's settings) · skip (intro vote) · s · plan · sig · st · course · rdy · next · tilt · ka · bye.
-const LOBBY = { find: null, mm: null, phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 }, pub: false, quick: false, qt: 0, fromList: false, rooms: [], relays: { open: 0, total: 0, failed: false }, watching: false, venueSet: false, pres: null, copied: false, invited: false };
+const LOBBY = { find: null, mm: null, phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 }, pub: false, quick: false, qt: 0, fromList: false, rooms: [], relays: { open: 0, total: 0, failed: false }, watching: false, venueSet: false, pres: null, copied: false, invited: false, note: '' };
 // The public list (src/lobby.js, loaded only when the online screen opens): LOBBY.phase 'list' shows LOBBY.rooms; a PUBLIC room waiting for a challenger is announced; Quick match = look for ~3 s, join the oldest, else host a public room.
 let lobbyP = null, lobbyObj = null;
 const lobbyApi = () => lobbyP || (lobbyP = import('./lobby.js').then((m) => (lobbyObj = m.createLobby())));
@@ -3327,7 +3335,7 @@ function startWatch() {
   lobbyApi().then((l) => { if (LOBBY.watching) l.watch((rooms, st) => { LOBBY.rooms = rooms; LOBBY.relays = st; if (LOBBY.phase === 'list') lobbyShow(); }); }).catch(() => { LOBBY.relays = { open: 0, total: 0, failed: true }; if (LOBBY.phase === 'list') lobbyShow(); });
 }
 function stopWatch() { LOBBY.watching = false; LOBBY.rooms = []; if (lobbyObj) lobbyObj.unwatch(); }
-const netSend = (o) => { if (NET.net) NET.net.send(o); };
+const netSend = (o, unreliable = false) => { if (NET.net) NET.net.send(o, unreliable); };
 const lobbyShow = () => { syncAnnounce(); if (typeof menus !== 'undefined' && menus.root.classList.contains('on') && menus.root.dataset.name === 'online') menus.show('online'); };
 // Presence ("3 knights in the lists", see src/lobby.js): announced while the Play Online screen or an online match is up, silent otherwise. A 1 s check follows the screen.
 let presOn = '', presHooked = false;
@@ -3336,7 +3344,7 @@ function syncPresence() {
   const w = wantPresence(); if (w === presOn) return; presOn = w;
   if (!w && !lobbyObj) return;
   lobbyApi().then((l) => {
-    if (!presHooked) { presHooked = true; l.onPresence((p) => { LOBBY.pres = p; if (['choose', 'list', 'hostWait', 'hostReady', 'joined', 'friend'].includes(LOBBY.phase)) lobbyShow(); }); }
+    if (!presHooked) { presHooked = true; l.onPresence((p) => { LOBBY.pres = p; if (p && p.listening && lobbyAlone() && (LOBBY.phase === 'finding' || LOBBY.phase === 'quickLook')) { aloneSwitch(); return; } if (['choose', 'list', 'hostWait', 'hostReady', 'joined', 'friend'].includes(LOBBY.phase)) lobbyShow(); }); }
     l.present(wantPresence() || null); if (!wantPresence()) LOBBY.pres = null;
   }).catch((e) => console.warn('[presence]', e));
 }
@@ -3385,11 +3393,19 @@ function inviteLink(code) {
   if (!validCode(code)) return '';
   return location.origin + location.pathname + '?join=' + code + (useLocal() ? '&net=local' : '');
 }
+/** Nobody else is in the lists (src/lobby.js presence): matchmaking has nobody to find, so only the invite link is offered. Unknown yet or relays down counts as alone. */
+const lobbyAlone = () => { const P = LOBBY.pres; return !(P && P.listening && P.others > 0 && P.open); };
+/** A search was running and the count dropped to just you: stop it and open the private room with its invite link. */
+function aloneSwitch() {
+  if (LOBBY.find || LOBBY.mm) mmCancel(); else { LOBBY.qt++; stopWatch(); netClose(); }
+  lobbyCreate(false).then(() => { LOBBY.note = 'Nobody else is in the lists any more, so the search has stopped. Send your friend this link instead.'; lobbyShow(); });
+  LOBBY.note = 'Nobody else is in the lists any more, so the search has stopped. Send your friend this link instead.';
+}
 /** "Copy invite link": the share sheet on a phone, else the clipboard. */
-async function lobbyInvite() {
+async function lobbyInvite(mode) {
   const url = inviteLink(LOBBY.code); if (!url) return;
   let done = false;
-  if (touchMode && navigator.share) { try { await navigator.share({ title: 'Joust Revival', text: 'Join my joust:', url }); done = true; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  if (mode !== 'copy' && touchMode && navigator.share) { try { await navigator.share({ title: 'Joust Revival', text: 'Join my joust:', url }); done = true; } catch (e) { if (e && e.name === 'AbortError') return; } }
   if (!done) {
     try { await navigator.clipboard.writeText(url); done = true; } catch (e) { /* fall through */ }
     if (!done) { const t = document.createElement('textarea'); t.value = url; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); try { done = document.execCommand('copy'); } catch (e) { /* ignore */ } t.remove(); }
@@ -3444,11 +3460,11 @@ function lobbyBack() {
   if (LOBBY.find || (LOBBY.mm && !M)) { mmCancel(); return; }
   if (LOBBY.phase === 'choose') { lobbyLeave(); return; }
   const priv = LOBBY.phase === 'joinInput' || LOBBY.phase === 'joining' || (LOBBY.phase === 'joined' && !LOBBY.fromList) || ((LOBBY.phase === 'hostWait' || LOBBY.phase === 'hostReady' || LOBBY.phase === 'failed') && !LOBBY.quick && !LOBBY.pub);
-  LOBBY.qt++; stopWatch(); netLeave(); LOBBY.friend = null; LOBBY.err = ''; LOBBY.quick = false; LOBBY.pub = false; LOBBY.fromList = false; LOBBY.phase = priv ? 'friend' : 'choose'; lobbyShow();
+  LOBBY.qt++; stopWatch(); netLeave(); LOBBY.friend = null; LOBBY.err = ''; LOBBY.quick = false; LOBBY.pub = false; LOBBY.fromList = false; LOBBY.note = ''; LOBBY.phase = priv && !lobbyAlone() ? 'friend' : 'choose'; lobbyShow();
 }
 function lobbySetPublic(b) { if (!NET.host || LOBBY.phase !== 'hostWait') return; LOBBY.pub = !!b; lobbyShow(); }
 function lobbyOpen() {
-  LOBBY.find = LOBBY.mm = null;
+  LOBBY.find = LOBBY.mm = null; LOBBY.note = '';
   ranks.syncName();      // (the rank server: make the key, register, send the name; fails silently)
   netClose(); stopWatch(); NET.host = false; LOBBY.qt++; LOBBY.phase = 'choose'; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.pub = LOBBY.quick = LOBBY.fromList = false; preloadNet(); import('./lobby.js').then((m) => m.preloadLobby()).catch(() => {});
   if (!LOBBY.venueSet) LOBBY.room.v = Math.min(profile.venue || 0, VENUES.length - 1);      // (Quick match opens the lists you last rode in)
@@ -3496,6 +3512,7 @@ function onNetClose() {
 }
 function onNetMessage(m) {
   if (!m || typeof m !== 'object') return;
+  if (Array.isArray(m)) { if (M && S.online) { const st = cleanState(unpackState(m)); if (st) NET.remote.push(st); } return; }      // the rider-state stream (src/online.js packState): no JSON keys, no handler switch
   if (m.t === 'hi') {
     const f = cleanProfile(m); if (!f || M) return;
     if (LOBBY.mm && !LOBBY.mm.used && LOBBY.mm.opp && LOBBY.mm.opp.rid) f.rid = LOBBY.mm.opp.rid;      // Find match: the opponent's rank id is the server's, not what he says
@@ -3539,7 +3556,7 @@ function onMatchMessage(m) {
 
 /** The friend's rider, placed from his stream; his stroke quality and shield timing feed the host's strike code. */
 function netDriveOpp(dt) {
-  const s = NET.remote.step(dt); NET.rem = s;
+  const s = NET.remote.step(dt, performance.now() / 1000); NET.rem = s;
   if (!s) return;
   applyRider(opp, s);
   C.o.q = clamp(s.sq, 0, 1);
@@ -3560,10 +3577,12 @@ function netTick(dtReal) {
   const now = performance.now();
   if (NET.net && NET.lastRx && now - NET.lastRx > 12000) { netForfeit(); return; }
   if (!C || S.mode === 'intro' || !NET.net) return;
-  NET.sendT -= dtReal;
-  if (NET.sendT > 0) return;
-  NET.sendT = 1 / SEND_HZ;
-  netSend(packRider(player, { ts: Math.round(S.time * 1000) / 1000, n: M.course, md: S.mode[0], rP: C.rd.p ? 1 : 0, sq: Math.round(selfQ() * 100) / 100 }));
+  if (now - NET.lastRx > 2500) { if (!NET.slowShown) { NET.slowShown = true; toast('Connection', 'Nothing from your opponent for a moment. Waiting for the link to recover...', 4); } } else NET.slowShown = false;
+  // a fixed rate (SEND_HZ), kept by an accumulator so that 60 fps gives 30 Hz and not 20; a slow PC sends once per frame. Time stamps are the wall clock (not the game clock, which a slow frame rate slows down).
+  NET.sendT += dtReal; const iv = 1 / SEND_HZ;
+  if (NET.sendT < iv) return;
+  NET.sendT = Math.min(NET.sendT - iv, iv);
+  netSend(packState(packRider(player, { ts: Math.round(now) / 1000, n: M.course, md: S.mode[0], rP: C.rd.p ? 1 : 0, sq: Math.round(selfQ() * 100) / 100 })), true);
 }
 const bodyArr = () => [M.bodyS.p.arm, M.bodyS.p.wind, M.bodyS.o.arm, M.bodyS.o.wind].map(v => Math.round(v * 1000) / 1000);
 const hpArr = () => [M.hp.body, M.hp.horse, M.hpO.body, M.hpO.horse].map(v => Math.round(v * 1000) / 1000);
@@ -3830,7 +3849,7 @@ const accountApi = { signedIn: account.signedIn, info: account.info, providers: 
   if (r.ok) { const me = await account.fetchMe(); if (!me) profile.gold = r.wallet.gold; }
   return r;
 } };
-const onlineApi = { find: lobbyFind, get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic, invite: lobbyInvite, inviteLink };
+const onlineApi = { find: lobbyFind, get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic, invite: lobbyInvite, inviteLink, alone: lobbyAlone };
 
 // ------------------------------------------------------------------ input
 /** Keys common to every replay: 1-4 speed, , and . step a frame, K pauses (the automatic one skips on Space), and the free camera's WASD / arrows (R resets it). True when it took the key. */
@@ -3906,7 +3925,9 @@ window.addEventListener('mousemove', (e) => {
   if (rplDrag && !touchMode) { const dx = e.clientX - rplDrag.x, dy = e.clientY - rplDrag.y; rplDrag.x = e.clientX; rplDrag.y = e.clientY; rplDrag.moved += Math.abs(dx) + Math.abs(dy); if (rplDrag.moved > 5 && R) freeOrbit(dx, dy); return; }
   if (touchMode) return;      // a finger moves the aim by dragging (src/touch.js); the synthetic mouse move must not jump it
   if (G.auto && S.mode === 'charge') return;
-  mouse.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  const nx = (e.clientX / window.innerWidth) * 2 - 1, ny = -(e.clientY / window.innerHeight) * 2 + 1;
+  if (aimRebase) { aimRebase = false; aimOrigin.set(nx, ny); }      // the first move of a course takes wherever the hand is as the screen centre: the aim starts centred, whatever the pointer was doing
+  mouse.set(clamp(nx - aimOrigin.x, -1, 1), clamp(ny - aimOrigin.y, -1, 1));
 });
 canvas.addEventListener('mousedown', (e) => {
   initAudio();
@@ -4040,7 +4061,7 @@ function updateReticle() {
   cur.style.left = `${(mouse.x * 0.5 + 0.5) * w}px`; cur.style.top = `${(-mouse.y * 0.5 + 0.5) * h}px`;
   // true aim: where the lance line meets the opponent's plane
   player.gripWorld(_a); player.tipWorld(_b); _c.subVectors(_b, _a).normalize();
-  if (player.lanceLower > 0.95) player.aimWorld(_c);      // the ring follows where you mean the point to go; far out the shaft itself is held wider, clear of your horse's head
+  if (C.aimDir && S.mode === 'charge') _c.copy(C.aimDir); else if (player.lanceLower > 0.95) player.aimWorld(_c);      // the ring follows where you mean the point to go; far out the shaft itself is held wider, clear of your horse's head
   opp.zoneWorld('body', _zc);
   const t = _c.z * D > 0.05 ? clamp((_zc.z - _a.z) / _c.z, player.reach, 150) : 150;
   _p.copy(_a).addScaledVector(_c, t);
@@ -4048,6 +4069,7 @@ function updateReticle() {
   if (C.couch > 0.9) for (const z of opp.zones) { z.o.getWorldPosition(_d); if (Math.hypot(_p.x - _d.x, _p.y - _d.y) < z.r) { zone = z.name; break; } }
   if (zone === 'shield' && S.mode === 'charge') { C.onMarkT += 1 / 60; if (C.onMarkT > 0.3) C.flags.onmark = true; }
   _p.project(camera);
+  if (!(C.aimDir && S.mode === 'charge')) _p.set(aimMouse.x, aimMouse.y, 0);      // before the run: the ring sits where the pointer is (centred at the start of a course)
   ret.style.left = `${(_p.x * 0.5 + 0.5) * w}px`; ret.style.top = `${(-_p.y * 0.5 + 0.5) * h}px`;
   ret.className = (C.couch < 0.9 ? 'up ' : '') + (C.aimEdge ? 'edge ' : '') + zone;
   $('zoneTxt').textContent = zone ? zone.toUpperCase() : '';
@@ -4301,7 +4323,7 @@ function tick(now) {
   const dt = clock.getDelta();
   frameTime(dt * 1000, S.paused || document.hidden || S.mode === 'menu');      // the live safety net (src/gfx.js); the capped menus would read as slow
   if (S.mode === 'menu' && attract.running) attract.sample(dt * 1000);      // (the menu joust has its own check, against the menus' 30 a second)
-  try { frame(Math.min(dt, 0.05)); } catch (e) {      // a throwing frame must not leave the screen black or stop the loop: log it, draw what there is
+  try { frame(Math.min(dt, S.online && M ? 0.1 : 0.05)); } catch (e) {      // a throwing frame must not leave the screen black or stop the loop: log it, draw what there is
     if (glFix.errs++ < 5) console.error('[frame] failed:', e);
     drawFrame(0);
   }

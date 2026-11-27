@@ -100,23 +100,36 @@ export function createJudges(scene) {
       const wave = p.goal === 1 ? Math.sin(t * 7 + p.ph) * 0.35 : 0, ang = p.k <= 1 ? -0.3 - 0.9 * p.k : p.k <= 2 ? -1.2 - 0.4 * (p.k - 1) : -1.6 - 1.25 * (p.k - 2);
       p.armR.rotation.x = ang; p.armR.rotation.z = wave; p.torso.rotation.x = -0.04 * p.k;
       const fl = p.isRed ? p.red : p.white; fl.cloth.rotation.x = Math.sin(t * 9 + p.ph) * 0.35 * (p.k > 1.5 ? 1 : 0.4);
-      p.head.rotation.x = damp(p.head.rotation.x, p.k > 0.1 ? -0.1 : 0.12, 5, dt);
+      p.head.rotation.x = damp(p.head.rotation.x, p.k > 0.1 ? -0.1 : 0.12, 3, dt);
     }
     const an = J.an; let e = 0, kind = '', tt = 0;
-    if (an) { an.t += dt; if (an.t >= an.dur) J.an = null; else { kind = an.kind; tt = an.t; e = Math.max(0, Math.min(1, an.t / 0.35, (an.dur - an.t) / 0.5)); } }
-    const hy = [0, 0, 0], hx = [0, 0, 0], lean = [0, 0, 0]; let scribeHard = 0, baton = 0;
-    if (kind === 'confer') { hy[0] = 0.7 * e; hy[2] = -0.7 * e; hy[1] = Math.sin(tt * 1.7) * 0.75 * e; lean[0] = lean[1] = lean[2] = 0.2 * e; hx[1] = Math.sin(tt * 3.4) * 0.07 * e; scribeHard = e; }
-    else if (kind === 'nod') { hx[0] = hx[1] = hx[2] = Math.sin(tt * 5) * 0.12 * e; }
+    const sm = (x) => x * x * (3 - 2 * x);      // no snapping: every gesture eases in and out over most of a second
+    if (an) { an.t += dt; if (an.t >= an.dur) J.an = null; else { kind = an.kind; tt = an.t; e = sm(Math.max(0, Math.min(1, an.t / 0.9, (an.dur - an.t) / 1.0))); } }
+    const hy = [0, 0, 0], hx = [0, 0, 0], lean = [0, 0, 0], lz = [0, 0, 0], ty = [0, 0, 0]; let scribeHard = 0, baton = 0, sUp = 0;
+    // the table is calm: now and then one judge leans toward his neighbour as if talking, a small lean and a slight turn of the head, one pair at a time, with long pauses; the scorer mostly writes
+    const I = J.idle || (J.idle = { next: 2.5, pair: null, t: 0, dur: 0, last: -1 });
+    I.next -= dt;
+    if (I.pair) { I.t += dt; if (I.t >= I.dur) { I.pair = null; I.next = 4 + Math.random() * 5; } }
+    else if (I.next <= 0 && !kind && J.hold <= 0) { const opts = [[0, 1], [1, 0], [1, 2], [2, 1], [2, 3]].filter(q => q[0] !== I.last); I.pair = opts[Math.floor(Math.random() * opts.length)]; I.last = I.pair[0]; I.t = 0; I.dur = 3.2 + Math.random() * 2.2; }
+    if (I.pair && !kind) {
+      const w = sm(Math.max(0, Math.min(1, I.t / 1.2, (I.dur - I.t) / 1.4))), [i, j] = I.pair, dir = Math.sign(j - i) || 1, sway = 0.6 + 0.4 * Math.sin(I.t * 1.3);
+      if (i < 3) { hy[i] = dir * 0.2 * w; lz[i] = -dir * 0.06 * w * sway; ty[i] = dir * 0.1 * w; lean[i] = 0.05 * w; }
+      if (j < 3) { hy[j] = -dir * 0.12 * w; lz[j] = dir * 0.025 * w; lean[j] = 0.02 * w; } else sUp = w;      // (the scorer glances up)
+    }
+    if (kind === 'confer') { hy[0] = 0.28 * e; hy[2] = -0.28 * e; hy[1] = Math.sin(tt * 0.8) * 0.28 * e; lean[0] = lean[1] = lean[2] = 0.08 * e; lz[0] = -0.04 * e; lz[2] = 0.04 * e; hx[1] = Math.sin(tt * 1.6) * 0.03 * e; scribeHard = e; }
+    else if (kind === 'nod') { hx[0] = hx[1] = hx[2] = Math.sin(tt * 3.2) * 0.05 * e; }
     else if (kind === 'write') scribeHard = e;
-    else if (kind === 'verdict') { baton = e; hx[1] = Math.sin(tt * 4.5) * 0.1 * e; hx[0] = Math.sin(tt * 4 + 1) * 0.1 * e; hx[2] = Math.sin(tt * 4 + 2) * 0.1 * e; lean[1] = -0.06 * e; scribeHard = e * 0.6; }
+    else if (kind === 'verdict') { baton = e; hx[1] = Math.sin(tt * 3) * 0.04 * e; hx[0] = Math.sin(tt * 2.8 + 1) * 0.04 * e; hx[2] = Math.sin(tt * 2.8 + 2) * 0.04 * e; lean[1] = -0.06 * e; scribeHard = e * 0.6; }
     J.men.forEach((p, i) => {
-      p.hy = damp(p.hy, hy[i], 7, dt); p.lean = damp(p.lean, lean[i], 7, dt); p.hx = damp(p.hx, hx[i], 12, dt); p.ak = i === 1 ? damp(p.ak, baton, 8, dt) : 0;
-      p.head.rotation.y = p.hy; p.head.rotation.x += p.hx; p.torso.rotation.x += p.lean;
+      p.hy = damp(p.hy, hy[i], 2.4, dt); p.lean = damp(p.lean, lean[i], 2.4, dt); p.hx = damp(p.hx, hx[i], 3.5, dt); p.lz = damp(p.lz || 0, lz[i], 2.2, dt); p.ty = damp(p.ty || 0, ty[i], 2.2, dt);
+      p.ak = i === 1 ? damp(p.ak, baton, 8, dt) : 0;
+      p.head.rotation.y = p.hy; p.head.rotation.x += p.hx; p.torso.rotation.x += p.lean; p.torso.rotation.z = p.lz; p.torso.rotation.y = p.ty;
       p.armL.rotation.x = p.ak > 0.02 ? -0.8 - 1.9 * p.ak : -0.8;      // the free hand rests on the table; the middle judge's goes up with the baton
       p.baton.parent.visible = p.ak > 0.05;
     });
+    J.sUp = damp(J.sUp || 0, sUp, 2.2, dt);
     const sc = J.scribe;
-    if (sc) { const w = 6.5 + 7 * scribeHard; sc.armR.rotation.x = -1.1 + Math.sin(t * w) * (0.08 + 0.07 * scribeHard); sc.armR.rotation.z = Math.sin(t * 3.1) * (0.12 + 0.1 * scribeHard); sc.armL.rotation.x = -0.9; sc.torso.rotation.x = 0.3 + 0.12 * scribeHard; sc.head.rotation.x = 0.5 - (kind === 'confer' ? 0.35 * Math.max(0, Math.sin(tt * 1.7)) * e : 0); }
+    if (sc) { const w = 6.5 + 7 * scribeHard; sc.armR.rotation.x = -1.1 + Math.sin(t * w) * (0.08 + 0.07 * scribeHard); sc.armR.rotation.z = Math.sin(t * 3.1) * (0.12 + 0.1 * scribeHard); sc.armL.rotation.x = -0.9; sc.torso.rotation.x = 0.3 + 0.12 * scribeHard; sc.head.rotation.x = 0.5 - (kind === 'confer' ? 0.2 * Math.max(0, Math.sin(tt * 0.8)) * e : 0) - 0.25 * J.sUp; }
   };
   return J;
 }

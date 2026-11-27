@@ -142,7 +142,7 @@ class Lobby {
   unwatch() { this.cb = null; clearInterval(this.pv); this.pv = 0; this.map.clear(); this._sub(); }
   /** One subscription serves both the room list and the presence count: on while either is wanted. */
   _sub() {
-    const want = !!(this.cb || this.pst);
+    const want = !!(this.cb || (this.pst && this.pst !== 'match'));      // (in a match nothing is listened to: every presence event heard is a signature check on the main thread; we only keep announcing)
     if (want && !this.subbed) { this.subbed = true; this.tr.subscribe((text, from, kind) => { if (kind === PKIND) this._hearPresence(text, from); else if (this.cb) this._hear(text, from); }); }
     else if (!want && this.subbed) { this.subbed = false; this.tr.unsubscribe(); }
   }

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { drawCrest } from './util.js';
 import { LANE_X, START_Z } from './world.js';
 import { dressFigure, ARM_AT } from './people.js';
+import { stumpGeo, lanceBitMat } from './lance_bits.js';
 
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const ease = (k) => k * k * (3 - 2 * k);
@@ -26,8 +27,8 @@ const G = {
   shaft: new THREE.CylinderGeometry(0.03, 0.045, 3.5, 6).translate(0, 1.5, 0),       // a lance, butt at 0 (y -0.25), point at 3.25 up
   band: new THREE.CylinderGeometry(0.05, 0.05, 0.3, 6),
   point: new THREE.ConeGeometry(0.035, 0.22, 5),
-  stump: new THREE.CylinderGeometry(0.035, 0.045, 1.1, 6).translate(0, 0.45, 0),
-  gstump: new THREE.CylinderGeometry(0.035, 0.045, 1.1, 6).rotateX(Math.PI / 2),       // a broken stump lying along the fwd axis, centred
+  get stump() { return stumpGeo(false); },       // the butt piece of the rider's own lance (src/lance_bits.js): grip, vamplate, a torn break
+  get gstump() { return stumpGeo(true); },        // the same lying along the fwd axis, centred
   pole: new THREE.CylinderGeometry(0.022, 0.026, 2.0, 5).translate(0, 0.6, 0),
   cloth: new THREE.PlaneGeometry(0.75, 0.88),
   post: new THREE.BoxGeometry(0.08, 1.25, 0.08).translate(0, 0.62, 0),
@@ -72,6 +73,7 @@ function makeSide(scene, isLate) {
   const F = { root, men: () => men };
 
   function build(id, rec, c1, c2, extras) {
+    const bit = (g, parent, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(g, lanceBitMat(c1, c2)); m.name = 'lance_bit'; m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
     const sk = SKIN[hash(rec.name) % SKIN.length], g = grp(endG), body = grp(g), a = { id, rec, g, body, o: 0, f: 0, yaw: 0, q: [], pose: 'idle', k: 0, ph: (hash(rec.name) % 628) / 100, wph: 0, moving: false, walkYaw: 0, pend: null, talkT: 0, ang: { aL: 0, aR: 0, lean: 0, drop: 0, hd: 0 }, home: HOME[id] };
     const legL = a.legL = grp(body, -0.09, 0.85), legR = a.legR = grp(body, 0.09, 0.85);
     // the modelled parts of src/people.js on the same joints: parti-coloured hose, a tunic in your first colour (the pursuivant a tabard in your second, the
@@ -92,7 +94,7 @@ function makeSide(scene, isLate) {
     // what he carries
     if (id === 'squire') {
       a.lanceP = grp(a.handR); lance(a.lanceP, c1, c2).position.y = -0.5; a.lanceP.visible = false;
-      a.stump = grp(a.handR); mesh(G.stump, c1, a.stump); a.stump.visible = false;
+      a.stump = grp(a.handR); bit(G.stump, a.stump); a.stump.visible = false;
       a.helmP = grp(torso, 0, 0.35, 0.32); mesh(G.helm, '#8c9098', a.helmP); a.helmP.visible = false;
     }
     if (id === 'armourer') { a.tool = grp(a.handR); mesh(G.handle, '#5b4332', a.tool); mesh(G.mallet, '#6c7078', a.tool); }
@@ -105,8 +107,8 @@ function makeSide(scene, isLate) {
     const hp = HOME[id];
     if (id === 'squire') {
       const r = grp(endG, -(hp[0] + 0.9), 0, hp[1] - 0.3); mesh(G.post, '#5b4332', r, 0, 0, -0.55); mesh(G.post, '#5b4332', r, 0, 0, 0.55); mesh(G.bar, '#5b4332', r, 0, 1.0, 0);
-      pile = [[-0.25, 0.04], [0.0, 0.04], [-0.12, 0.11]].map(([dx, y]) => { const m = mesh(G.gstump, c1, endG, -(hp[0] + 0.7) + dx, y, -3.0); m.visible = false; return m; }); pileN = 0;
-      gs = { mesh: mesh(G.gstump, c1, endG), active: false, spot: [1.5, -0.7] }; gs.mesh.visible = false; gs.mesh.rotation.order = 'YXZ';
+      pile = [[-0.25, 0.04, 0.0], [0.0, 0.04, 0.5], [-0.12, 0.11, -0.4]].map(([dx, y, dz]) => { const m = bit(G.gstump, endG, -(hp[0] + 0.7) + dx, y, -3.0 + dz); m.rotation.y = dx * 6; m.visible = false; return m; }); pileN = 0;
+      gs = { mesh: bit(G.gstump, endG), active: false, spot: [1.5, -0.7] }; gs.mesh.visible = false; gs.mesh.rotation.order = 'YXZ';
       rack = [-0.35, 0, 0.35].map((z, i) => { const l = grp(r, 0.05, 0, z); lance(l, c1, c2); l.rotation.z = -0.1; l.rotation.x = (i - 1) * 0.04; return l; });
     }
     if (id === 'armourer') { const s = grp(endG, -(hp[0] + 0.7), 0, hp[1] - 0.2); mesh(G.stand, '#6b4a32', s); mesh(G.block, '#4b4f56', s); }

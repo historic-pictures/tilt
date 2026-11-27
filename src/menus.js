@@ -356,9 +356,14 @@ export function initMenus(api) {
     } else if (ph === 'choose') {
       head = '';
       const pl = (cls, attrs, label, t, tb) => `<button class="plaque ${cls}" ${attrs} ${tipAttr(t, tb)}>${label}${tip(t, tb, 'tonly')}</button>`;
-      body = `${L.err ? `<p class="err">${esc(L.err)}</p>` : ''}<div class="onrow main">${pl('big', 'data-on="find" data-ranked="0"', 'Find match', 'Find match', 'Unranked: paired by rating, friendly.|Your rating does not change.')}${pl('blue', 'data-on="find" data-ranked="1"', 'Ranked match', 'Ranked match', api.account && api.account.signedIn() ? 'Rated, and it pays a purse.' : 'Sign in to play ranked.')}</div>
-        <div class="onrow three">${pl('blue', 'data-on="quick"', 'Quick match', 'Quick match', 'Join the next open room,|or wait for a challenger.')}${pl('blue', 'data-on="list"', 'Public rooms', 'Public rooms', 'See who is waiting, and pick a room.')}${pl('blue', 'data-on="friend"', 'Joust a friend', 'A private room', 'Share the code with a friend.|No account needed.')}</div>
-        ${presenceLine(true)}
+      const err = L.err ? `<p class="err">${esc(L.err)}</p>` : '';
+      if (O.alone()) {      // nobody else in the lists: no searching, just the invite link
+        body = `${err}<div class="onrow main">${pl('big', 'data-on="create"', 'Invite a friend', 'Invite a friend', 'Makes a private room and its link.|Send it to a friend: no account needed.')}${pl('blue', 'data-on="joinmode"', 'Join a friend', 'Join a friend', "Type your friend's code.")}</div>
+        <p class="presence quiet">Nobody else in the lists right now &mdash; send a friend the link.</p>
+        <p class="fineprint">${tip('Playing online', 'You ride with your own arms, horse and harness.|Nothing is paid and no renown is won.|Only your chosen name is shown to others.')} Friend rooms need no account.</p>`;
+      } else body = `${err}<div class="onrow main">${pl('big', 'data-on="find" data-ranked="0"', 'Find match', 'Find match', 'Unranked: paired by rating, friendly.|Your rating does not change.')}${pl('blue', 'data-on="find" data-ranked="1"', 'Ranked match', 'Ranked match', api.account && api.account.signedIn() ? 'Rated, and it pays a purse.' : 'Sign in to play ranked.')}</div>
+        <div class="onrow three">${pl('blue', 'data-on="quick"', 'Quick match', 'Quick match', 'Join the next open room,|or wait for a challenger.')}${pl('blue', 'data-on="list"', 'Public rooms', 'Public rooms', 'See who is waiting, and pick a room.')}${pl('blue', 'data-on="friend"', 'Invite a friend', 'A private room', 'Share the link or code with a friend.|No account needed.')}</div>
+        ${presenceLine(false)}
         <p class="fineprint">${tip('Playing online', 'You ride with your own arms, horse and harness.|Nothing is paid and no renown is won.|Only your chosen name is shown to others.')} Friend rooms need no account.</p>`;
     } else if (ph === 'friend') {
       head = '';
@@ -376,7 +381,7 @@ export function initMenus(api) {
       actions = `<button class="btn" data-on="back">${ph === 'hostReady' ? 'Back' : 'Cancel'}</button>${ph === 'hostReady' ? '<button class="btn primary" data-on="ride">Ride!</button>' : ''}`;
       if (L.quick && ph === 'hostWait') body = `<p class="wait big">${L.code ? 'Waiting for a challenger…' : 'Opening a room…'}</p><p class="dimtxt">No open room was found, so yours is listed: ${V.name} · ${MODES[room.m].name} · ${fixed || room.c} courses</p>`;
       else body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code || '·····'}</b></div>
-        ${ph === 'hostWait' && L.code && !L.quick ? `<div class="onrow invite"><button class="btn primary" data-on="invite" data-url="${O.inviteLink(L.code).replace(/&/g, '&amp;')}">${L.copied === true ? 'Link copied' : 'Copy invite link'}</button></div>${L.copied === 'fail' ? `<p class="dimtxt">Copying is blocked here. Select and copy the link:</p><input class="name invlink" readonly value="${O.inviteLink(L.code).replace(/&/g, '&amp;')}" onfocus="this.select()">` : ''}${presenceLine(false)}` : ''}
+        ${ph === 'hostWait' && L.code && !L.quick ? `${L.note ? `<p class="dimtxt invnote">${esc(L.note)}</p>` : ''}<div class="onrow invite"><button class="btn primary big" data-on="copy">${L.copied === true ? 'Link copied' : 'Copy invite link'}</button>${typeof navigator.share === 'function' && document.body.classList.contains('touch') ? `<button class="btn big" data-on="invite">Share</button>` : ''}</div><input class="name invlink" readonly value="${O.inviteLink(L.code).replace(/&/g, '&amp;')}" onfocus="this.select()">${L.copied === 'fail' ? '<p class="dimtxt">Copying is blocked here. Select and copy the link above.</p>' : ''}${presenceLine(false)}` : ''}
         ${ph === 'hostReady' ? friendRow() + presenceLine(false) : `<p class="wait">${L.code ? (L.pub ? 'Waiting for a challenger…' : 'Waiting for your friend…') : 'Opening the room…'}</p>${pubRow()}`}
         ${chips()}`;
     } else if (ph === 'joinInput') {
@@ -772,7 +777,7 @@ export function initMenus(api) {
     if (d.go) { dismissArm = null; if (d.go === 'online') api.online.open(); return show(d.go); }
     if (d.on) {
       const O = api.online;
-      if (d.on === 'create') return O.create(false);
+      if (d.on === 'create') { O.lobby.note = ''; return O.create(false); }
       if (d.on === 'createpub') return O.create(true);
       if (d.on === 'retry') return O.create(O.lobby.pub, O.lobby.quick);
       if (d.on === 'find') { if (d.ranked === '1' && !(api.account && api.account.signedIn())) return show('account'); return O.find(d.ranked === '1'); }
@@ -785,6 +790,7 @@ export function initMenus(api) {
       if (d.on === 'joinmode') { O.lobby.phase = 'joinInput'; O.lobby.err = ''; return show('online'); }
       if (d.on === 'join') return O.join(joinDraft);
       if (d.on === 'invite') return O.invite();
+      if (d.on === 'copy') return O.invite('copy');
       if (d.on === 'ranks') { RK.status = 'idle'; RK.view = 'board'; RK.msg = ''; return show('rankings'); }
       if (d.on === 'rkback') return show('online');
       if (d.on === 'rkview') { RK.view = RK.view === 'recover' ? 'board' : 'recover'; RK.msg = ''; if (RK.view === 'recover' && !RK.code) ranks.recoveryCode().then((c) => { RK.code = c || ''; if (root.dataset.name === 'rankings') show('rankings'); }); return show('rankings'); }

@@ -8,8 +8,17 @@ export function seeded(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t
 // Everything is built along +z about its own middle (z -0.5 .. 0.5) so a body spins about its centre.
 // aMask: 1 = the lance's paint, 0 = the pale inner wood, -1 = steel.   aPaint (per instance): the paint colour.
 function addTri(pos, msk, a, b, c, ma, mb, mc) { pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); msk.push(ma, mb, mc); }
-function finish(pos, msk) {
+function finish(pos, msk, stripes) {
   const g = new THREE.BufferGeometry();
+  if (stripes) {      // aSt = (1 + turn, along 0..1): the lance's spiral on the round fore part (x < 0.5 = no spiral); the turn is kept continuous inside each triangle
+    const st = new Float32Array(pos.length / 3 * 2);
+    for (let v = 0; v < pos.length; v += 9) {
+      const u = [0, 1, 2].map(k => Math.atan2(pos[v + k * 3 + 1], pos[v + k * 3]) / (Math.PI * 2) + 0.5);
+      if (Math.max(...u) - Math.min(...u) > 0.5) for (let k = 0; k < 3; k++) if (u[k] < 0.5) u[k] += 1;
+      for (let k = 0; k < 3; k++) { st[(v / 3 + k) * 2] = 1 + u[k]; st[(v / 3 + k) * 2 + 1] = pos[v + k * 3 + 2]; }
+    }
+    g.setAttribute('aSt', new THREE.Float32BufferAttribute(st, 2));
+  }
   for (let i = 2; i < pos.length; i += 3) pos[i] -= 0.5;
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aMask', new THREE.Float32BufferAttribute(msk, 1)); g.computeVertexNormals();
   return g;
@@ -28,18 +37,19 @@ export function splinterGeo() {
 }
 /** The fore part of a lance: a tapered round shaft (radius 1 at the break, 0.6 at the cut-off end), a jagged broken rear end. Scale (r0, r0, length). */
 export function foreGeo() {
-  const pos = [], msk = [], N = 14, rings = [[0, 0], [0.07, 0], [0.08, 1], [1, 1]], rad = (z) => 1 - 0.4 * z;
+  const pos = [], msk = [], N = 14, rings = [[0, 0], [0.07, 1], [0.08, 1], [1, 1]], rad = (z) => 1 - 0.4 * z;
   const pt = (k, i) => {
     const th = i / N * Math.PI * 2, r = rad(rings[k][0]); let z = rings[k][0];
-    if (k === 0) z = 0.06 * ((i * 0.37) % 1) + 0.03 * Math.abs(Math.sin(i * 2.1));      // the ragged break
-    return [Math.cos(th) * r, Math.sin(th) * r, z];
+    let rr = r;
+    if (k === 0) { const h = [0.03, 0.24, 0.06, 0.15, 0.02, 0.28, 0.07, 0.18, 0.04, 0.2, 0.05, 0.13, 0.02, 0.22][i % N]; z = -h; rr = r * (1 - 0.7 * Math.min(1, h / 0.28)); }      // the torn break: long fibres standing out of the end, thinning to a point
+    return [Math.cos(th) * rr, Math.sin(th) * rr, z];
   };
   for (let k = 0; k < 3; k++) for (let i = 0; i < N; i++) {
     const a = pt(k, i), b = pt(k, i + 1), c = pt(k + 1, i + 1), d = pt(k + 1, i), m0 = rings[k][1], m1 = rings[k + 1][1];
     addTri(pos, msk, a, b, c, m0, m0, m1); addTri(pos, msk, a, c, d, m0, m1, m1);
   }
-  for (let i = 0; i < N; i++) { addTri(pos, msk, [0.1, -0.05, -0.1], pt(0, i + 1), pt(0, i), 0, 0, 0); addTri(pos, msk, [0, 0, 1], pt(3, i), pt(3, i + 1), 0, 0, 0); }
-  return finish(pos, msk);
+  for (let i = 0; i < N; i++) { addTri(pos, msk, [0, 0, 0.04], pt(0, i + 1), pt(0, i), 0, 0, 0); addTri(pos, msk, [0, 0, 1], pt(3, i), pt(3, i + 1), 0, 0, 0); }
+  return finish(pos, msk, true);
 }
 /** The crown of a coronel (the three-pronged head), about 0.12 m long: scale 1 = that size. */
 export function crownGeo() {
@@ -68,6 +78,7 @@ export class Rods {
     this.fx = fx; this.max = max;
     this.mesh = new THREE.InstancedMesh(geo, mat, max); this.mesh.frustumCulled = false; this.mesh.castShadow = true;
     this.paint = new THREE.InstancedBufferAttribute(new Float32Array(max * 3).fill(1), 3); geo.setAttribute('aPaint', this.paint);
+    this.paint2 = new THREE.InstancedBufferAttribute(new Float32Array(max * 3).fill(1), 3); geo.setAttribute('aPaint2', this.paint2);
     this.b = [];
     for (let i = 0; i < max; i++) this.b.push({ i, life: 0, age: 0, sleep: true, p: new THREE.Vector3(), v: new THREE.Vector3(), q: new THREE.Quaternion(), w: new THREE.Vector3(), sc: new THREE.Vector3(1, 1, 1), rad: 0.01, e: 0.25, mu: 0.6, still: 0, hold: 0, hv: new THREE.Vector3(), launch: null, fade: 4, hit: 0, prevX: 0 });
     this.cursor = 0; this.zero = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -76,11 +87,11 @@ export class Rods {
     scene.add(this.mesh);
   }
   /** A new body (the oldest is reused when the pool is full). Returns it; the caller sets v, w and the rest. */
-  spawn(p, q, sc, life, paint, fade = 4) {
+  spawn(p, q, sc, life, paint, fade = 4, paint2 = paint) {
     const i = this.cursor; this.cursor = (this.cursor + 1) % this.max; const b = this.b[i];
     b.life = life; b.fade = fade; b.age = 0; b.sleep = false; b.still = 0; b.hold = 0; b.launch = null; b.e = 0.25; b.mu = 0.6; b.hit = 0;
     b.p.copy(p); b.q.copy(q); b.sc.copy(sc); b.v.set(0, 0, 0); b.w.set(0, 0, 0); b.rad = Math.max(0.006, sc.y * 0.5); b.prevX = p.x;
-    this.paint.setXYZ(i, paint.r, paint.g, paint.b); this.paint.needsUpdate = true; this.dirty = true; return b;
+    this.paint.setXYZ(i, paint.r, paint.g, paint.b); this.paint.needsUpdate = true; this.paint2.setXYZ(i, paint2.r, paint2.g, paint2.b); this.paint2.needsUpdate = true; this.dirty = true; return b;
   }
   clear() { for (let i = 0; i < this.max; i++) { this.b[i].life = 0; this.mesh.setMatrixAt(i, this.zero); } this.dirty = true; this.mesh.instanceMatrix.needsUpdate = true; }
   write(b, i) {
