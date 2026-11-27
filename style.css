@@ -907,3 +907,8 @@ body.touch #pmMain kbd { display: none; }
 body.hasYtIcon #ytbox { left: max(58px, env(safe-area-inset-left)); }
 body.hasYtIcon.ytdock:not(.touch) .menu.main { left: max(5vw, 396px); }
 body.hasYtIcon.ytdock:not(.touch):has(#ytbox.min) .menu.main { left: max(5vw, 276px); }
+
+/* the retinue's painted roundels on the Armoury's Retinue tab */
+.armcard .manpic { display: block; width: 76px; height: 76px; margin: 2px auto 6px; }
+.armview .manpic.big { display: block; height: min(176px, 92%); width: auto; max-width: 92%; margin: auto; object-fit: contain; }
+body.touch.compact .armcard .manpic { width: 56px; height: 56px; }
