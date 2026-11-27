@@ -72,7 +72,7 @@ function patch(mat, instanced) {
       .replace('#include <common>', `#include <common>
         attribute vec3 aFat; attribute float aSh; varying vec4 vCol2; varying float vSh;
         #ifdef PEOPLE_INST
-          attribute vec4 iPar; attribute vec4 iCol2;
+          attribute vec4 iPar; attribute vec4 iCol2; attribute float iBend;      // iBend: the elbow (arms only, radians; 0 elsewhere, an unbound attribute reads 0)
           #define PPAR iPar
           #define PCOL2 iCol2
         #else
@@ -81,8 +81,29 @@ function patch(mat, instanced) {
           #define PCOL2 uCol2
         #endif`)
       .replace('#include <uv_vertex>', '#include <uv_vertex>\n vMapUv = uv + PPAR.xy;')
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        #ifdef PEOPLE_INST
+        if (iBend != 0.0) {      // the elbow, normals: the upper arm turned by the bend, the forearm by minus the bend, blended across the joint (see the positions below)
+          float bw = smoothstep(0.38, 0.62, clamp(-position.y, 0.0, 1.0)), bc = cos(iBend), bs = sin(iBend);
+          vec3 nu = vec3(objectNormal.x, objectNormal.y * bc - objectNormal.z * bs, objectNormal.y * bs + objectNormal.z * bc);
+          vec3 nl = vec3(objectNormal.x, objectNormal.y * bc + objectNormal.z * bs, -objectNormal.y * bs + objectNormal.z * bc);
+          objectNormal = normalize(mix(nu, nl, bw));
+        }
+        #endif`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         transformed += aFat * PPAR.z; vCol2 = PCOL2; vSh = aSh;
+        #ifdef PEOPLE_INST
+        if (iBend != 0.0) {      // an ELBOW. The arm is a unit tube along -y (the matrix scales it to the arm's length): the upper half is turned about the shoulder by the bend (elbow back, z is the
+          // figure's front), the lower half about the elbow by minus the bend, and both are stretched by 1/cos so the hand stays exactly where the straight arm's hand was (callers that put
+          // a hat or a banner in the hand, and the claps that meet, need no change). K: the matrix scales z (the girth) about 1.5x more than y (the length), so the turn is done in metres.
+          float eu = clamp(-transformed.y, 0.0, 1.0), ew = smoothstep(0.38, 0.62, eu), ec = cos(iBend), es = sin(iBend), esc = 1.0 / ec, K = 1.5;
+          vec3 ep = vec3(transformed.x, transformed.y, transformed.z * K);
+          vec3 pu = vec3(ep.x, ep.y * esc, ep.z); pu = vec3(pu.x, pu.y * ec - pu.z * es, pu.y * es + pu.z * ec);
+          vec3 eq = vec3(ep.x, (ep.y + 0.5) * esc, ep.z), elb = vec3(0.0, -0.5, -0.5 * es * esc);
+          vec3 pl = elb + vec3(eq.x, eq.y * ec + eq.z * es, -eq.y * es + eq.z * ec);
+          ep = mix(pu, pl, ew); transformed = vec3(ep.x, ep.y, ep.z / K);
+        }
+        #endif
         if (PPAR.w > 0.0) {      // seated: the figure folds at the hip (0.62 of the shoulder height), the lap comes forward
           float hip = 0.62, k = transformed.y / hip;
           if (k < 1.0) { transformed.z += PPAR.w * 0.36 * min(1.0, (1.0 - k) / 0.42); transformed.y *= 1.0 - PPAR.w; } else transformed.y -= hip * PPAR.w;
@@ -126,6 +147,39 @@ export function figure() {
     head: partGeo('head_mid'), hat: partGeo('chaperon_hi'), cap: partGeo('feltcap_hi'), coif: partGeo('coif_hi'), hood: partGeo('hood_hi'), straw: partGeo('straw_hi'),
     robe: fitGeo('robe_npc_hi', 1.06, 1.06, 1.06, 0, -0.88 * 1.06, 0) });
 }
+// ------------------------------------------------------------------------------------------------ the elbow of the jointed figures
+/** The triangles of `g` whose middle is above (up = true) or below y = cut, as their own geometry (vertices renumbered). Below the cut the geometry is moved so the elbow is its origin. */
+function armHalf(g, cut, up) {
+  const I = g.index.array, P = g.attributes.position, keep = [];
+  for (let t = 0; t < I.length; t += 3) { const y = (P.getY(I[t]) + P.getY(I[t + 1]) + P.getY(I[t + 2])) / 3; if ((y >= cut) === up) keep.push(I[t], I[t + 1], I[t + 2]); }
+  const map = new Map(), order = [], idx = keep.map((v) => { let n = map.get(v); if (n === undefined) { n = order.length; map.set(v, n); order.push(v); } return n; }), h = new THREE.BufferGeometry();
+  for (const k in g.attributes) { const a = g.attributes[k], d = new a.array.constructor(order.length * a.itemSize); order.forEach((v, i) => { for (let c = 0; c < a.itemSize; c++) d[i * a.itemSize + c] = a.array[v * a.itemSize + c]; }); h.setAttribute(k, new THREE.BufferAttribute(d, a.itemSize)); }
+  h.setIndex(idx); if (!up) h.translate(0, -cut, 0); return h;
+}
+const ARM_LEN = 0.65, ARM_ELBOW = 0.3;      // the arm part is 0.65 long (its hand ends there); the elbow is 0.3 from the shoulder
+let ARM2 = null;
+/**
+ * An arm with an ELBOW, for every jointed figure (heralds, judges, flagmen, the band, your men, the stands' sellers...). It stands in for the one-piece arm mesh: a Group at the
+ * shoulder (the callers turn their own shoulder group, `armL.add(D.armL)`, and hang what he holds at 0.6 below it) holding an upper arm and a forearm that are re-posed just
+ * before they are drawn from how far that shoulder group has swung the arm forward or out: a little slack at rest, up to about 32 degrees as the arm is lifted (a raised flag, a
+ * presented lance, a herald's scroll, a trumpet). The two halves lean in opposite directions (elbow back, forearm forward) and are stretched by 1/cos so the HAND STAYS EXACTLY
+ * where the straight arm's hand was: nothing that is held, nothing that was posed, needs touching. `.material` reads (and sets) both halves, as it did on the old mesh.
+ */
+export function elbowArm(F, mat, shadow) {
+  const a = ARM2 || (ARM2 = { up: armHalf(F.arm, -ARM_ELBOW, true), low: armHalf(F.arm, -ARM_ELBOW, false) });
+  const g = new THREE.Group(), up = new THREE.Mesh(a.up, mat), low = new THREE.Mesh(a.low, mat);
+  up.castShadow = low.castShadow = shadow; g.add(up, low);
+  const l1 = ARM_ELBOW, l2 = ARM_LEN - ARM_ELBOW, set = () => {
+    const p = g.parent, rx = p ? p.rotation.x : 0, rz = p ? p.rotation.z : 0;
+    const t1 = 0.1 + 0.34 * Math.min(1, Math.max(0, -rx) / 2.2) + 0.12 * Math.min(1, Math.abs(rz)), t2 = Math.asin(l1 * Math.sin(t1) / l2), s = ARM_LEN / (l1 * Math.cos(t1) + l2 * Math.cos(t2));
+    up.rotation.x = t1; up.scale.y = s; low.rotation.x = -t2; low.scale.y = s; low.position.set(0, -l1 * s * Math.cos(t1), -l1 * s * Math.sin(t1));
+    up.updateMatrix(); low.updateMatrix(); up.matrixWorld.multiplyMatrices(g.matrixWorld, up.matrix); low.matrixWorld.multiplyMatrices(g.matrixWorld, low.matrix);
+  };
+  up.onBeforeRender = low.onBeforeRender = set;      // (the shoulder group's turn has been applied by now: scene.updateMatrixWorld ran first)
+  up.frustumCulled = low.frustumCulled = false;
+  Object.defineProperty(g, 'material', { get: () => up.material, set: (m) => { up.material = low.material = m; } });
+  set(); return g;
+}
 const brighter = (c, k) => '#' + _c.set(c).multiplyScalar(k).getHexString();
 /**
  * The dressed parts of one figure, as meshes to hang on its joints: { torso, legL, legR, armL, armR, head } (the hat, if any, is on the head).
@@ -135,15 +189,15 @@ const brighter = (c, k) => '#' + _c.set(c).multiplyScalar(k).getHexString();
 export function dressFigure(o) {
   const F = figure(), skin = o.skin || '#e0ac84', fat = o.fat || 0, G = garment(o.tab ? 'tabard' : o.garb || 'doublet'), hoseCell = garment('doublet').uv;
   const M = (geo, mat, sh = true) => { const m = new THREE.Mesh(geo, mat); m.castShadow = sh; return m; };
-  const leg = (c) => M(F.leg, partMaterial(brighter(c, 1.4), skin, hoseCell, fat * 0.5));      // (the doublet's hose is painted dark: lift the dye back to the colour asked for)
+  const leg = (c) => M(F.leg, partMaterial(brighter(c, 1.4), skin, hoseCell, fat * 0.5), false);      // (the doublet's hose is painted dark: lift the dye back to the colour asked for)
   const slv = patchUV(o.sleeve || 'sleeve_wool');
   const R = o.robe ? garment(o.robe) : null;      // a long robe instead of the short gown and hose (the marshal of the lists)
-  const out = { torso: R ? M(F.robe, partMaterial(o.coat, skin, R.uv, fat)) : M(F.torso, partMaterial(o.tab || o.coat, skin, G.uv, fat)), legL: R ? null : leg(o.hose), legR: R ? null : leg(o.hose2 || o.hose), armL: M(F.arm, partMaterial(o.coat, skin, slv, 0), !!o.close), armR: M(F.arm, partMaterial(o.coat, skin, slv, 0), !!o.close),
+  const out = { torso: R ? M(F.robe, partMaterial(o.coat, skin, R.uv, fat)) : M(F.torso, partMaterial(o.tab || o.coat, skin, G.uv, fat)), legL: R ? null : leg(o.hose), legR: R ? null : leg(o.hose2 || o.hose), armL: elbowArm(F, partMaterial(o.coat, skin, slv, 0), false), armR: elbowArm(F, partMaterial(o.coat, skin, slv, 0), false),
     head: null };
   // the head: the figures the camera goes close to (o.close: the judges, the herald, the marshal, the flagmen, your men) get the knight's modelled head with its
   // hair and beard (src/people_heads.js) on the high and medium tiers; the rest, and everyone on the low tier, the lighter head with a painted face
   const KH = { m_young: 0, m_plain: 1, m_beard: 1, m_fullbeard: 2, m_old: 2, m_moustache: 3, m_dark: 4, m_tonsure: 5, m_fat: 5 };
-  out.head = GFX.tier === 'low' || !o.close ? M(F.head, partMaterial(skin, o.hair || '#4a3524', faceUV(o.face || 'm_plain'), Math.max(0, fat)))
+  out.head = GFX.tier === 'low' || !o.close ? M(F.head, partMaterial(skin, o.hair || '#4a3524', faceUV(o.face || 'm_plain'), Math.max(0, fat)), false)
     : headFor(KH[o.face || 'm_plain'] ?? 1, 'm', fat > 0.45 ? 'heavy' : fat < -0.15 ? 'skinny' : 'medium', skin, o.hair || '#4a3524', !!o.hat);
   if (out.head.isGroup) { const w = new THREE.Group(); out.head.position.y = -0.035; w.add(out.head); out.head = w; }      // (this head has a neck of its own: it sits a little lower on the joint)
   if (o.hat) { const h = M(F[o.hat.kind] || F.hat, partMaterial(o.hat.color, '#e0d9c3', patchUV({ hat: 'chaperon', cap: 'feltcap' }[o.hat.kind] || o.hat.kind), 0), false); (out.head.isGroup ? out.head.children[0] : out.head).add(h); }      // (the hat rides the head)

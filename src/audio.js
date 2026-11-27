@@ -66,7 +66,7 @@ class MusicBus {
   /** YouTube source (src/ytmusic.js, loaded only when used): the game's own music stays silent while it plays. */
   async _yt(go = true) {
     if (!this.yt) {
-      this._ytLoad = this._ytLoad || import('./ytmusic.js').then(m => { this.yt = m.ytmusic; this.yt.on((k) => { if (k === 'stop') { mymusic.setSource('game'); this.refreshMine(); } }); });
+      this._ytLoad = this._ytLoad || import('./ytmusic.js').then(m => { this.yt = m.ytmusic; this.yt.on((k) => { if (k === 'stop') { mymusic.setSource('game'); this.refreshMine(); } else if (k === 'fail') { mymusic.ytFailed = true; this.refreshMine().then(() => this.yt.showFallback()); } }); });
       try { await this._ytLoad; } catch (e) { return; }
     }
     const y = this.yt; y.setVolume(this.vol); y.duck(this.ducked); y.muted = !!(this.ga.muted || this.off); y.place(this._where); y.held = this.held;

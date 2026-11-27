@@ -1,4 +1,14 @@
-import { touchMode } from './touch.js';
+// "Phone or tablet" = the install gate's real-mobile test (src/install.js: mobile/tablet UA, or iPadOS posing as a Mac with touch), NOT touchMode:
+// touchscreen laptops and coarse-pointer desktops are desktops and get the YouTube radio.
+export const isPhone = (() => {
+  try {
+    if (window.TiltInstall && typeof window.TiltInstall.mobileUA === 'boolean') return window.TiltInstall.mobileUA;
+    const ua = navigator.userAgent || ''; return /iP(hone|ad|od)|Android|Mobile|Silk|Tablet/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  } catch (e) { return false; }
+})();
+// One-time migration: before this, a desktop player could have 'game' saved (the radio was desktop-only by touch mode, and the dock's cross saves it too),
+// so older saves cannot be told from explicit choices. Reset 'game' to the default once; choices made after this are respected.
+try { if (localStorage.getItem('tilt.musicsrc.v2') === null) { if (!isPhone && localStorage.getItem('tilt.musicsrc') === 'game') localStorage.removeItem('tilt.musicsrc'); localStorage.setItem('tilt.musicsrc.v2', '1'); } } catch (e) { /* ignore */ }
 // "Your own music": songs the player adds from their own computer. They live in this browser's IndexedDB only
 // (db 'tilt-mymusic'): never uploaded, never sent to an online opponent, never part of the build.
 // src/audio.js MusicBus plays them (shuffled, looping) in place of the game's own music while this is on.
@@ -41,8 +51,9 @@ export const mymusic = {
   /** Which source plays: 'game' (the game's own music), 'files' (your files) or 'yt' (YouTube links). */
   // Pre-release test builds default to the YouTube "Mates' radio" (the three bardcore tracks, streamed by YouTube's own player, never re-hosted).
   // For the public launch set DEFAULT_SRC back to 'game'.
-  get source() { const DEFAULT_SRC = 'yt'; let r = DEFAULT_SRC; try { const v = localStorage.getItem('tilt.musicsrc'); if (v === 'files' || v === 'yt' || v === 'game') r = v; } catch (e) { /* default */ } return r === 'yt' && touchMode ? 'game' : r; },      // YouTube is desktop-only: phones and tablets always get the game's own music
-  setSource(v) { v = v === 'files' || (v === 'yt' && !touchMode) ? v : 'game'; try { localStorage.setItem('tilt.musicsrc', v); localStorage.setItem(KEY, v === 'files' ? 'on' : 'off'); } catch (e) { /* ignore */ } this._emit('enabled'); },
+  get source() { const DEFAULT_SRC = 'yt'; let r = DEFAULT_SRC; try { const v = localStorage.getItem('tilt.musicsrc'); if (v === 'files' || v === 'yt' || v === 'game') r = v; } catch (e) { /* default */ } return r === 'yt' && (isPhone || this.ytFailed) ? 'game' : r; },      // YouTube is desktop-only: phones and tablets always get the game's own music; ytFailed = YouTube could not play this session
+  setSource(v) { v = v === 'files' || (v === 'yt' && !isPhone) ? v : 'game'; if (v === 'yt') this.ytFailed = false; try { localStorage.setItem('tilt.musicsrc', v); localStorage.setItem(KEY, v === 'files' ? 'on' : 'off'); } catch (e) { /* ignore */ } this._emit('enabled'); },
+  ytFailed: false,
   get enabled() { return this.source === 'files'; },
   setEnabled(on) { this.setSource(on ? 'files' : 'game'); },
   /** Add audio files. Returns { added: n, messages: [friendly text] }. */

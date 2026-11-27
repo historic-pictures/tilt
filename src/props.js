@@ -201,7 +201,7 @@ export function makeFigure(style, colors, rnd) {
     const A = new Acc(); A.between([0.07, 1.78, -0.04], [0.2, 1.95, -0.14], 0.014, 0.002, white, 5); A.between([0.07, 1.78, -0.04], [0.15, 1.91, -0.17], 0.012, 0.002, C(cb), 5); fig._bodyAcc = A;
   }
   // arms: the animated ones are groups at the shoulder; the others are set in their pose
-  const SY = 0.85 + ARM_AT[1], arm = (src, bend) => { const m = new THREE.Mesh(bentArm(F.arm, bend), src.material); m.castShadow = true; return m; };
+  const SY = 0.85 + ARM_AT[1], arm = (src, bend) => { const m = new THREE.Mesh(bentArm(F.arm, bend), src.material); m.castShadow = false; return m; };
   const hand = (bend) => ({ hand: [0, -0.325 - 0.275 * Math.cos(bend), 0.275 * Math.sin(bend)], f: [0, -Math.cos(bend), Math.sin(bend)] });
   const one = (sx, anim, pose, bend, src, extra) => {
     const g = new THREE.Group(); g.position.set(sx * ARM_AT[0], SY, 0); g.add(arm(src, bend));

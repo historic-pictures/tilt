@@ -118,7 +118,7 @@
   }
 
   window.__tiltGated = gated;
-  window.TiltInstall = { gated: gated, kind: kind, installed: installed, realDevice: realDevice, show: show, hide: hide };
+  window.TiltInstall = { gated: gated, kind: kind, installed: installed, realDevice: realDevice, mobileUA: mobileUA, show: show, hide: hide };
   function boot() {
     if (gated) { show({ blocking: true }); var l = document.getElementById('loading'); if (l) l.style.display = 'none'; }
     else appMode();

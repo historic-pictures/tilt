@@ -846,3 +846,5 @@ body:has(#verdict:not(.hidden)) :is(#prompt, .tCoach) { visibility: hidden; }
 .online .onrow.invite .btn.big { font-size: 26px; padding: 14px 40px; }
 .online .invlink { text-align: center; margin-top: 6px; }
 .online .invnote { text-align: center; font-style: italic; }
+
+#ytfallback { position: fixed; z-index: 58; left: max(8px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); max-width: 320px; padding: 6px 10px; background: var(--red2); color: var(--vellum3); border: 1px solid var(--ink); border-radius: 3px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.45); pointer-events: none; }

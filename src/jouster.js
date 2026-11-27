@@ -53,19 +53,23 @@ function modelWithers() {
 const DRAPE_FIT = new Map();   // caparison fit per horse scale + girth: the rigged horse's top and half-width under each drape point
 // horse_smooth.glb: the Quaternius horse welded, subdivided twice and smooth-shaded in Blender (13 Nov), one coat material; same rig and clips.
 export async function preloadHorse(url) {
-  expect('horse', 'boot', GFX.tier === 'low' ? 2.6e6 : 3.9e6); expect('knight', 'boot', 2.2e6);
-  const knight = preloadKnight();      // (both models download side by side)
+  expect('horse', 'boot', GFX.lod ? 1.5e6 : 3.9e6);
+  // the code-built knight's modelled plate (2.2 MB) is only for the code-built rider, which every tier now replaces with the rigged one: fetched only when the rig is switched off (?rider=old)
+  let knight = Promise.resolve(); if (!riderWanted()) { expect('knight', 'boot', 2.2e6); knight = preloadKnight(); }      // (both models download side by side)
   const wantNew = !url && wantNewModels() && new URLSearchParams(location.search).get('horse') !== 'old';      // ?horse=old: the smooth horse on any tier
   const tryLoad = async (u, mgr) => new GLTFLoader(mgr).loadAsync(u, (e) => progress('horse', e));
   HORSE_MODEL = null; HORSE_NEW = false; HORSE_SEAT = null; MODEL_WITHERS = 0;
   if (wantNew) {
     try {
       // medium: the 512 textures (the file names them horse/<name>; they sit in horse/512/ too, all but the mane's hair texture)
-      const mgr = new THREE.LoadingManager(); if (GFX.tier !== 'high') mgr.setURLModifier((u) => u.replace(/\/horse\/(horse_(?:normal|coat_[a-z]+)\.(?:png|jpg))/, '/horse/512/$1'));
-      const g = await tryLoad(MODEL_DIR + 'horse_new.glb', mgr), seat = g.parser.json.scenes[0].extras && g.parser.json.scenes[0].extras.seat;
+      // low: horse_new_lod.glb (45% of the triangles, only the clips the game plays) and horse/256/ (half-size normal and hair maps, 512 coats)
+      const mgr = new THREE.LoadingManager();
+      if (GFX.lod) mgr.setURLModifier((u) => u.replace(/\/horse\/(horse_(?:normal|hair|hair_n|coat_[a-z]+)\.(?:png|jpg))/, '/horse/256/$1'));
+      else if (GFX.tier !== 'high') mgr.setURLModifier((u) => u.replace(/\/horse\/(horse_(?:normal|coat_[a-z]+)\.(?:png|jpg))/, '/horse/512/$1'));
+      const g = await tryLoad(MODEL_DIR + (GFX.lod ? 'horse_new_lod.glb' : 'horse_new.glb'), mgr), seat = g.parser.json.scenes[0].extras && g.parser.json.scenes[0].extras.seat;
       if (!seat) throw new Error('horse_new.glb carries no seat data');
       HORSE_MODEL = g; HORSE_SEAT = seat; HORSE_NEW = true;
-      const tl = new THREE.TextureLoader(), dir = MODEL_DIR + (GFX.tier === 'high' ? 'horse/' : 'horse/512/');
+      const tl = new THREE.TextureLoader(), dir = MODEL_DIR + (GFX.tier === 'high' ? 'horse/' : GFX.lod ? 'horse/256/' : 'horse/512/');
       await Promise.all(['destrier', 'courser', 'andalusian', 'rouncey'].map(b => new Promise((ok) => tl.load(`${dir}horse_coat_${b}.jpg`, (t) => { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = GFX.aniso || 4; HORSE_COATS[b] = t; ok(); }, undefined, () => ok()))));
     } catch (e) { HORSE_MODEL = null; HORSE_NEW = false; HORSE_SEAT = null; console.warn('new horse unavailable, using the smooth horse', e); }
   }

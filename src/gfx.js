@@ -28,19 +28,20 @@ const TIERS = {
   high: {
     antialias: true, post: touchMode ? 'lite' : 'full', shadow: touchMode ? 2048 : 4096, aniso: 8, halfTex: false,
     sky: '4k', skyWait: true, cards: ALL_CARDS, halfCards: false, models: ALL_MODELS,
-    crowd: 1, trees: 1, bushes: 1, grass: 1, flowers: 1, tents: 1, px: 5.5e6,
+    crowd: 0.8, crowdRate: 2, trees: 1, bushes: 1, grass: 1, flowers: 1, tents: 1, px: 5.5e6,
     pr: () => (touchMode ? (dpr() > 2.5 ? 1 : Math.min(dpr(), 1.25)) : Math.min(dpr(), 1.75)),      // (what main.js always used)
   },
   medium: {
     antialias: false, post: 'lite', shadow: 2048, aniso: 4, halfTex: false,
     sky: '2k', skyWait: true, cards: ALL_CARDS, halfCards: true, models: ALL_MODELS.filter(m => m !== 'wooden_barrels_01'),
-    crowd: 0.75, trees: 0.6, bushes: 0.6, grass: 0.6, flowers: 0.6, tents: 0.75, px: 3.4e6,
+    crowd: 0.5, crowdRate: 3, trees: 0.6, bushes: 0.6, grass: 0.6, flowers: 0.6, tents: 0.75, px: 3.4e6,
     pr: () => (touchMode ? Math.min(dpr(), 1) : Math.min(dpr(), 1.25)),
   },
   low: {
     antialias: false, post: 'plain', shadow: 1024, aniso: 2, halfTex: true,
-    sky: '1k', skyWait: false, cards: ['tree_small_02', 'island_tree_02'], halfCards: true, models: ['rock_moss_set_01', 'wine_barrel_01', 'wooden_crate_02'],
-    crowd: 0.45, trees: 0.3, bushes: 0.25, grass: 0.35, flowers: 0.3, tents: 0.6, px: 1.4e6,
+    sky: '1k', skyWait: false, cards: ['tree_small_02', 'island_tree_02'], halfCards: true, models: ['wine_barrel_01', 'wooden_crate_02'],      // (no photo-scanned rocks on Low: 280k triangles)
+   
+    crowd: 0.25, crowdRate: 4, noShadow: true, noLife: true, trees: 0.3, bushes: 0.25, grass: 0.35, flowers: 0.3, tents: 0.6, px: 1.4e6,
     pr: () => Math.min(dpr(), 0.8),
   },
 };
@@ -114,7 +115,12 @@ export function detect(p = probe()) {
 }
 
 // ------------------------------------------------------------------ the live object
-export const GFX = { tier: 'high', pref: 'auto', detected: 'high', ceiling: 'high', reason: '', info: {}, prScale: 1, dropped: false, listeners: [],
+/** WHAT GETS CUT FIRST (owner's rule: "reduce the crowd first"). Order of savings, everywhere the game lowers its graphics (tier table, benchmark, safety net):
+ *    1. the crowd: fewer people (TIERS.crowd; live: GFX.crowdLive, see crowdDown), the lighter '_lo' crowd figures on Low, no idle life, no crowd shadows
+ *    2. trees, bushes, grass, props (TIERS)         3. shadows, post, pixel ratio        4. only last the knights, horses, lances and armour (Low loads their *_lod models: the same models, ~half the triangles)
+ *  The live step: GFX.crowdLive goes 1 -> 0.6 -> 0.35 BEFORE the pixel ratio or the tier is touched (and the benchmark does the same before it steps a tier down). It multiplies the tier's crowd. */
+const CROWD_LIVE = [1, 0.6, 0.35];
+export const GFX = { tier: 'high', crowdLive: 1, pref: 'auto', detected: 'high', ceiling: 'high', reason: '', info: {}, prScale: 1, dropped: false, listeners: [],
   /** what Auto picked and why: source 'saved' (an earlier benchmark), 'guess' (the probe; the benchmark is still to come), 'bench' (just measured), 'net' (the safety net lowered it), 'boot' (the game never finished loading) */
   auto: { tier: 'high', source: 'guess', note: '' },
   bench: { state: 'off', fps: 0, note: '' }, ov: {}, sim: SIM || '' };
@@ -127,7 +133,6 @@ const readOv = () => { const o = lsJson(K.set) || {}, out = {};
   if (typeof o.dof === 'boolean') out.dof = o.dof;
   if ([0.25, 0.5, 0.75, 1].includes(o.crowd)) out.crowd = o.crowd;
   if ([0, 30, 60].includes(o.cap)) out.cap = o.cap;
-  if (o.model === 'old' || o.model === 'new') out.model = o.model;
   return out; };
 
 /** The pixel ratio the current tier (or the resolution override) starts from, before the safety net's scale. */
@@ -143,19 +148,26 @@ function apply(tier) {
   GFX.tier = tier;
   const t = TIERS[tier], o = GFX.ov;
   for (const k of Object.keys(t)) GFX[k] = t[k];
-  GFX.shadowOn = o.shadow !== 'off';
+  GFX.noLife = !!t.noLife;      // (no band or vendors on Low)
+  GFX.shadowOn = o.shadow === 'off' ? false : o.shadow != null ? true : !t.noShadow;      // Low: no sun shadows (about 500 shadow draw calls a frame) unless he asks for them
   GFX.shadow = typeof o.shadow === 'number' ? o.shadow : t.shadow;
   GFX.post = o.post || t.post;
   GFX.dof = o.dof != null ? o.dof : (GFX.post === 'full' && tier === 'high');      // depth of field: the high tier's full pipeline, or on request
-  GFX.crowd = o.crowd != null ? o.crowd : t.crowd;
+  GFX.crowd = o.crowd != null ? o.crowd : t.crowd;      // (the share of the stands' people; the world builds the crowd with GFX.crowd * GFX.crowdLive)
   GFX.capFps = o.cap != null ? o.cap : 60;      // matches; the menus draw at most 30 (main.js). 0 = every screen refresh (desktop only)
-  GFX.model = o.model || 'auto';
+  GFX.lod = tier === 'low';      // the rigged horse, rider, helms, lances and shield are loaded as their *_lod.glb copies (about half the triangles, half-size normal maps; tools/lod/build_lods.py)
   GFX.baseRatio = baseRatio;
   GFX.pixelRatio = () => Math.max(PR_MIN, baseRatio() * GFX.prScale);
 }
-/** Use the new horse and rider (true) or the old code-built ones? Settings > Graphics > Models; Auto: everything but Low. (?horse=old and ?rider=old still win.) */
-export const wantNewModels = () => (GFX.model === 'new' ? true : GFX.model === 'old' ? false : GFX.tier !== 'low');
+/** The new horse and rigged rider are used on EVERY tier (Low loads their lighter LOD copies, see GFX.lod and tools/lod/); the old code-built ones are only the fallback when a model file fails to load
+ *  (and the ?horse=old / ?rider=old debug switches). */
+export const wantNewModels = () => true;
 
+/** One live crowd step (1 -> 0.6 -> 0.35 of the tier's crowd). Returns false when the crowd is already at its smallest. Emits { kind: 'crowd' } so main.js thins the stands in place. */
+export function crowdDown() {
+  const i = CROWD_LIVE.indexOf(GFX.crowdLive); if (i < 0 || i >= CROWD_LIVE.length - 1) return false;
+  GFX.crowdLive = CROWD_LIVE[i + 1]; emit({ kind: 'crowd', crowd: GFX.crowd * GFX.crowdLive, pr: GFX.pixelRatio() }); return true;
+}
 /** The GPU lost its context or showed only black frames: take the cap down one tier now and keep it (Auto only; a named tier is what he chose, but a black screen is no use to him either). Returns the new tier, or '' when already on Low. */
 export function dropTier(why) {
   if (GFX.tier === 'low') return '';
@@ -266,6 +278,9 @@ function benchFrame(ms) {
     const back = B.from; setTier(back, 'tier', 'bench', { note: 'tried ' + GFX.tier + ', not smooth' });
     saveDevice(back, 'bench', { fps: GFX.bench.fps, note: 'tried a higher tier: not smooth' }); return benchEnd('tried a step up, not smooth: stayed on ' + back);
   }
+  if (j.bad && (GFX.crowdLive > CROWD_LIVE[CROWD_LIVE.length - 1] + 1e-6) && (crowdDown() && (!j.awful || crowdDown()))) {      // the crowd goes first: thinner stands, then measure again
+    B.phase = 'warm'; B.t = 0; B.ms = []; B.sum = 0; GFX.bench.state = 'waiting'; return;
+  }
   if (j.bad && idx > 0) {
     const next = TIER_ORDER[Math.max(0, idx - (j.awful && idx > 1 ? 2 : 1))];
     setTier(next, 'tier', 'bench', { avg: j.mean, note: 'measured ' + pct() + ' on ' + GFX.tier });
@@ -301,6 +316,7 @@ export function frameTime(ms, paused = false) {
   if (acc < WINDOW) return;
   const avg = acc / n; acc = 0; const frames = n; n = 0;
   if (avg <= LIMIT * (GFX.capFps === 30 ? 1.5 : 1) || frames < 20) return;
+  if (crowdDown()) { quiet = COOLDOWN; return; }      // 1. the crowd (before the pixel ratio, the shadows, and above all the knights)
   const base = baseRatio(), cur = base * GFX.prScale, floor = Math.min(PR_FLOOR, base);
   if (cur > floor * 1.03) {
     GFX.prScale = Math.max(floor / base, GFX.prScale * 0.85);

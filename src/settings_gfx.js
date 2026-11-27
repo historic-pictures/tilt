@@ -4,13 +4,14 @@
 import { ensurePanelCss } from './panel_css.js';
 import { GFX, setPref, setOverride, clearOverrides, redetect, PREFS } from './gfx.js';
 import { touchMode } from './touch.js';
+import { fpsOn, setFps, softwareGpu } from './fps_overlay.js';
 import { menuJoustOn, setMenuJoust, joustCap, clearJoustCap } from './attract_pref.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cap1 = (t) => t[0].toUpperCase() + t.slice(1);
 const LIVE = 'applies now', NEXT = 'applies on next match', RELOAD = 'applies after a reload';
 let reloadTimer = 0;
-const startPref = GFX.pref, startModel = GFX.ov.model;      // what this page was loaded with
+const startPref = GFX.pref;      // what this page was loaded with
 
 /** One line about what Auto chose: the tier, where that came from, and what the benchmark is doing. */
 export function autoNote() {
@@ -60,8 +61,8 @@ export function renderGfxSettings(host, ctx = {}) {
     ${row('Crowd', sel('crowd', [['auto', 'Auto'], [1, 'Full'], [0.75, 'Large'], [0.5, 'Half'], [0.25, 'Sparse']], ovv('crowd')), NEXT, 'How many people fill the stands and the field. The notable ones always stay.')}
     ${row('Frame rate', sel('cap', [['auto', 'Auto (60)'], [30, '30'], [60, '60'], ...(touchMode ? [] : [[0, 'Uncapped']])], ovv('cap')), LIVE, 'The most frames drawn a second in a match. 30 saves battery and heat; Uncapped follows your screen (desktop only). The menus always stay at 30 or less.')}
     ${row('Menu joust', `<button class="toggle" role="switch" data-tg="joust" aria-checked="${menuJoustOn() ? 'true' : 'false'}">${menuJoustOn() ? 'On' : 'Off'}</button>`, joustWhen(), 'Two knights ride endless passes in the lists behind the menus. It is not shown on Low graphics, and it switches itself off if your device cannot keep it smooth.')}
-    ${row('Horse and rider', sel('model', [['auto', 'Auto'], ['new', 'Detailed'], ['old', 'Simple']], ovv('model')), RELOAD, 'Detailed uses the new horse and the rigged rider; Simple is the old light model for slow phones. The horse loads at the start, so this needs a reload.')}
-    <div class="row"><span class="sctl"><button class="btn" data-g="reset" data-tip="Put every setting above back to Auto (the preset stays).">Reset to Auto</button><button class="btn primary btn-primary" data-g="reload" ${GFX.ov.model !== startModel ? '' : 'hidden'}>Reload now</button></span></div>
+    ${row('Show FPS', `<button class="toggle" role="switch" data-tg="fps" aria-checked="${fpsOn() ? 'true' : 'false'}">${fpsOn() ? 'On' : 'Off'}</button>`, softwareGpu() ? 'hardware acceleration is OFF in this browser' : LIVE, 'A small readout in the corner: frames a second, the slowest frames, draw calls, the graphics tier and your graphics card. Handy for a screenshot when the game runs badly.')}
+    <div class="row"><span class="sctl"><button class="btn" data-g="reset" data-tip="Put every setting above back to Auto (the preset stays).">Reset to Auto</button><button class="btn primary btn-primary" data-g="reload" ${GFX.pref !== startPref ? '' : 'hidden'}>Reload now</button></span></div>
     <p class="note" data-status role="status" aria-live="polite">${pend ? 'The game reloads in a moment to apply the preset.' : ''}</p>
   </div>`;
   if (host.__gfxBound) return;      // (the listeners are bound once; a redraw only replaces the markup)
@@ -80,7 +81,7 @@ export function renderGfxSettings(host, ctx = {}) {
       else say('Preset unchanged.');
       return;
     }
-    const v = raw === 'auto' ? null : (key === 'post' || key === 'model' || raw === 'off' ? raw : Number(raw));
+    const v = raw === 'auto' ? null : (key === 'post' || raw === 'off' ? raw : Number(raw));
     setOverride(key, v);
     const r = s.closest('.row'), when = r.querySelector('[data-when]');
     redraw();
@@ -88,6 +89,7 @@ export function renderGfxSettings(host, ctx = {}) {
   });
   host.addEventListener('click', (e) => {
     const tg = e.target.closest('[data-tg]'), g = e.target.closest('[data-g]');
+    if (tg && tg.dataset.tg === 'fps') { const on = tg.getAttribute('aria-checked') !== 'true'; setFps(on); redraw(); say('Show FPS: ' + (on ? 'on' : 'off') + ' (applies at once).'); return; }
     if (tg && tg.dataset.tg === 'joust') { const on = tg.getAttribute('aria-checked') !== 'true'; setMenuJoust(on); redraw(); say('Menu joust: ' + (on ? 'on' : 'off') + ' (applies at once).'); return; }
     if (tg && !tg.disabled) { const on = tg.getAttribute('aria-checked') !== 'true'; setOverride('dof', on); redraw(); say('Depth of field: ' + (on ? 'on' : 'off') + ' (applies now).'); return; }
     if (!g) return;

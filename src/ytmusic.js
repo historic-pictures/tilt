@@ -143,25 +143,46 @@ export const ytmusic = {
     try {
       const YT = await loadApi(); if (!this.wantPlay) return;
       this._ensureBox();
+      clearTimeout(this._rt); this._rt = setTimeout(() => { if (!this.ready && this.wantPlay) this._fail(); }, 20000);      // the player never became ready: blocked or offline
       this.player = new YT.Player('ytplayer', {
         width: this._size[0], height: this._size[1], videoId: this.curId || undefined, host: 'https://www.youtube-nocookie.com',
         playerVars: { playsinline: 1, rel: 0, controls: 1, origin: location.origin },
         events: {
-          onReady: () => { this.ready = true; this._apply(); this._setNow(); this._layout(); try { if (this.wantPlay && !this.held) this.player.playVideo(); } catch (e) { /* ignore */ } this._emit('ready'); },
-          onStateChange: (e) => { if (e.data === 0) { if (!this.held) this.next(); } else if (e.data === 1) { this._failed = 0; this._setNow(); this._playIcon(); } else if (e.data === 2) this._playIcon(); },
+          onReady: () => { this.ready = true; this._apply(); this._setNow(); this._layout(); try { if (this.wantPlay && !this.held) this.player.playVideo(); } catch (e) { /* ignore */ } this._emit('ready'); this._watch(); },
+          onStateChange: (e) => { if (e.data === 0) { if (!this.held) this.next(); } else if (e.data === 1) { this._failed = 0; clearTimeout(this._wt); this._setNote(''); this._setNow(); this._playIcon(); } else if (e.data === 2) this._playIcon(); },
           onError: (e) => {
             if (this.held) return;      // a pause or hide must never skip a track
             this._setNote(`A video ${[100, 101, 150].includes(e.data) ? 'cannot be played here' : 'did not load'}; skipped.`); this._failed++;
-            if (this._failed < this.ids.length) this.next(); else this._setNote('None of the videos can be played here.');
+            if (this._failed < this.ids.length) this.next(); else { this._setNote('None of the videos can be played here.'); this._fail(); }
           },
         },
       });
-    } catch (e) { this._setNote('YouTube could not be reached.'); }
+    } catch (e) { this._setNote('YouTube could not be reached.'); this._fail(); }
     finally { this._starting = false; }
+  },
+  /** Autoplay watchdog: after play is asked for, if nothing is playing within 5 s ask for a click; if a click does not start it either, give up. */
+  _watch() {
+    clearTimeout(this._wt);
+    this._wt = setTimeout(() => {
+      if (!this.player || !this.ready || !this.wantPlay || this.held || this.muted || this.fail) return;
+      let s = -1; try { s = this.player.getPlayerState(); } catch (e) { /* ignore */ }
+      if (s === 1 || s === 3) return;
+      if (this._gestured) return this._fail();      // a click did not start it either
+      this._setNote('Click anywhere to start the radio.'); clearTimeout(this._nt);
+      const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('keydown', go, true); this._gestured = true; this._setNote(''); try { this.player.playVideo(); } catch (e) { /* ignore */ } this._watch(); };
+      window.addEventListener('pointerdown', go, true); window.addEventListener('keydown', go, true);
+    }, 5000);
+  },
+  /** YouTube cannot play here: tell the owner of the source (src/audio.js switches to the game's music for this session). */
+  _fail() { if (this.fail) return; this.fail = true; clearTimeout(this._wt); clearTimeout(this._rt); this._emit('fail'); },
+  /** After the switch to the game's music (the box is gone): a short note where the dock was. */
+  showFallback() {
+    let n = document.getElementById('ytfallback'); if (!n) { n = document.createElement('div'); n.id = 'ytfallback'; n.setAttribute('role', 'status'); document.body.appendChild(n); }
+    n.textContent = "YouTube can't play here — playing the game's music"; clearTimeout(this._ft2); this._ft2 = setTimeout(() => n.remove(), 9000);
   },
   /** Hide the box and stop. */
   stop() {
-    this.wantPlay = false;
+    this.wantPlay = false; clearTimeout(this._wt); clearTimeout(this._rt); this.fail = false; this._gestured = false;
     if (this.player) { try { this.player.destroy(); } catch (e) { /* ignore */ } this.player = null; this.ready = false; }
     if (this.box) { this.box.remove(); this.box = null; }
     document.body.classList.remove('ytdock'); clearInterval(this._ft); this.fade = 1; this.note = '';

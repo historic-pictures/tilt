@@ -5,6 +5,7 @@
 // Layout: east side is x > 0. The platform stands where the groundlings leave a gap beside the dais (x 10.1-11.9, z 6.25-9.55), facing the lists (-x).
 import * as THREE from 'three';
 import { LISTS } from './lists.js';
+import { GFX } from './gfx.js';
 import { person, mesh, grp } from './ceremony.js';
 import { VENDOR } from './crowd_lines.js';      // what the sellers cry (plain data, shared with the TTS inventory)
 
@@ -95,7 +96,7 @@ export function createLife(scene, opts = {}) {
   }
 
   /** Build for a match (the same band and sellers at every venue). */
-  Lf.setup = function setup() { Lf.clear(); buildBand(); buildVendors(); root.visible = true; t = 0; cool = 0; };
+  Lf.setup = function setup() { Lf.clear(); if (GFX.noLife) return; buildBand(); buildVendors(); root.visible = true; t = 0; cool = 0; };
   Lf.clear = function clear() { root.clear(); Lf.band = []; Lf.vendors = []; root.visible = false; };
 
   function band(dt, env) {

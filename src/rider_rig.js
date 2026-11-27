@@ -23,8 +23,8 @@ const DIR = new URL('../assets/models/armour/', import.meta.url).href;
 /** The rig is 1.73 m; the game's old code-built rider (the frame every number in PHYS.hitboxes is in) was 1 / KS times that. */
 export const KS = 0.8394;
 const QP = new URLSearchParams(location.search).get('rider');
-/** ?rider=rig forces the rig, ?rider=old the code-built rider; otherwise the rig on high and medium, the code-built rider on low (phones stay light). */
-export const riderWanted = () => (QP ? QP !== 'old' : wantNewModels());
+/** ?rider=rig forces the rig, ?rider=old the code-built rider; otherwise the rig on every tier (Low loads the lod copies); the code-built rider is only the fallback if the files fail. */
+export const riderWanted = () => (QP ? QP !== 'old' : wantNewModels());      // (every tier: Low loads the *_lod.glb copies)
 export const HARNESSES = ['mail', 'bascinet', 'milanese', 'stechzeug'], HELMS = ['greathelm', 'bascinet', 'armet', 'frogmouth'];
 /** lance id (data.js LANCES) -> glb; its tint mask is `<file>_mask_<res>.png` */
 export const LANCE_FILES = { light: 'lance_light', standard: 'lance', heavy: 'lance_heavy' };
@@ -53,10 +53,10 @@ const soft = (m) => { if (touchMode && m.metalness > 0.5) m.metalness = 0.5; ret
  */
 export function preloadRider(want = {}) {
   if (!riderWanted()) return Promise.resolve(false);
-  const t = GFX.tier === 'high' ? '' : '_512'; RIG.tier = t; RIG.res = t ? 512 : 1024;
+  const t = GFX.lod ? '_lod' : GFX.tier === 'high' ? '' : '_512'; RIG.tier = t; RIG.res = t ? 512 : 1024;      // (the lod files keep the 512 colour maps: the livery masks are 512)
   const A = [...new Set((want.armour && want.armour.length ? want.armour : ['stechzeug']).filter(a => HARNESSES.includes(a)))];
   const H = [...new Set((want.helm || []).filter(h => HELMS.includes(h)))], L = [...new Set((want.lance && want.lance.length ? want.lance : ['standard']).filter(l => LANCE_FILES[l]))];
-  RIG.busy++; RIG.settled = false; expect('rider' + RIG.busy, 'bg', (A.length + H.length) * (t ? 0.9e6 : 1.6e6) + 0.6e6);
+  RIG.busy++; RIG.settled = false; expect('rider' + RIG.busy, 'bg', (A.length + H.length) * (t === '_lod' ? 0.5e6 : t ? 0.9e6 : 1.6e6) + 0.6e6);
   const id = 'rider' + RIG.busy, prog = (e) => progress(id, e);
   const job = (async () => {
     try {
@@ -96,6 +96,20 @@ function compact(geo, idx) {
   return g;
 }
 
+/**
+ * THUMBS. The clips curl every finger joint about its bone's local -X; for the four fingers that is toward the palm, but the thumb bones sit turned about 55 degrees from the hand's
+ * frame (Thumb1's rest), so the same curl about -X bent the thumb straight DOWN and out, away from the fingers: a stiff hook that read as bent backwards ("inversely curved").
+ * The outer two thumb joints now bend about an axis turned 70 degrees from X (mirrored for the left hand: its bone frames are the mirror image), toward the fingers, and only
+ * 60% as far, so the thumb lies slightly flexed against the grip. Applied to the clip quaternions once, so every pose (idle, reins, couched lance, celebrations, the ragdoll
+ * and the Armoury preview, all of which blend these clips) and every LOD file gets it. Thumb1 (the spread) is left as authored.
+ */
+const THUMB_PHI = -70 * Math.PI / 180, THUMB_K = 0.6;
+function thumbFix(name, q) {
+  if (!/HandThumb[23]$/.test(name)) return q;
+  const al = -2 * Math.atan2(q.x, q.w) * THUMB_K, ph = THUMB_PHI * (name.startsWith('Left') ? -1 : 1);
+  return q.setFromAxisAngle(new THREE.Vector3(Math.cos(ph), 0, Math.sin(ph)), al);
+}
+
 /** Pose clips -> {pose: {bone: {quaternion, position}}}; the list of bones that differ between poses; the helm split off the upper harness. */
 function prepareFigure(gltf, id) {
   const scene = gltf.scene, P = { scene, id, poses: {} };
@@ -110,7 +124,7 @@ function prepareFigure(gltf, id) {
   // the animated bones: those whose rotation differs between any two poses
   const S = P.poses.Seated, names = Object.keys(S), list = [];
   for (const n of names) {
-    const get = (pose) => { const e = P.poses[pose] && P.poses[pose][n]; return e && e.quaternion ? new THREE.Quaternion().fromArray(e.quaternion) : null; };
+    const get = (pose) => { const e = P.poses[pose] && P.poses[pose][n]; return e && e.quaternion ? thumbFix(n, new THREE.Quaternion().fromArray(e.quaternion)) : null; };
     const s = get('Seated'), c = get('Couch') || s, r = get('LanceRaised') || s, st = get('Stand') || s;
     if (!s) continue;
     const moves = Math.min(Math.abs(s.dot(c)), Math.abs(s.dot(r)), Math.abs(s.dot(st))) < 0.99999;

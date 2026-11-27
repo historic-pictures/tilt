@@ -16,7 +16,7 @@ import { tourneyHTML, tourneyAct, stopTourneyWatch } from './tourney_screen.js';
 import { BEGIN, VENUES_STORY, OUT_LINES, SEASON_END, fillStory, storyName } from './career_story.js';
 import { sfxPack, setSfxPack, SFX_HAS_OLD } from './audio.js';
 import * as ranks from './ranks.js';
-import { mymusic } from './mymusic.js';
+import { mymusic, isPhone } from './mymusic.js';
 import { ytmusic } from './ytmusic.js';
 import { safeName } from './online.js';
 import { confirmBuy, buyAsk } from './confirm.js';
@@ -100,7 +100,7 @@ export function initMenus(api) {
     const ytp = `<div class="mmlist">${yt.map(id => `<div class="mmrow"><span>${esc(ytTitles[id] || (ytmusic.DEFAULTS[id] || 'youtu.be/' + id))}</span><b data-mm="ytrm" data-id="${id}" aria-label="Remove">✕</b></div>`).join('') || '<div class="mmrow"><span>(empty)</span></div>'}</div>
       <div class="mmadd"><input id="mmLink" placeholder="Paste a YouTube link" autocomplete="off" spellcheck="false"><span class="chip" data-mm="ytadd">Add link</span><span class="chip" data-mm="next">Next ▸</span></div>
       <div class="mmnote">Played by YouTube's own player, shown in the corner. Nothing is downloaded.</div>`;
-    return `<div class="mymusic"><div class="toggles"><span class="lbl">Music source:</span>${chip('game', 'Game music')}${chip('files', 'My files')}${api.touch ? `<span class="chip off" data-tip="YouTube music is desktop only" style="opacity:.4;cursor:default">YouTube</span><span class="mmnote">desktop only</span>` : chip('yt', 'YouTube')}</div>
+    return `<div class="mymusic"><div class="toggles"><span class="lbl">Music source:</span>${chip('game', 'Game music')}${chip('files', 'My files')}${isPhone ? `<span class="chip off" data-tip="YouTube music is desktop only" style="opacity:.4;cursor:default">YouTube</span><span class="mmnote">desktop only</span>` : chip('yt', 'YouTube')}</div>
       ${src === 'files' ? files : src === 'yt' ? ytp : ''}<div class="mmmsg" id="mmMsg">${esc(mmMsg.text)}</div></div>`;
   }
   mymusic.list().then(() => { if (root.dataset.name === 'settings' && root.classList.contains('on')) show('settings'); });

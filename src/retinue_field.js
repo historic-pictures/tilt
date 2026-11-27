@@ -2,6 +2,7 @@
 // Each is a handful of cheap meshes (the way crowd.js builds a person: shared geometry, flat colours) in your livery, with the cap of his post.
 // Positions are kept as [out, fwd] in the frame of YOUR end: out = metres away from the tilt, fwd = the way your horse faces, you at [0, 0].
 // A man runs a short list of steps (walk, act, hold, fn); poses are eased toward targets every frame, so there is no animation system.
+import { GFX } from './gfx.js';
 import * as THREE from 'three';
 import { drawCrest } from './util.js';
 import { LANE_X, START_Z } from './world.js';
@@ -43,7 +44,7 @@ const G = {
 const SKIN = ['#f0c8a4', '#e0ac84', '#c68e63', '#a8704a', '#7c4f33', '#f4d6bb'];
 let mats = new Map();
 const mat = (c) => { let m = mats.get(c); if (!m) { m = new THREE.MeshLambertMaterial({ color: c, side: c === 'banner' ? THREE.DoubleSide : THREE.FrontSide }); mats.set(c, m); } return m; };
-const mesh = (g, c, parent, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(g, mat(c)); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+const mesh = (g, c, parent, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(g, mat(c)); m.position.set(x, y, z); g.boundingSphere || g.computeBoundingSphere(); m.castShadow = g.boundingSphere.radius > 0.22; parent.add(m); return m; };
 const grp = (parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
 
@@ -127,7 +128,7 @@ function makeSide(scene, isLate) {
   /** retinue: profile.retinue ({ id: { name, trait } }); arms: your colours; only the squire in practice. */
   F.setup = function setup(retinue, a, practice, withMaster) {
     F.clear(); arms = a;
-    for (const id of Object.keys(HOME)) { const r = retinue && retinue[id]; if (id !== 'master' && r && typeof r === 'object' && (id === 'squire' || !practice)) men[id] = build(id, r, a.c1, a.c2); }
+    for (const id of Object.keys(HOME)) { const r = retinue && retinue[id]; if (id !== 'master' && r && typeof r === 'object' && (id === 'squire' || (!practice && !GFX.noLife))) men[id] = build(id, r, a.c1, a.c2); }
     if (withMaster) { men.master = build('master', { name: 'master of arms' }, '#4a4038', '#4a4038'); buildMark(); }      // your trainer, at the rail
     root.visible = Object.keys(men).length > 0; prevMode = '';
   };

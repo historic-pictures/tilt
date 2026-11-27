@@ -284,7 +284,9 @@ export function buildCrowd(group, spots, opts = {}) {
     let g = partGeo(name + LOD);
     if (norm) { g = g.clone(); g.scale(1, 1 / BH, 1); const f = g.attributes.aFat; for (let k = 0; k < f.count; k++) f.setY(k, f.getY(k) / BH); } else g = shareGeo(g);      // bodies: the shoulder line at y = 1 (the matrix carries the height)
     const c = Math.max(1, count), par = new THREE.InstancedBufferAttribute(new Float32Array(c * 4), 4), c2 = new THREE.InstancedBufferAttribute(new Float32Array(c * 4), 4);
-    par.setUsage(THREE.DynamicDrawUsage); g.setAttribute('iPar', par); g.setAttribute('iCol2', c2); g.userData.par = par.array; g.userData.c2 = c2.array; g.userData.parA = par; return g;
+    g.setAttribute('iPar', par); g.setAttribute('iCol2', c2); g.userData.par = par.array; g.userData.c2 = c2.array; g.userData.parA = par;
+    if (name === 'arm') { const bd = new THREE.InstancedBufferAttribute(new Float32Array(c), 1); bd.setUsage(THREE.DynamicDrawUsage); g.setAttribute('iBend', bd); g.userData.bend = bd.array; g.userData.bendA = bd; }      // the elbow, per instance (people.js shader): no extra draw call
+    return g;
   };
   const bodyGeos = BODIES.map((b, k) => inst(b, nBody[k], true)), headGeo = inst('head', n), armGeoL = inst('arm', n), armGeoR = inst('arm', n);
   const hatGeos = HATS_LIST.map((h, k) => (h ? inst(h, nHat[k]) : null));
@@ -490,7 +492,7 @@ export function buildCrowd(group, spots, opts = {}) {
   let focus = 0, focusInit = false, upLvl = 0;
   const RISE0 = [0, 0.1, 0.5, 0.55], RISEMAX = [1, 1, 0.6, 0.45];   // by class: when the stand begins to rise, and how far
   const mBd = mBodies.map(m => m.instanceMatrix.array), mH = mHead.instanceMatrix.array;
-  const mL = mArmL.instanceMatrix.array, mR = mArmR.instanceMatrix.array;
+  const mL = mArmL.instanceMatrix.array, mR = mArmR.instanceMatrix.array, bendArr = [armGeoL.userData.bend, armGeoR.userData.bend];
   const mHat = mHats.map(m => (m ? m.instanceMatrix.array : null));
   const mFA = mFlagA.instanceMatrix.array, mFB = mFlagB.instanceMatrix.array, mK = mKerch.instanceMatrix.array;
   const HIP = 0.62;      // where a seated figure folds (the people material does the folding; see src/people.js)
@@ -780,11 +782,19 @@ export function buildCrowd(group, spots, opts = {}) {
         xf(vx, vy, vz);
         const wdx = ox, wdy = oy, wdz = oz;
         const y0 = -wdx, y1 = -wdy, y2 = -wdz; // arm geometry points along local -Y
-        let x0, x1, x2;
-        if (y2 > 0.9 || y2 < -0.9) { x0 = 0; x1 = y2; x2 = -y1; } else { x0 = y1; x1 = -y0; x2 = 0; }
-        const xl = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2) || 1;
-        x0 /= xl; x1 /= xl; x2 /= xl;
-        const z0 = x1 * y2 - x2 * y1, z1 = x2 * y0 - x0 * y2, z2 = x0 * y1 - x1 * y0;
+        let x0, x1, x2, z0, z1, z2;
+        const fd = r6 * y0 + r7 * y1 + r8 * y2;      // the arm's frame has its z toward the figure's front, so the elbow (people.js shader) always bends the forearm forward; an arm pointing straight along the front or back keeps the old frame
+        if (fd > -0.9 && fd < 0.9) {
+          z0 = r6 - y0 * fd; z1 = r7 - y1 * fd; z2 = r8 - y2 * fd; const zl = Math.sqrt(z0 * z0 + z1 * z1 + z2 * z2) || 1; z0 /= zl; z1 /= zl; z2 /= zl;
+          x0 = y1 * z2 - y2 * z1; x1 = y2 * z0 - y0 * z2; x2 = y0 * z1 - y1 * z0;
+        } else {
+          if (y2 > 0.9 || y2 < -0.9) { x0 = 0; x1 = y2; x2 = -y1; } else { x0 = y1; x1 = -y0; x2 = 0; }
+          const xl = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2) || 1;
+          x0 /= xl; x1 /= xl; x2 /= xl;
+          z0 = x1 * y2 - x2 * y1; z1 = x2 * y0 - x0 * y2; z2 = x0 * y1 - x1 * y0;
+        }
+        // the elbow: a little slack when the arm hangs, more as it comes forward (clapping, hands to the chest) or goes up (cheering); the cheer pumps it
+        bendArr[arm][i] = Math.min(0.62, 0.14 + 0.62 * Math.max(0, vz) + 0.3 * Math.max(0, vy) + (wCheer > 0.001 ? 0.12 * wCheer * Math.sin(t * (7 + 2 * kn) + phi + arm * 2.1) : 0));
         wm(arm === 0 ? mL : mR, o, x0 * aw, x1 * aw, x2 * aw, y0 * armL, y1 * armL, y2 * armL, z0 * aw, z1 * aw, z2 * aw, shx, shy, shz);
         handX = shx + wdx * armL * 0.95; handY = shy + wdy * armL * 0.95; handZ = shz + wdz * armL * 0.95;
       }
@@ -850,7 +860,7 @@ export function buildCrowd(group, spots, opts = {}) {
 
     for (let k = 0; k < 3; k++) { mBodies[k].instanceMatrix.needsUpdate = true; bodyGeos[k].userData.parA.needsUpdate = true; }
     mHead.instanceMatrix.needsUpdate = true;
-    mArmL.instanceMatrix.needsUpdate = true; mArmR.instanceMatrix.needsUpdate = true;
+    mArmL.instanceMatrix.needsUpdate = true; mArmR.instanceMatrix.needsUpdate = true; armGeoL.userData.bendA.needsUpdate = true; armGeoR.userData.bendA.needsUpdate = true;
     for (let k = 1; k < HATS_LIST.length; k++) mHats[k].instanceMatrix.needsUpdate = true;
     mKerch.instanceMatrix.needsUpdate = true;
     mFlagA.instanceMatrix.needsUpdate = true; mFlagB.instanceMatrix.needsUpdate = true;
@@ -870,5 +880,7 @@ export function buildCrowd(group, spots, opts = {}) {
   // initial pose so the first rendered frame is valid
   update(0, 0, { excitement: 0.12, anticipation: 0, favour: 0, scorer: 0, waveStart: -1e9, focusZ: 0 });
 
-  return { update, setColors, count: n, ladies, spotlight, voiceSpot };
+  /** Take the whole crowd out of the scene (world.thinCrowd builds a thinner one in its place). The shared part geometries stay for the next build. */
+  const dispose = () => { for (const m of all) { group.remove(m); m.dispose(); } };
+  return { update, setColors, count: n, ladies, spotlight, voiceSpot, dispose };
 }

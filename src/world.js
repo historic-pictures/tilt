@@ -304,9 +304,11 @@ export function buildWorld(scene, renderer, venue = {}) {
   }
 
   // ---------- crowd ----------
-  if (GFX.crowd < 1 && !T) {      // lower tiers: fewer people (the notable ones, class 2 and 3, always stay)
-    const keep = rng(777); const kept = crowdSpots.filter(s => s[4] >= 2 || keep() < GFX.crowd); crowdSpots.length = 0; crowdSpots.push(...kept);
-  }
+  // lower tiers: fewer people (the notable ones, class 2 and 3, always stay). Each spot has its own draw, so a thinner crowd is always a subset of a fuller one (GFX.crowdLive: the safety net thins the stands first, see gfx.js)
+  const allSpots = crowdSpots.slice(), keepU = (() => { const k = rng(777); return allSpots.map(() => k()); })();
+  const crowdKeep = (d) => allSpots.filter((s, i) => s[4] >= 2 || keepU[i] < d);
+  let crowdAcc = 0, crowdN = 0, crowdD = 1, crowdCols = [V.colorsA, V.colorsB];
+  if (GFX.crowd * GFX.crowdLive < 1 && !T) { crowdD = GFX.crowd * GFX.crowdLive; const kept = crowdKeep(crowdD); crowdSpots.length = 0; crowdSpots.push(...kept); }
   world.crowd = T ? { update() {}, setColors() {}, ladies: () => [], spotlight() {}, voiceSpot: () => null } : buildCrowd(grp, crowdSpots, { seed: 99, colorsA: V.colorsA, colorsB: V.colorsB });
   world.crowdState = { excitement: 0.12, anticipation: 0, favour: 0, scorer: 0, waveStart: -999, focusZ: 0 };
 
@@ -326,7 +328,14 @@ export function buildWorld(scene, renderer, venue = {}) {
     if (propGrp) { grp.remove(propGrp); propGrp.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
     propGrp = new THREE.Group(); grp.add(propGrp);
     props = T ? null : buildProps(propGrp, { seed: 7, colorsA, colorsB, modelled: !!world.lists });
-    world.crowd.setColors(colorsA, colorsB);
+    crowdCols = [colorsA, colorsB]; world.crowd.setColors(colorsA, colorsB);
+  };
+  /** Thin the stands in place to GFX.crowd * GFX.crowdLive (main.js calls it when the safety net or the benchmark takes a crowd step): rebuilds the crowd from the same spots minus the dropped ones. */
+  world.thinCrowd = () => {
+    const d = GFX.crowd * GFX.crowdLive; if (T || !world.crowd.dispose || d >= crowdD - 1e-3) return false;
+    crowdD = d; world.crowd.dispose(); const sp = crowdKeep(d);
+    world.crowd = buildCrowd(grp, sp, { seed: 99, colorsA: crowdCols[0], colorsB: crowdCols[1] }); world.crowd.setColors(crowdCols[0], crowdCols[1]);
+    return sp.length;
   };
 
   // ---------- tents ----------
@@ -397,7 +406,7 @@ export function buildWorld(scene, renderer, venue = {}) {
       }
       f.geo.attributes.position.needsUpdate = true;
     }
-    world.crowd.update(t, dt, world.crowdState);
+    crowdAcc += dt; if (++crowdN >= (GFX.crowdRate || 1)) { world.crowd.update(t, crowdAcc, world.crowdState); crowdAcc = 0; crowdN = 0; }      // (the stands move at 30 / 20 / 15 Hz on high / medium / low: the crowd's JS was ~3.8 ms of every frame)
     if (props) props.update(t, dt, world.propState);
   };
 

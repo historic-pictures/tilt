@@ -25,7 +25,7 @@ const GEO = {
 };
 const mats = {};
 export const mat = (c, o) => mats[c + (o ? 'd' : '')] || (mats[c + (o ? 'd' : '')] = new THREE.MeshLambertMaterial({ color: c, side: o ? THREE.DoubleSide : THREE.FrontSide }));
-export const mesh = (g, c, parent, x = 0, y = 0, z = 0, dbl) => { const m = new THREE.Mesh(g, mat(c, dbl)); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+export const mesh = (g, c, parent, x = 0, y = 0, z = 0, dbl) => { const m = new THREE.Mesh(g, mat(c, dbl)); m.position.set(x, y, z); g.boundingSphere || g.computeBoundingSphere(); m.castShadow = g.boundingSphere.radius > 0.22; parent.add(m); return m; };      // (only the big pieces cast a shadow: the small ones were ~370 shadow draw calls a frame)
 export const grp = (parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 
 /**

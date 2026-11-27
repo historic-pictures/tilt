@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildWorld, LANE_X, BARRIER_X, LAT_CLOSE, LAT_SHAVE, LAT_WIDE, START_Z, LIST_HALF } from './world.js';
 import { Jouster, preloadHorse } from './jouster.js';
 import { cleanBody, bodyFor, applyBody } from './body_types.js';
+import { initFps } from './fps_overlay.js';
 import { preloadRider, rigHas, RIG } from './rider_rig.js';
 import { CELEBS, celStart, celClear, celActive, celCam, aiPick, aiLoser, favourites, promptChoices, showPrompt, hidePrompt, promptKey, cleanCel, heraldLine } from './celebrate.js';
 import { FX } from './fx.js';
@@ -4343,6 +4344,7 @@ GFX.listeners.push((ev) => {
   renderer.setPixelRatio(GFX.pixelRatio()); syncPost(); resize();
   if (world && (GFX.shadow !== shadowNow || GFX.shadowOn !== shadowOnNow)) { if (world.setShadowSize) world.setShadowSize(GFX.shadow); if (world.setShadows) world.setShadows(GFX.shadowOn); }
   shadowNow = GFX.shadow; shadowOnNow = GFX.shadowOn;
+  if (ev.kind === 'crowd' || ev.kind === 'tier') { if (world && world.thinCrowd) world.thinCrowd(); }      // (a thinner crowd: the stands are rebuilt in place)
   if (ev.kind === 'ov') return;
   console.info('[gfx] ' + (ev.kind === 'pr' ? 'frames averaged ' + ev.avg.toFixed(1) + ' ms: pixel ratio ' + ev.pr.toFixed(2) : ev.kind + ' ' + ev.tier + ' (' + ev.src + ')'));
   if (ev.kind === 'tier' && ev.src === 'net') toast('Graphics', 'Graphics lowered for smoother play — change in Settings', 8);
@@ -4455,15 +4457,16 @@ showMusicBtn();
 { // show the saved sound state on the button (no save); browsers need a gesture before audio starts
   showSoundBtn(!S.muted);
   const wake = () => {
-    window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake);
+    if (audio === noop) return;      // the sound code is still loading: keep listening, this tap must not be spent on nothing
+    window.removeEventListener('pointerdown', wake, true); window.removeEventListener('keydown', wake, true);
     if (S.muted) return;
-    try { audio.init(); const c = audio.ctx; if (c && c.state === 'suspended') c.resume(); if (audio.music && audio.music.want) audio.music.play(audio.music.want); } catch (e) { /* audio not ready */ }
+    try { audio.init(); const c = audio.ctx; if (c && c.state === 'suspended') c.resume(); if (audio.music && audio.music.want) audio.music.play(audio.music.want); if (audio.music && audio.music.refreshMine) audio.music.refreshMine(); } catch (e) { /* audio not ready */ }      // refreshMine starts the YouTube radio inside this first gesture (it is a no-op for the game's own music)
   };
-  window.addEventListener('pointerdown', wake); window.addEventListener('keydown', wake);
+  window.addEventListener('pointerdown', wake, true); window.addEventListener('keydown', wake, true);      // capture: no overlay (welcome screen, menus) can swallow the first click
 }
 G.attract = attract;
 G.drama = { conditionOf, lancesLeft, startTend, startBatter, doYield, openYield, swapHelm, dropLance: (side = 0) => dropLance(side ? opp : player, side), yieldOk, aiYields };
-G.squireCheer = (sit) => squireCheer(sit, 0.2); G.aftermath = afterM; G.lanceBits = () => lanceBits; G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.celFire = (who, id, mode) => celFire(who === 'opp' ? opp : player, id, mode || 'course'); G.celStop = celStop; G.celCourse = celCourse; G.celMatch = (w) => celMatch(w === 'opp' ? opp : player, w === 'opp' ? player : opp); G.fx = fx; G.endReplay = endReplay; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
+G.squireCheer = (sit) => squireCheer(sit, 0.2); initFps(); G.aftermath = afterM; G.lanceBits = () => lanceBits; G.online = Object.assign({ NET, S }, onlineApi); G.setSound = setSound; G.celFire = (who, id, mode) => celFire(who === 'opp' ? opp : player, id, mode || 'course'); G.celStop = celStop; G.celCourse = celCourse; G.celMatch = (w) => celMatch(w === 'opp' ? opp : player, w === 'opp' ? player : opp); G.fx = fx; G.endReplay = endReplay; G.post = post; G.startMatch = startMatch; G.advance = advance; G.spur = spur; G.interlude = interlude; G.startReplay = startReplay; G.openReplays = openReplays; G.openHL = openHL; G.closeHL = closeHL; G.closeReplays = closeReplays; G.setPaused = setPaused; G.replayView = replayView; G.burst = burst; G.menus = menus; G.saveProfile = saveProfile; Object.defineProperty(G, 'profile', { get: () => profile });
 resize();
 const firstVenue = Math.min(profile.venue || 0, VENUES.length - 1);
 // Staged loading: the menu needs only the two models (and, at medium and high, the first sky, but not for more than a few seconds).

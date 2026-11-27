@@ -103,7 +103,7 @@ export const makeHead = (body) => headFor(body.face, body.sex, body.build, SKINS
 /** The same head from plain values (the jointed figures of src/people.js use it): face index, sex, build, skin and hair as colours; hatted = he wears a hat (the hair on top of the head is left off, it would come through). */
 export function headFor(faceI, sex, build, skinHex, hairHex, hatted = false) {
   const face = FACES[faceI] || FACES[0], G = headGeos(face, sex, build), M = mats(skinHex, hairHex), g = new THREE.Group(); g.name = 'KnightHead';
-  const add = (geo, mat, name) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.name = name; m.castShadow = name === 'head'; m.receiveShadow = true; m.frustumCulled = false; g.add(m); };
+  const add = (geo, mat, name) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.name = name; m.castShadow = false; /* (a head's shadow is the body's: one caster fewer per figure) */ m.receiveShadow = true; m.frustumCulled = false; g.add(m); };
   add(G.head, M.face, 'head'); if (!hatted || face.hair === 'page' || face.hair === 'long') add(G.hair, M.hair, 'hair'); add(G.beard, M.hair, 'beard');
   return g;
 }

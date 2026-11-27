@@ -155,7 +155,7 @@ function skelUpdate(J, B, e) {
 function bodyUpdate(J, B) {
   const s = B.s, R = J.rig;
   if (B.head) {
-    const hv = J.helm.visible, bare = hv && !!J.helmOff;
+    const hv = J.helm.visible, bare = hv && (!!J.helmOff || !!J.celHelmOff);      // (celHelmOff: a celebration that waves the helm leaves the head bare too)
     B.head.visible = bare; if (R.headMesh && bare) R.headMesh.visible = false;      // (the old faceless head stays under the helm)
   }
   if (Math.abs(s - 1) < 1e-4) { if (B.moved) { for (const f of B.follow) { f.o.matrixAutoUpdate = true; f.o.position.copy(f.pos); f.o.updateMatrix(); } B.moved = false; } return; }
