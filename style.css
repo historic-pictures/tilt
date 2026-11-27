@@ -336,11 +336,13 @@ kbd, .keys kbd { font-family: var(--caps); font-size: 14px; color: var(--ink); p
 .renown .bar { height: 6px; } .renown .bar > div { background: var(--red); }
 .skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
 .skill { border: 1px solid var(--rule); border-radius: 2px; padding: 10px 14px 12px; }
-.skill b { display: block; font-family: var(--caps); font-size: 20px; color: var(--ink); } .skill em { float: right; font-style: normal; font-family: var(--caps); font-size: 13px; letter-spacing: .1em; color: var(--ink-soft); margin-top: 5px; }
+.skill .skhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.skill b { display: block; font-family: var(--caps); font-size: 20px; color: var(--ink); } .skill em { flex: none; white-space: nowrap; font-style: normal; font-family: var(--caps); font-size: 13px; letter-spacing: .1em; color: var(--ink-soft); }
+.sknote { margin: -2px 0 10px; color: var(--ink2); }
 .skill span { display: block; font-size: 17px; line-height: 1.25; font-style: italic; color: var(--ink2); margin-top: 2px; }
 .skill.known { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); background: rgba(184, 134, 43, .14); } .skill.known em { color: var(--red); }
 .skill.open { cursor: pointer; border-color: var(--ink); } .skill.open:hover { background: rgba(255, 250, 228, .35); } .skill.open em { color: var(--green); }
-.skill.locked { opacity: .6; }
+.skill.locked { opacity: .72; }
 .arts { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 6px 0; }
 .art { padding: 8px 12px; border: 1px solid var(--rule); border-radius: 2px; font-size: 16px; line-height: 1.25; }
 .art b { display: block; font-family: var(--caps); font-size: 18px; color: var(--red2); }
