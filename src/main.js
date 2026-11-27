@@ -1107,7 +1107,7 @@ function beginCourse(first = false) {
   if (!first) { M.hp.body = clamp(M.hp.body + REST.body * rs, 0, 1); M.agit = clamp(M.agit - crew('calm'), 0, 1); if (man('groom')) M.agit = clamp(M.agit - man('groom').calm, 0, 1); if (man('armourer')) M.hp.body = clamp(M.hp.body + man('armourer').mend, 0, 1); if (man('farrier')) M.hp.horse = clamp(M.hp.horse + man('farrier').heal, 0, 1); player.mend(man('armourer') ? PHYS.damage.mend : 0, man('squire') ? PHYS.damage.squireShield : 0); } M.focus = clamp(M.focus + 0.35 + (sk('nerve') ? SKILLS.nerve.refill : 0) + 0.3 * Math.max(0, M.fav.commons), 0, M.hp.body); M.agit = clamp(M.agit - 0.1, 0, 1);
   S.mode = 'ready'; S.slowT = 0; bobHist.y = bobHist.v = bobHist.a = 0;
   $('banner').classList.add('hidden'); $('hud').classList.remove('hidden'); $('card').classList.add('hidden');
-  if (first) $('verdict').classList.add('hidden');
+  if (first) $('verdict').classList.add('hidden'); else fadeVerdict();      // the next course is ready: the course card goes by itself (it used to stay up, hiding the prompt, until you spurred)
   const extra = M.course > M.courses;
   if (first && !M.practice && !G.auto) startHelmBeat();      // the helm is fitted before the lances go up
   // now and then the squire mutters where a bold knight might look (until he has done it once; at most a few times ever)
@@ -1135,6 +1135,12 @@ function beginCourse(first = false) {
   updateHud(true);
 }
 
+/** Fade the course card out (0.35 s), then hide it. showVerdict() cancels a fade still running. */
+function fadeVerdict() {
+  const v = $('verdict'); if (v.classList.contains('hidden')) return;
+  v.classList.add('vfade'); clearTimeout(fadeVerdict.t);
+  fadeVerdict.t = setTimeout(() => { if (v.classList.contains('vfade')) { v.classList.add('hidden'); v.classList.remove('vfade'); } }, 350);
+}
 /** The lances come down to the carry and the course is ridden (your first tap after the signal; online, everyone goes at the signal itself). */
 function startCharge() {
   S.mode = 'charge'; C.t = 0; C.cut = null; player.raiseT = 0; if (!M.practice && !S.online) opp.raiseT = 0;
@@ -2898,7 +2904,7 @@ function showVerdict() {
   $('vhint').innerHTML = touchMode ? 'Your knight wheels about for the next course' + (C.replayed && C.rec.f.length > 20 && !S.online ? ' &nbsp;·&nbsp; <button class="btn small" id="vhintReplay">Replay</button>' : '') : 'Your knight wheels about for the next course &nbsp;·&nbsp; <b>R</b> watch the replay again';
   { const rb = $('vhintReplay'); if (rb) rb.onclick = (e) => { e.stopPropagation(); if (C && S.mode === 'after' && !C.cut && !R) startReplay({ frozen: true }); }; }
   $('flashTxt').className = '';
-  $('verdict').classList.remove('hidden');
+  clearTimeout(fadeVerdict.t); $('verdict').classList.remove('vfade', 'hidden');
   scoreLine();
 }
 /** The herald reads the score only when it is news: the lead changes, it comes level, or the last course is next. The HUD shows the rest. */

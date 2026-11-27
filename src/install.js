@@ -72,7 +72,7 @@
 
   function render() {
     if (!el) return;
-    el.innerHTML = '<div class="ig-panel"><img class="ig-logo" src="assets/ui/logo.svg" alt="" draggable="false">' +
+    el.innerHTML = '<div class="ig-panel"><img class="ig-logo" src="assets/ui/icons/emblem-128.webp" srcset="assets/ui/icons/emblem-128.webp 1x, assets/ui/icons/emblem-256.webp 2x" alt="" draggable="false">' +
       '<div class="ig-main"><h1>Install Joust Revival</h1>' + body() +
       '<p class="ig-why"><i>Why?</i> The game needs the whole screen, landscape, with no browser bars.</p>' +
       (soft ? '<button class="ig-btn ig-close" id="igClose">Close</button>' : '') + '</div></div>';
