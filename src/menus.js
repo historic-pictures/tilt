@@ -84,7 +84,8 @@ export function initMenus(api) {
   const crests = () => root.querySelectorAll('canvas[data-arms]').forEach(c => drawCrest(c, JSON.parse(c.dataset.arms)));
   const crest = (arms, w = 40, h = 48) => `<canvas width="${w}" height="${h}" data-arms='${JSON.stringify(arms)}'></canvas>`;
   // every screen is a scroll: the skin, then the page that is written on (and scrolls)
-  const scroll = (cls, html) => `<div class="${cls} scroll"><i class="paper"></i><div class="page">${html}</div><div class="helpstrip" aria-live="polite"></div></div>`;
+  const ORN = '<svg class="orn" aria-hidden="true"><use class="u-l" href="#orn" width="100%" height="100%"/><use class="u-s" href="#orn-s" width="100%" height="100%"/></svg>';      // the penwork fleur-de-lis rule under every page heading (one shared <symbol> in index.html)
+  const scroll = (cls, html) => `<div class="${cls} scroll"><i class="paper"></i><div class="page">${html.replace(/<div class="(top|stop)"([^>]*)>/g, (m) => m + ORN)}</div><div class="helpstrip" aria-live="polite"></div></div>`;
 
   /** "Your own music": songs from the player's own computer, kept in this browser only (src/mymusic.js). */
   const mmMsg = { text: '' };

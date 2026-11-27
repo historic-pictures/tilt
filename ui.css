@@ -23,6 +23,7 @@
   --caps: 'EB Garamond SC', 'EB Garamond', Georgia, serif;
   --body: 'EB Garamond', Georgia, 'Times New Roman', serif;
   --head: var(--caps); --black: var(--display); --pirata: var(--display);
+  --hs: 98px;                      /* the help strip under a menu page (52 + 6 + 1 + 38 margin): menu pages leave this much room */
   --bw: 34px;                      /* thickness of the page frame */
   --lz: 14px;                      /* lozenge size in the CSS fallback frame */
 }
@@ -57,8 +58,9 @@ body.lowui { --bw: calc(16px + var(--lz)); }
 .sheet h5::after, .menu h5::after, .sect h5::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--gold), transparent); align-self: center; display: block; }
 .menu h5, .sect h5 { display: flex; align-items: baseline; }
 .sheet p, .sheet .pick p { font-size: 20px; }
-.sheet .top { border-bottom: 0; padding-bottom: 12px; position: relative; }
-.sheet .top::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 18px; background: url('assets/ui/divider.svg') center / auto 100% no-repeat; }
+.sheet .top { border-bottom: 0; padding-bottom: 22px; position: relative; }
+.orn { position: absolute; left: 50%; bottom: -3px; width: 300px; max-width: 100%; height: 24px; transform: translateX(-50%); pointer-events: none; overflow: visible; } .orn .u-s { display: none; }
+@media (max-width: 700px), (max-height: 520px) { .orn { width: 184px; } .orn .u-l { display: none; } .orn .u-s { display: inline; } }
 .purseline { margin: 2px 0 0; }
 .debt { color: var(--red); }
 .fineprint { text-align: center; font-style: italic; font-size: 17px; color: var(--ink2); margin: 10px 0 0; }
@@ -155,10 +157,10 @@ details.more .morebody p { margin: 6px 0; font-size: 18px; } details.more .moreb
 input.name { font-family: var(--caps); border-width: 0 0 1.5px 0; border-radius: 0; background: transparent; }
 .sect select { min-height: 40px; } .sect input[type="range"], .vol input { accent-color: var(--vermilion); }
 .sect .btn { font-size: 18px; }
-.stop { display: flex; justify-content: space-between; align-items: center; gap: 14px; position: relative; padding-bottom: 12px; }
-.stop::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 18px; background: url('assets/ui/divider.svg') center / auto 100% no-repeat; }
+.stop { display: flex; justify-content: space-between; align-items: center; gap: 14px; position: relative; padding-bottom: 22px; }
+
 .settings { width: 920px; max-width: 94vw; left: 50%; transform: translate(-50%, -50%); }
-.settings .page { max-height: 92vh; }
+.settings .page { max-height: calc(92vh - var(--hs)); }
 .mymusic .chip { font-size: 17px; } .mmnote, .mmmsg, .mmnow { font-size: 15px; }
 
 /* ---------- the "?" seal and the tooltip scroll ---------- */
@@ -239,7 +241,7 @@ body.touch #tipScroll p { font-size: 17px; }
 body.touch { --bw: 18px; --lz: 9px; }
 body.touch.small #screen > .scroll, body.touch.small #card { zoom: 1 !important; }
 body.touch.small #screen .page { max-height: none; }
-body.touch.small #screen .menu .page { max-height: 94vh; } body.touch.small #card .page { max-height: 94vh; }
+body.touch.small #screen .menu .page { max-height: calc(94vh - var(--hs)); } body.touch.small #card .page { max-height: 94vh; }
 body.touch.small #verdict { zoom: .85; }
 body.touch .chip { padding: 6px 14px 7px; min-height: 40px; display: inline-flex; align-items: center; font-size: 17px; }
 body.touch .btn { min-height: 42px; font-size: 18px; padding: 6px 18px 7px; }
@@ -254,7 +256,7 @@ body.touch.compact #screen .sheet:not(.slim) { inset: 2.5vh 2vw; }
 body.touch.compact #screen .sheet .page { position: absolute; inset: 0; overflow-y: auto; max-height: none; }
 body.touch.compact #screen .sheet.slim { width: 96vw; } body.touch.compact #screen .sheet.slim .page { position: relative; max-height: 94vh; }
 body.touch.compact .sheet h3 { font-size: 36px; }
-body.touch.compact .sheet .top { gap: 12px; padding-bottom: 8px; } body.touch.compact .sheet .top::after, body.touch.compact .stop::after { height: 10px; }
+body.touch.compact .sheet .top { gap: 12px; padding-bottom: 18px; } body.touch.compact .orn { height: 18px; width: 140px; bottom: -2px; }
 body.touch.compact .sheet h5, body.touch.compact .menu h5, body.touch.compact .sect h5 { font-size: 16px; margin: 12px 0 6px; }
 body.touch.compact .sheet p, body.touch.compact .sheet .top p { font-size: 16px; line-height: 1.25; }
 body.touch.compact #screen[data-name="exhibition"] .top p { display: block; }
@@ -276,7 +278,7 @@ body.touch.compact #screen[data-name="circuit"] .page > .venues { grid-template-
 body.touch.compact #screen[data-name="circuit"] .venue { display: block; }
 body.touch.compact #screen[data-name="circuit"] .venue b, body.touch.compact #screen[data-name="circuit"] .venue i { display: block; }
 body.touch.compact .settings, body.touch.compact .menu.settings { width: min(880px, 96vw); }
-body.touch.compact #screen .menu.settings .page { max-height: 94vh; }
+body.touch.compact #screen .menu.settings .page { max-height: calc(94vh - var(--hs)); }
 body.touch.compact .sgrid { grid-template-columns: 1fr 1fr; gap: 0 22px; }
 body.touch.compact #screen[data-name="armoury"] .sheet { left: 30vw; }
 body.touch.compact .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
@@ -288,7 +290,7 @@ body.touch.compact .feat, body.touch.compact .skill, body.touch.compact .art { f
 body.touch.compact .ribbon { font-size: 18px; padding: 18px 0; min-width: 200px; border-image-width: 0 40px; border-width: 0 40px; }
 /* the main menu: two columns, built to fit 812x375 and 667x375 at full size */
 body.touch.compact #screen .menu.main { width: min(800px, 98vw); left: 50%; transform: translate(-50%, -50%); }
-body.touch.compact #screen .menu.main .page { display: grid; grid-template-columns: 0.9fr 1.1fr; column-gap: 22px; align-items: center; max-height: 98vh; }
+body.touch.compact #screen .menu.main .page { display: grid; grid-template-columns: 0.9fr 1.1fr; column-gap: 22px; align-items: center; max-height: calc(98vh - var(--hs)); }
 body.touch.compact #screen .menu.main .page > * { grid-column: auto; }
 body.touch.compact #screen .menu.main .mini { grid-column: 1; grid-row: 1; margin: 0; } body.touch.compact #screen .menu.main .mini img { height: 104px; }
 body.touch.compact #screen .menu.main h1 { grid-column: 1; grid-row: 2; font-size: 72px; margin: 0; }
@@ -297,7 +299,7 @@ body.touch.compact #screen .menu.main .standing { grid-column: 1 / -1; grid-row:
 body.touch.compact .plaque.big { font-size: 30px; min-height: 54px; padding-top: 10px; } body.touch.compact .trio .plaque { font-size: 20px; min-height: 46px; }
 body.touch.compact .menu button.shieldbtn { padding: 0 2px; } body.touch.compact .shield { width: 46px; height: 54px; } body.touch.compact .shield .ico { width: 26px; height: 26px; } body.touch.compact .shieldbtn b { font-size: 15px; }
 body.touch.compact .menu h2 { font-size: 14px; }
-body.touch.compact #screen .menu.welcome { width: min(700px, 98vw); } body.touch.compact #screen .menu.welcome .page { display: block; max-height: 96vh; }
+body.touch.compact #screen .menu.welcome { width: min(700px, 98vw); } body.touch.compact #screen .menu.welcome .page { display: block; max-height: calc(96vh - var(--hs)); }
 body.touch.compact .menu.welcome h1 { font-size: 54px; }
 /* the end-of-match card: one column at full size, scrolling */
 body.touch.compact #card, body.touch.compact #card:has(#cardFacts > *) { width: min(780px, 98vw); }
@@ -442,7 +444,7 @@ body.touch.portrait { --bw: 16px; --lz: 8px; }
 body.touch.portrait #screen .scroll > .page, body.touch.portrait .menu .page, body.touch.portrait .sheet .page, body.touch.portrait #card .page, body.touch.portrait #pmenu .page { padding: calc(var(--bw) + 8px) calc(var(--bw) + 8px); }
 body.touch.portrait #screen { padding-left: var(--sl); padding-right: var(--sr); padding-top: var(--st); padding-bottom: var(--sb); }
 body.touch.portrait .menu, body.touch.portrait .menu.welcome, body.touch.portrait .menu.settings, body.touch.portrait #screen .menu.main { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100vw - 16px - var(--sl) - var(--sr))); max-width: none; }
-body.touch.portrait .menu .page, body.touch.portrait #screen .menu .page { max-height: calc(100dvh - 16px - var(--st) - var(--sb)); }
+body.touch.portrait .menu .page, body.touch.portrait #screen .menu .page { max-height: calc(100dvh - 16px - var(--st) - var(--sb) - var(--hs)); }
 body.touch.portrait .menu h1 { font-size: 80px; }
 body.touch.portrait .menu .mini img { max-height: 120px; width: 100%; object-fit: cover; }
 body.touch.portrait .menu.welcome .mini { display: block; }
@@ -678,7 +680,7 @@ body.touch.portrait #discordBtn { right: calc(var(--sr, 0px) + 56px); bottom: ca
 /* ---------- the help strip: one info bar along the bottom of each menu panel (replaces the floating tooltips in the menus) ---------- */
 .scroll > .helpstrip { position: relative; z-index: 2; font-family: var(--body); color: var(--ink); line-height: 1.22; overflow: hidden; }
 .sheet.scroll > .helpstrip { position: absolute; left: 50px; right: 50px; bottom: 32px; height: 54px; padding: 6px 14px 4px; border-top: 1px solid var(--gold); background: linear-gradient(rgba(255, 250, 228, .0), rgba(226, 191, 94, .16)); }
-.menu.scroll > .helpstrip { margin: 0 34px 38px; min-height: 52px; padding: 6px 4px 0; border-top: 1px solid var(--gold); font-size: 15px; }
+.menu.scroll > .helpstrip { margin: 0 34px 38px; height: 52px; padding: 6px 4px 0; border-top: 1px solid var(--gold); font-size: 15px; }
 .helpstrip .ht { display: block; font-family: var(--caps); font-size: 13px; letter-spacing: .12em; color: var(--red); font-weight: 400; text-transform: none; }
 .helpstrip .hb { font-size: 17px; font-style: italic; } .menu .helpstrip .hb { font-size: 15px; }
 .helpstrip .coin { display: inline-flex; align-items: center; gap: .15em; vertical-align: middle; font-style: normal; } .helpstrip .coin img, .helpstrip .coin svg { width: 1.1em; height: 1.1em; }
@@ -693,7 +695,8 @@ body.touch.portrait #discordBtn { right: calc(var(--sr, 0px) + 56px); bottom: ca
 body.touch.compact .menu h1.wmark.txt .wm-text { font-size: min(40px, calc((100cqw - 84px) / 6.2)) !important; }
 body.touch.compact .menu.welcome h1.wmark.txt .wm-text { font-size: min(36px, calc((100cqw - 68px) / 6.2)) !important; }
 /* the welcome banner (painted unhorsing scene, 21:9): fills the header box, the falling knight and the broken lance stay in view */
-.menu.welcome .mini img { width: 100%; height: 132px; object-fit: cover; object-position: 38% 22%; display: block; }
+.menu.welcome .mini img { width: 100%; height: 132px; object-fit: cover; object-position: 30% 6%; display: block; }
+.menu.welcome .mini { border: 0; border-bottom: 2px solid var(--gold); box-shadow: 0 1px 0 var(--ink); }      /* the picture is cropped inside its own painted border; a thin gold-and-ink rule closes it */
 
 /* phones: the title wraps onto two lines ("Joust" / "Revival") at a comfortable size instead of shrinking; every panel scrolls inside its frame */
 body.touch .menu h1.wmark.txt .wm-text { white-space: normal !important; text-wrap: balance; line-height: .98; font-size: 44px !important; max-width: 5.5em !important; }
@@ -714,7 +717,10 @@ body.touch.portrait .armstage { grid-template-rows: 150px minmax(0, 1fr); overfl
 body.touch.portrait .armview { min-height: 150px; } body.touch.portrait .armscr canvas.pv.big { height: 150px; }
 body.touch.portrait .arminfo { overflow-y: auto; }
 body.touch.portrait .armscr .tabbody.armlay { grid-template-rows: 50% minmax(0, 1fr); }
-body.touch.portrait .sheet .top { padding-bottom: 2px; } body.touch.portrait .armscr .top .purseline { display: none; }
+body.touch.portrait .sheet .top { padding-bottom: 22px; } body.touch.portrait .armscr .top .purseline { display: none; }
 body.touch.portrait .tabs .tab { padding: 4px 9px; min-height: 34px; font-size: 15px; }
 body.touch.compact .armstage { grid-template-columns: 1fr 1fr; grid-template-rows: none; }
 body.touch.compact .armscr .tabbody.armlay { grid-template-rows: minmax(0, 1fr) 96px; }
+/* phones: the help strip may need three lines, so it is taller and the menu pages leave more room for it */
+@media (max-width: 700px) { :root { --hs: 112px; } .menu.scroll > .helpstrip { height: 66px; } }
+body.touch #pmenu kbd, body.touch #pmenu .kbd { display: none; }      /* no keyboard hints on a touch screen */

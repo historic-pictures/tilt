@@ -23,6 +23,18 @@
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
+<svg id="ornSprite" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false"><defs>
+<g id="orn-fleur"><path d="M0-10.4C3.4-6.6 3.8-2 0 2.2C-3.8-2-3.4-6.6 0-10.4Z" fill="#d6a93a" stroke="#2a1a10" stroke-width=".8"/><path d="M-1.6 2C-2.6-3.4-6.6-6.6-10-5.2C-12.6-4-11.6-.4-8.4-.6C-6.4-.7-6-2-6.8-2.9C-5.2-2.3-4.8-.4-4.6 1.6Z" fill="#d6a93a" stroke="#2a1a10" stroke-width=".8" stroke-linejoin="round"/><path d="M1.6 2C2.6-3.4 6.6-6.6 10-5.2C12.6-4 11.6-.4 8.4-.6C6.4-.7 6-2 6.8-2.9C5.2-2.3 4.8-.4 4.6 1.6Z" fill="#d6a93a" stroke="#2a1a10" stroke-width=".8" stroke-linejoin="round"/><path d="M0 4.4C-1.2 6.4-1.2 8.6 0 10.6C1.2 8.6 1.2 6.4 0 4.4Z" fill="#d6a93a" stroke="#2a1a10" stroke-width=".7"/><path d="M-1.4 4.2C-4.6 4.6-6 8-3.8 9.2C-2.4 9.8-1.8 8.4-2.8 7.8M1.4 4.2C4.6 4.6 6 8 3.8 9.2C2.4 9.8 1.8 8.4 2.8 7.8" fill="none" stroke="#b8862b" stroke-width="1.1" stroke-linecap="round"/><rect x="-5.6" y="1.7" width="11.2" height="2.7" rx=".5" fill="#a82a1c" stroke="#2a1a10" stroke-width=".8"/><path d="M-3.6 3.05H3.6" stroke="#f0d68a" stroke-width=".7"/><circle cx="0" cy="-3.6" r="1" fill="#a82a1c"/></g>
+<g id="orn-half" fill="none" stroke-linecap="round"><path d="M8 0H16" stroke="#b8862b" stroke-width="1.2"/>
+<path d="M16 0C28-7 42-7 58 0" stroke="#a82a1c" stroke-width="1.6"/><path d="M58 0C74 7 88 7 100 0" stroke="#a82a1c" stroke-width="1.15"/><path d="M100 0C112-5 124-4 136 0" stroke="#a82a1c" stroke-width=".8"/><path d="M136 0C142 2 146 1 149 0" stroke="#a82a1c" stroke-width=".5"/>
+<path d="M16 0C28 7 42 7 58 0" stroke="#1f3f8a" stroke-width="1.6"/><path d="M58 0C74-7 88-7 100 0" stroke="#1f3f8a" stroke-width="1.15"/><path d="M100 0C112 5 124 4 136 0" stroke="#1f3f8a" stroke-width=".8"/><path d="M136 0C142-2 146-1 149 0" stroke="#1f3f8a" stroke-width=".5"/>
+<path d="M37-5.2C36-8.6 40-10.6 42.4-8.8C44-7.6 43-5.6 41.4-6.2" stroke="#a82a1c" stroke-width=".9"/><path d="M37 5.2C36 8.6 40 10.6 42.4 8.8C44 7.6 43 5.6 41.4 6.2" stroke="#1f3f8a" stroke-width=".9"/>
+<path d="M79 5.2C80 8.6 76 10.6 73.6 8.8C72 7.6 73 5.6 74.6 6.2" stroke="#a82a1c" stroke-width=".8"/><path d="M79-5.2C80-8.6 76-10.6 73.6-8.8C72-7.6 73-5.6 74.6-6.2" stroke="#1f3f8a" stroke-width=".8"/>
+<path d="M118-3.4C117-6 120-7.4 121.8-6C122.8-5.2 122-3.8 120.8-4.2" stroke="#a82a1c" stroke-width=".65"/><path d="M118 3.4C117 6 120 7.4 121.8 6C122.8 5.2 122 3.8 120.8 4.2" stroke="#1f3f8a" stroke-width=".65"/>
+<g stroke="none" fill="#d6a93a"><circle cx="58" cy="0" r="1.3"/><circle cx="100" cy="0" r="1.1"/><circle cx="136" cy="0" r=".9"/><circle cx="42.4" cy="-8.6" r=".8"/><circle cx="42.4" cy="8.6" r=".8"/><circle cx="73.6" cy="-8.6" r=".7"/><circle cx="73.6" cy="8.6" r=".7"/><circle cx="150" cy="0" r=".7"/></g></g>
+<symbol id="orn" viewBox="-150 -12 300 24"><use href="#orn-half"/><use href="#orn-half" transform="scale(-1 1)"/><use href="#orn-fleur"/></symbol>
+<symbol id="orn-s" viewBox="-92 -12 184 24"><use href="#orn-half" transform="translate(7 0) scale(.55 1)"/><use href="#orn-half" transform="scale(-1 1) translate(7 0) scale(.55 1)"/><use href="#orn-fleur"/></symbol>
+</defs></svg>
 <canvas id="c"></canvas>
 <!-- the torn edge of the parchment: a large one for scrolls, a finer one for slips -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">

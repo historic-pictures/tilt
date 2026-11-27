@@ -4114,11 +4114,23 @@ function updateCamera(dtReal) {
     const c = player ? player.root.position : _a.set(0, 0, 0);
     if (S.menuView === 'armoury') {
       // the knight stands on the left of the page, as in a manuscript portrait
-      const a = S.celPrev ? Math.PI / 2 : S.menuAng * 1.6, px = c.x + Math.sin(a) * 5.4, pz = c.z + Math.cos(a) * 5.4;
-      want.set(px, 2.0, pz);
-      const vx = c.x - px, vz = c.z - pz, len = Math.hypot(vx, vz) || 1;
-      wantLook.set(c.x + (-vz / len) * 1.7, 1.45, c.z + (vx / len) * 1.7); rate = 4; wantFov = 44;
+      if (S.celPrev) {
+        // Knight tab: a celebration is playing. The camera stands on the crowd's side, close enough that the pose reads, looking straight at the rider; the picture is then
+        // shifted sideways (the same view offset the menu joust uses) so he sits centred in the free left part of the screen, with the list on the right.
+        const pe = document.querySelector('#screen .sheet'), pl = pe ? pe.getBoundingClientRect().left : 0, W = window.innerWidth;
+        const tx = pl > W * 0.25 ? pl / 2 : W / 2;      // (a phone page covers the whole screen: no room at the side, so he stays centred)
+        want.set(c.x + 5.0, 1.8, c.z + 0.15); wantLook.set(c.x, 1.3, c.z + 0.15); rate = 5; wantFov = 40;
+        S.armDx = damp(S.armDx || 0, tx - W / 2, 4, dtReal);
+      } else {
+        S.armDx = damp(S.armDx || 0, 0, 5, dtReal);
+        const a = S.menuAng * 1.6, px = c.x + Math.sin(a) * 5.4, pz = c.z + Math.cos(a) * 5.4;
+        want.set(px, 2.0, pz);
+        const vx = c.x - px, vz = c.z - pz, len = Math.hypot(vx, vz) || 1;
+        wantLook.set(c.x + (-vz / len) * 1.7, 1.45, c.z + (vx / len) * 1.7); rate = 4; wantFov = 44;
+      }
+      if (Math.abs(S.armDx || 0) > 0.5) menuView = { dx: S.armDx, dy: 0 };
     } else {
+      S.armDx = 0;
       want.set(c.x + Math.sin(S.menuAng) * 6.2, 2.3 + Math.sin(S.menuAng * 0.7) * 0.4, c.z + 1.0 + Math.cos(S.menuAng) * 6.2);
       wantLook.set(c.x - 1.2, 1.75, c.z + 0.4); rate = 3; wantFov = 42;
     }
@@ -4338,7 +4350,7 @@ function frame(dtReal) {
     ceremony.skipUI(true, S.skipWanted.me ? 1 : S.skipHold / SKIP_HOLD, lbl);
     if (S.skipHold >= SKIP_HOLD && !S.skipWanted.me) skipVote();
     if (S.mode === 'intro' && S.introT > (introNew() ? INTRO_END : 8.4)) finishIntro();
-  } else if (S.mode === 'menu') { if (S.celPrev) { if (S.menuView !== 'armoury' || !player) { S.celPrev = null; if (player) celClear(player); } else if (!celActive(player) && (S.celPrevT += dtReal) > 0.9) { S.celPrevT = 0; celStart(player, S.celPrev, { mode: 'course' }); } } if (attract.update(dtReal, dt)) { if (player) player.root.visible = false; } else { if (player) { player.root.visible = true; player.update(dt); } } if ((S.menuView === 'armoury' || S.menuView === 'welcome')) previews.update(dtReal, menus.root, profile.arms, profile.body, { armour: profile.armour, helm: profile.helm }); if (S.menuView === 'stable') stable.update(dtReal, menus.root, menus.stableHorse(), profile.arms, menus.stableCap()); else stable.release(); }
+  } else if (S.mode === 'menu') { if (S.celPrev) { if (S.menuView !== 'armoury' || !player) { S.celPrev = null; if (player) celClear(player); } else if (!celActive(player) && (S.celPrevT += dtReal) > 0.9) { S.celPrevT = 0; celStart(player, S.celPrev, { mode: 'course' }); } } if (attract.update(dtReal, dt)) { if (player) player.root.visible = false; } else { if (player) { player.root.visible = true; if (!celActive(player) && player.rear > 0) player.rear = Math.max(0, player.rear - dtReal * 2.5); player.update(dt); } } if ((S.menuView === 'armoury' || S.menuView === 'welcome')) previews.update(dtReal, menus.root, profile.arms, profile.body, { armour: profile.armour, helm: profile.helm }); if (S.menuView === 'stable') stable.update(dtReal, menus.root, menus.stableHorse(), profile.arms, menus.stableCap()); else stable.release(); }
   else if (S.mode === 'replay') updateReplay(dtReal, dt);
   else if (M && C) { if (C.patCd > 0) C.patCd -= dtReal; updateRide(dt, dtReal); }
   if (S.online && M) netTick(dtReal);
