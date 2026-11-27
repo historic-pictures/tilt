@@ -308,20 +308,98 @@ function tube(pts, mat, segs = 14, opts = {}) {
 }
 
 const DM = PHYS.damage, _kv = new THREE.Vector3(), _dm = new THREE.Matrix4();
-/** Push the vertices within R of c (geometry-local) inward by up to D, smoothly (a bowl), and tilt their normals to match the slope. */
-function dentGeo(geo, c, R, D) {
-  const P = geo.attributes.position, N = geo.attributes.normal; let hit = false;
+/**
+ * Cut the long edges of an indexed (optionally skinned) mesh so a dent has vertices to move: the figure's harness is 650 vertices over a metre of man (a 10 cm crater
+ * would find two or three of them, which is why the old dents were never seen). Edges longer than maxEdge are halved (the triangle patterns keep it crack-free), up to
+ * `passes` times; normals, uvs and skin weights are interpolated. The geometry (same object) also gets `aScuff` (0 = clean): see dentMat.
+ */
+function refineGeo(geo, maxEdge, passes = 3) {
+  const A = geo.attributes; if (!geo.index || !A.position) return false;
+  const names = Object.keys(A), cols = {}, ctor = {}; for (const n of names) { cols[n] = Array.from(A[n].array); ctor[n] = A[n].array.constructor; }
+  const P = cols.position, sk = !!(A.skinIndex && A.skinWeight);
+  let tri = Array.from(geo.index.array), nv = A.position.count;
+  const mid = (i, j) => {
+    for (const n of names) {
+      if (sk && (n === 'skinIndex' || n === 'skinWeight')) continue;
+      const s = A[n].itemSize, c = cols[n]; let l = 0; const v = [];
+      for (let k = 0; k < s; k++) { const x = (c[i * s + k] + c[j * s + k]) / 2; v.push(x); l += x * x; }
+      if (n === 'normal') { l = Math.sqrt(l) || 1; for (let k = 0; k < s; k++) v[k] /= l; }
+      for (let k = 0; k < s; k++) c[nv * s + k] = v[k];
+    }
+    if (sk) {
+      const w = new Map(), I = cols.skinIndex, W = cols.skinWeight;
+      for (const q of [i, j]) for (let k = 0; k < 4; k++) w.set(I[q * 4 + k], (w.get(I[q * 4 + k]) || 0) + W[q * 4 + k] / 2);
+      const top = [...w.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4), tot = top.reduce((a, e) => a + e[1], 0) || 1;
+      for (let k = 0; k < 4; k++) { I[nv * 4 + k] = top[k] ? top[k][0] : 0; W[nv * 4 + k] = top[k] ? top[k][1] / tot : 0; }
+    }
+    return nv++;
+  };
+  const len = (i, j) => Math.hypot(P[i * 3] - P[j * 3], P[i * 3 + 1] - P[j * 3 + 1], P[i * 3 + 2] - P[j * 3 + 2]);
+  for (let pass = 0; pass < passes; pass++) {
+    const cache = new Map(), out = []; let split = 0;
+    const edge = (i, j) => { if (len(i, j) <= maxEdge) return -1; const k = i < j ? i * 4194304 + j : j * 4194304 + i; let m = cache.get(k); if (m === undefined) { m = mid(i, j); cache.set(k, m); split++; } return m; };
+    for (let t = 0; t < tri.length; t += 3) {
+      const a = tri[t], b = tri[t + 1], c = tri[t + 2], m0 = edge(a, b), m1 = edge(b, c), m2 = edge(c, a), mask = (m0 >= 0 ? 1 : 0) | (m1 >= 0 ? 2 : 0) | (m2 >= 0 ? 4 : 0);
+      switch (mask) {
+        case 0: out.push(a, b, c); break;
+        case 1: out.push(a, m0, c, m0, b, c); break;
+        case 2: out.push(a, b, m1, a, m1, c); break;
+        case 4: out.push(a, b, m2, m2, b, c); break;
+        case 3: out.push(m0, b, m1, a, m0, m1, a, m1, c); break;
+        case 6: out.push(m1, c, m2, a, b, m1, a, m1, m2); break;
+        case 5: out.push(m2, a, m0, m0, b, c, m0, c, m2); break;
+        default: out.push(a, m0, m2, m0, b, m1, m2, m1, c, m0, m1, m2);
+      }
+    }
+    tri = out; if (!split || nv > 40000) break;
+  }
+  for (const n of names) { const s = A[n].itemSize; geo.setAttribute(n, new THREE.BufferAttribute(new ctor[n](cols[n].slice(0, nv * s)), s, A[n].normalized)); }
+  geo.setAttribute('aScuff', new THREE.BufferAttribute(new Float32Array(nv), 1));
+  geo.setIndex(nv > 65535 ? new THREE.Uint32BufferAttribute(tri, 1) : new THREE.Uint16BufferAttribute(tri, 1));
+  return true;
+}
+/** A private copy of a plate material that shows `aScuff`: >0 blends the metal toward bright scraped steel, <0 darkens it (soot / dirt packed in the crease). */
+function dentMat(m, cloth = false) {
+  if (!m || Array.isArray(m) || m.userData.dentMat) return m;
+  cloth = cloth || /^(mail_upper|bascinet_upper)/.test(m.name || '');      // cloth (surcoat, jupon): no scraped steel, only dirt and a frayed darker patch in the cloth's own colour
+  const c = m.clone(), prev = m.onBeforeCompile; c.userData.dentMat = true;
+  c.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aScuff;\nvarying float vScuff;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvScuff = aScuff;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vScuff;').replace('#include <color_fragment>', '#include <color_fragment>\n{ float sb = clamp(vScuff, 0.0, 1.0), sd = clamp(-vScuff, 0.0, 1.0); ' + (cloth ? 'diffuseColor.rgb *= 1.0 - 0.45 * sb - 0.5 * sd;' : 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.74, 0.72, 0.68), sb * 0.85); diffuseColor.rgb *= 1.0 - 0.7 * sd;') + ' }');
+  };
+  c.customProgramCacheKey = () => cloth ? 'dentMatCloth' : 'dentMat'; c.needsUpdate = true;
+  return c;
+}
+/**
+ * Push the vertices within R of c (geometry-local) inward by up to D: a crater, a bowl with a raised light-catching lip, the normals tilted to the slope. Also marks the
+ * surface (aScuff): scraped bright metal in the middle with a few raking gouges, dirt in the crease round it. sc 0..1: how hard the blow was; seed varies the gouges.
+ */
+function dentGeo(geo, c, R, D, sc = 0.6, seed = 1, base = null, lim = 1) {
+  const P = geo.attributes.position, N = geo.attributes.normal, S = geo.attributes.aScuff; let hit = false;
+  const sa = seed * 2.1;
   for (let i = 0; i < P.count; i++) {
     const x = P.getX(i), y = P.getY(i), z = P.getZ(i), dx = x - c.x, dy = y - c.y, dz = z - c.z, d2 = dx * dx + dy * dy + dz * dz;
     if (d2 >= R * R) continue;
-    const u = Math.sqrt(d2) / R, w = 1 - u * u, h = D * w * w, nx = N.getX(i), ny = N.getY(i), nz = N.getZ(i);
-    P.setXYZ(i, x - nx * h, y - ny * h, z - nz * h);
-    const sl = -4 * D * u * w / R, tn = dx * nx + dy * ny + dz * nz;      // slope of the bowl; the outward tangent from the centre
+    const u = Math.sqrt(d2) / R, w = 1 - u * u, q = 1 - 2.2 * u * u, h = D * w * q, nx = N.getX(i), ny = N.getY(i), nz = N.getZ(i);
+    let px = x - nx * h, py = y - ny * h, pz = z - nz * h;
+    if (base) {      // stacked blows pile up, but never push the plate through the man (or the lining) behind it: the dent is held to `lim` from the untouched shape
+      const ex = px - base[i * 3], ey = py - base[i * 3 + 1], ez = pz - base[i * 3 + 2], el = Math.hypot(ex, ey, ez);
+      if (el > lim) { const k = lim / el; px = base[i * 3] + ex * k; py = base[i * 3 + 1] + ey * k; pz = base[i * 3 + 2] + ez * k; }
+    }
+    P.setXYZ(i, px, py, pz);
+    const sl = (D / R) * (-2 * u * q - 4.4 * u * w), tn = dx * nx + dy * ny + dz * nz;      // slope of the crater (dh/dr); the outward tangent from the centre
     let tx = dx - tn * nx, ty = dy - tn * ny, tz = dz - tn * nz; const tl = Math.hypot(tx, ty, tz) || 1;
     tx = nx + sl * tx / tl; ty = ny + sl * ty / tl; tz = nz + sl * tz / tl; const nl = Math.hypot(tx, ty, tz) || 1;
     N.setXYZ(i, tx / nl, ty / nl, tz / nl); hit = true;
+    if (S) {
+      const th = Math.atan2(dy, dx - 0.7 * dz), rn = Math.abs(Math.sin((i + 1) * 12.9898 + sa) * 43758.5453) % 1;
+      const core = 1 - smoothstep(0.15, 0.8, u), rake = Math.pow(Math.abs(Math.sin(th * 2.5 + sa)), 6) * (1 - 0.6 * u) * smoothstep(0, 0.12, u);
+      const ring = smoothstep(0.62, 0.9, u) * (1 - smoothstep(0.9, 1, u)), v = S.getX(i);
+      S.setX(i, clamp(v + sc * 1.3 * (core * (0.6 + 0.4 * rn) + rake * 0.9) - ring * 0.5 * sc * (v < 0.3 ? 1 : 0.4), -1, 1));
+    }
   }
-  if (hit) P.needsUpdate = N.needsUpdate = true;
+  if (hit) { P.needsUpdate = N.needsUpdate = true; if (S) S.needsUpdate = true; }
 }
 
 export class Jouster {
@@ -1382,6 +1460,32 @@ export class Jouster {
     this.bareHead.visible = !on;
   }
 
+  /**
+   * The rigged helm as a carried object (the celebration that waves it, celebrate.js): one whole helm, its base at the origin and its front toward +z, built on this
+   * rider's own (dented) geometry, with the plume fitted to it. Rebuilt when the dents swap in a private copy of the geometry. Call every frame it is carried; the plume
+   * goes back to the helm when it is back on (update()) or the prop is gone.
+   */
+  heldHelm() {
+    const hm = this.rig && this.rig.helmMesh; if (!hm) return null;
+    if (!this._held) { this._held = new THREE.Group(); this._held.userData.kind = 'helm'; this._heldMesh = new THREE.Mesh(new THREE.BufferGeometry(), hm.material); this._heldMesh.castShadow = true; this._heldMesh.frustumCulled = false; this._held.add(this._heldMesh); }
+    const g0 = hm.geometry, M = this._heldMesh;
+    if (this._heldSrc !== g0) {
+      const g = new THREE.BufferGeometry(); for (const n of ['position', 'normal', 'uv', 'aScuff']) if (g0.attributes[n]) g.setAttribute(n, g0.attributes[n]);
+      g.setIndex(g0.index); if (this._heldSrc) M.geometry.dispose();
+      M.geometry = g; this._heldSrc = g0; g.computeBoundingBox(); const b = g.boundingBox; this._heldTop = b.max.y - b.min.y; M.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+      // (the bind-pose shell, not the dented-in-place positions' bounds: the dent only moves a vertex a centimetre or two)
+    }
+    M.material = hm.material;
+    const pl = this.plume; if (pl && this._heldOn !== this._held) { this._held.add(pl); this._heldOn = this._held; }
+    if (pl) { pl.position.set(0, this._heldTop * 0.93, -0.03 * KS); pl.scale.setScalar(KS); pl.visible = this._vPlume; }
+    if (this.crestG) this.crestG.visible = false;
+    return this._held;
+  }
+  _heldEnd() {
+    this._heldOn = null; const pl = this.plume; if (!pl) return;
+    this.helm.add(pl); pl.position.set(0, this.armourDef.helm === 'bascinet' ? 0.38 : 0.31, -0.03); pl.scale.setScalar(1);
+  }
+
   // ------------------------------------------------------------ state
   /** A shield that sprang off the arm (see main.js strike): hidden until the squire re-fits it. */
   setShieldGone(on) { this.shGone = !!on; this.shield.visible = !on; }
@@ -1737,8 +1841,9 @@ export class Jouster {
     if (!(region in this.dmg) || !(amt > 0)) return null;
     const before = this.dmg[region], cum = Math.min(1, before + amt); this.dmg[region] = cum;
     this.root.updateMatrixWorld(true);
-    const g = region === 'shield' ? this.shield : region === 'helm' ? this.helm : this.torso, d = cum - before;
-    const e = { key, region, lp: g.worldToLocal(wp.clone()).toArray(), amt: d, cum, r: DM.radius * (0.85 + 0.35 * clamp(power, 0, 1)), depth: DM.depth * clamp(0.3 + 2.2 * d, 0.25, 1), seed: this.dlog.length * 7.31 + key, plume: false };
+    const g = region === 'shield' ? this.shield : region === 'helm' ? this.helm : this.torso, d = cum - before, dv = Math.max(d, 0.5 * amt);      // (dv: a worn region at 1 still takes a full dent)
+    const e = { key, region, lp: g.worldToLocal(wp.clone()).toArray(), amt: d, cum, r: DM.radius * (0.85 + 0.35 * clamp(power, 0, 1)) * (region === 'helm' ? DM.helmScale : 1), depth: DM.depth * clamp(0.3 + 2.2 * dv, 0.3, 1) * (region === 'helm' ? DM.helmDepth : this.armourDef.torso !== 'plate' ? 1.45 : 1), sc: clamp(0.4 + 2 * dv, 0.4, 1), seed: this.dlog.length * 7.31 + key, plume: false };
+    e.depth0 = e.depth;      // (the armourer beats the dent shallower, never flat: the scuffing stays)
     if (region === 'helm' && !this._plumeGone && cum >= DM.plumeAt) { e.plume = true; this._plumeGone = true; }
     if (region === 'shield') this.askew = Math.max(this.askew, smoothstep(DM.askewAt, 1, cum) * DM.askew);
     this.dlog.push(e); this._rebuild(Infinity);
@@ -1753,7 +1858,7 @@ export class Jouster {
   /** Between courses: the armourer takes `f` of the worst region out (dents beaten, shield patched); the squire pulls the shield straight (`sq` share of its askew). Returns the region mended. */
   mend(f, sq = 0) {
     let w = null, wv = 0.03; for (const r in this.dmg) if (this.dmg[r] > wv) { w = r; wv = this.dmg[r]; }
-    if (w && f > 0) { const k = 1 - f; this.dmg[w] *= k; for (const e of this.dlog) if (e.region === w) { e.cum *= k; e.depth *= k; } }
+    if (w && f > 0) { const k = 1 - f; this.dmg[w] *= k; for (const e of this.dlog) if (e.region === w) { e.cum *= k; e.depth = Math.max(e.depth * k, (e.depth0 ?? e.depth) * DM.mendKeep); } }
     if (sq > 0) this.askew *= 1 - sq;
     if ((w && f > 0) || (sq > 0 && this.askew > 0)) this._rebuild(Infinity);
     return w;
@@ -1764,7 +1869,7 @@ export class Jouster {
     if (n !== this._vN) this._rebuild(key);
   }
   _rebuild(keyMax) {
-    for (const m of this._dirty) { const d = m.userData.d0, P = m.geometry.attributes.position, N = m.geometry.attributes.normal; P.array.set(d.p); N.array.set(d.n); P.needsUpdate = N.needsUpdate = true; }
+    for (const m of this._dirty) { const d = m.userData.d0, P = m.geometry.attributes.position, N = m.geometry.attributes.normal; P.array.set(d.p); N.array.set(d.n); P.needsUpdate = N.needsUpdate = true; const S = m.geometry.attributes.aScuff; if (S) { S.array.fill(0); S.needsUpdate = true; } }
     this._dirty.clear();
     for (const r in this._vd) this._vd[r] = 0;
     this._vPlume = true; this._shMarks = []; this._vN = 0;
@@ -1779,20 +1884,20 @@ export class Jouster {
     const g = e.region === 'helm' ? this.helm : this.torso, lp = _kv.fromArray(e.lp);
     for (const m of this._dentTargets(e.region)) {
       if (m.isSkinnedMesh) {      // a skinned mesh: the blow's point -> the bone's frame -> the mesh's bind pose (where its vertices are)
-        if (!m.userData.d0) { if (!m.geometry.attributes.normal) continue; m.geometry = m.geometry.clone(); const P = m.geometry.attributes.position, N = m.geometry.attributes.normal; m.userData.d0 = { p: Float32Array.from(P.array), n: Float32Array.from(N.array) }; }
+        if (!m.userData.d0) { if (!m.geometry.attributes.normal) continue; m.geometry = m.geometry.clone(); refineGeo(m.geometry, DM.cut); m.material = dentMat(m.material, e.region !== 'helm' && this.armourDef.torso !== 'plate'); const P = m.geometry.attributes.position, N = m.geometry.attributes.normal; m.userData.d0 = { p: Float32Array.from(P.array), n: Float32Array.from(N.array) }; }
         const bone = e.region === 'helm' ? this.rig.bones[this.rig.helmBone] : this.rig.bones.Spine2, fr = e.region === 'helm' ? this.helm : this.torso;
         fr.updateMatrix(); const c = lp.clone().applyMatrix4(fr.matrix), bi = m.skeleton.boneInverses[m.skeleton.bones.indexOf(bone)];
-        c.applyMatrix4(_dm.copy(bi).invert()); dentGeo(m.geometry, c, e.r * KS, e.depth * KS); this._dirty.add(m); continue;
+        c.applyMatrix4(_dm.copy(bi).invert()); dentGeo(m.geometry, c, e.r * KS, e.depth * KS, e.sc, e.seed, m.userData.d0.p, (e.region === 'helm' ? DM.helmLim : DM.bodyLim) * KS); this._dirty.add(m); continue;
       }
       m.updateMatrix(); const M = m.matrix.clone();
       for (let p = m.parent; p && p !== g; p = p.parent) { if (p === this.visor) M.premultiply(_dm.makeTranslation(p.position.x, p.position.y, p.position.z)); else { p.updateMatrix(); M.premultiply(p.matrix); } }
       const k = M.getMaxScaleOnAxis() || 1, c = lp.clone().applyMatrix4(M.invert());      // the part's frame -> the mesh's own; k: the mesh's scale
       if (!m.userData.d0) {      // a private copy of the geometry (the plate model is shared between riders), with the untouched shape kept for rebuilds
         const N0 = m.geometry.attributes.normal; if (!N0) continue;
-        m.geometry = m.geometry.clone(); const P = m.geometry.attributes.position, N = m.geometry.attributes.normal;
+        m.geometry = m.geometry.clone(); refineGeo(m.geometry, DM.cut / k); m.material = dentMat(m.material, this._cloth.includes(m)); const P = m.geometry.attributes.position, N = m.geometry.attributes.normal;
         m.userData.d0 = { p: Float32Array.from(P.array), n: Float32Array.from(N.array) };
       }
-      dentGeo(m.geometry, c, e.r / k, e.depth / k); this._dirty.add(m);
+      dentGeo(m.geometry, c, e.r / k, e.depth / k, e.sc, e.seed, m.userData.d0.p, (e.region === 'helm' ? DM.helmLim : DM.bodyLim) / k); this._dirty.add(m);
     }
   }
   _dentTargets(region) {
@@ -1802,8 +1907,9 @@ export class Jouster {
     }
     if (region === 'breast') return this.plate && this.plate[2] ? [this.plate[2]] : this._cloth.length ? this._cloth : (this._plain || []);
     if (region === 'pauldronL') return this.plate ? [this.plate[1]] : (this._plain || []);
-    const out = [], walk = (o) => { if (o === this.plume || o === this.bareHead) return; if (o.isMesh && o.material === this._helmMat) out.push(o); o.children.forEach(walk); };
-    walk(this.helm); return out;
+    const all = [], walk = (o) => { if (o === this.plume || o === this.bareHead) return; if (o.isMesh && o.geometry.index && o.geometry.attributes.normal && !(o.material && o.material.transparent)) all.push(o); o.children.forEach(walk); };
+    walk(this.helm); const big = all.reduce((m, o) => Math.max(m, o.geometry.attributes.position.count), 0);
+    return all.filter(o => o.geometry.attributes.position.count >= big * 0.3);      // the shell (and a visor of its own size): not the rivets, the cross, the breath holes
   }
   /** Shield face: gouges and splinter marks at each blow, a crack once it is badly hurt, a corner broken away. */
   _drawShield() {
@@ -1813,11 +1919,25 @@ export class Jouster {
       const g = cv.getContext('2d'), W = cv.width, H = cv.height, px = W / 512;
       g.globalCompositeOperation = 'source-over'; g.drawImage(this._shBase, 0, 0);
       g.lineCap = 'round'; g.lineJoin = 'round';
+      if (!this._shBump) {      // the dents' shading: a grey height map (the paint canvas's own size), pits dark with a light lip; the shield's material lights it as a bump map
+        const bc = document.createElement('canvas'); bc.width = W; bc.height = H; this._shBump = bc; const bt = new THREE.CanvasTexture(bc); bt.colorSpace = THREE.NoColorSpace;
+        this.shieldMat.bumpMap = bt; this.shieldMat.bumpScale = 8; this.shieldMat.needsUpdate = true;
+      }
+      const bg = this._shBump.getContext('2d'); bg.globalCompositeOperation = 'source-over'; bg.fillStyle = '#808080'; bg.fillRect(0, 0, W, H);
       for (const e of this._shMarks) {
         let sd = Math.floor(e.seed * 1000) >>> 0; const rnd = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
-        const x = (e.lp[0] / SW + 0.5) * W, y = (1 - (e.lp[1] / SHH + 0.5)) * H, sz = (16 + 90 * e.amt) * px;
-        const gr = g.createRadialGradient(x, y, 0, x, y, sz); gr.addColorStop(0, 'rgba(22,15,10,0.7)'); gr.addColorStop(1, 'rgba(22,15,10,0)');
+        const x = (e.lp[0] / SW + 0.5) * W, y = (1 - (e.lp[1] / SHH + 0.5)) * H, sz = (30 + 170 * (e.sc ?? 0.5) * (e.depth0 ? e.depth / e.depth0 * 0.4 + 0.6 : 1)) * px;
+        const bw = bg.createRadialGradient(x, y, 0, x, y, sz * 1.15); bw.addColorStop(0, 'rgb(20,20,20)'); bw.addColorStop(0.55, 'rgb(96,96,96)'); bw.addColorStop(0.8, 'rgb(236,236,236)'); bw.addColorStop(1, 'rgb(128,128,128)');
+        bg.fillStyle = bw; bg.beginPath(); bg.arc(x, y, sz * 1.15, 0, TAU); bg.fill();      // (the crater: a pit with a raised lip)
+        const gr = g.createRadialGradient(x, y, 0, x, y, sz); gr.addColorStop(0, 'rgba(22,15,10,0.78)'); gr.addColorStop(0.5, 'rgba(40,28,18,0.45)'); gr.addColorStop(1, 'rgba(22,15,10,0)');
         g.fillStyle = gr; g.beginPath(); g.arc(x, y, sz, 0, TAU); g.fill();
+        const sg = g.createRadialGradient(x, y, 0, x, y, sz * 0.62); sg.addColorStop(0, 'rgba(228,208,168,0.62)'); sg.addColorStop(1, 'rgba(228,208,168,0)');      // the scraped patch: paint rubbed to raw wood
+        g.fillStyle = sg; g.beginPath(); g.ellipse(x, y, sz * 0.62, sz * 0.45, rnd() * Math.PI, 0, TAU); g.fill();
+        for (let i = 0, nc = 6 + Math.round(14 * (e.sc ?? 0.5)); i < nc; i++) {      // chipped paint: flakes of bare wood with a dark edge, thickest by the blow
+          const a = rnd() * TAU, r0 = sz * (0.1 + 0.85 * rnd() * rnd()), cx = x + Math.cos(a) * r0, cy = y + Math.sin(a) * r0, cs = (5 + rnd() * 14) * px;
+          g.beginPath(); for (let k = 0; k < 5; k++) { const ka = k / 5 * TAU + rnd() * 0.6, kr = cs * (0.5 + rnd() * 0.8); g.lineTo(cx + Math.cos(ka) * kr, cy + Math.sin(ka) * kr); } g.closePath();
+          g.fillStyle = 'rgba(214,190,146,0.92)'; g.fill(); g.strokeStyle = 'rgba(30,18,10,0.85)'; g.lineWidth = 1.6 * px; g.stroke();
+        }
         const n = 5 + Math.round(16 * e.amt);
         for (let i = 0; i < n; i++) {       // splinter marks: a pale gash with a dark edge, radiating from the blow
           const a = rnd() * TAU, r0 = rnd() * sz * 0.3, l = sz * (0.3 + rnd() * 0.8), x0 = x + Math.cos(a) * r0, y0 = y + Math.sin(a) * r0;
@@ -1831,7 +1951,7 @@ export class Jouster {
           g.stroke(); g.strokeStyle = 'rgba(232,214,170,0.55)'; g.lineWidth = px; g.stroke();
         }
       }
-      tex.needsUpdate = true; if (this.shTex) this.shTex.needsUpdate = true;
+      tex.needsUpdate = true; if (this.shTex) this.shTex.needsUpdate = true; if (this.shieldMat.bumpMap) this.shieldMat.bumpMap.needsUpdate = true;
     }
     if (this.rig) return;      // (the modelled targe keeps its outline: no broken corner)
     // the broken corner (on the side of the hardest blow): rebuild the face and the back plate with the corner cut
@@ -2432,6 +2552,7 @@ export class Jouster {
     if (!this.replaying) this.raise = damp(this.raise, this.raiseT, 7, dt);
     if (this.rig && !this.visor) this.visorUp = false;      // (the rigged helm has no visor: nothing is ever 'up', so no blow is taken 'with the visor up')
     const helmOn = !this.helmOff && !this.celHelmOff;      // (celHelmOff: a celebration waves the helm, celebrate.js)
+    if (this._heldOn && (helmOn || !this._held.parent)) this._heldEnd();      // (the helm is back on, or the carried one was dropped: the plume goes home)
     if (helmOn !== this._helmShown) this._showHelm(helmOn);
     if (this.rig) {      // (first person hides the helm, and the head inside it, by the marker's flag)
       const R = this.rig, hv = this.helm.visible; if (R.helmMesh) R.helmMesh.visible = hv && helmOn; if (R.headMesh) R.headMesh.visible = hv;

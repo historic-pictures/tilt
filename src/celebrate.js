@@ -235,7 +235,7 @@ function dropProps(c) { if (!c || !c.props) return; for (const k in c.props) { c
 function prop(J, c, kind) {
   c.props = c.props || {};
   if (!c.props[kind]) {
-    const p = kind === 'helm' ? makeHelm() : makeRibbon((J.arms && J.arms.c2 && new THREE.Color(J.arms.c2).getHex() !== 0xffffff) ? 0xc0341f : 0xc0341f);
+    const p = kind === 'helm' ? ((J.rig && J.rig.helmMesh && J.heldHelm()) || makeHelm()) : makeRibbon((J.arms && J.arms.c2 && new THREE.Color(J.arms.c2).getHex() !== 0xffffff) ? 0xc0341f : 0xc0341f);
     p.visible = false; (J.root.parent || J.root).add(p); c.props[kind] = p;
   }
   return c.props[kind];
@@ -341,7 +341,7 @@ export function celArms(J) {
   if (o.L && o.kL > 0.002) reach('Left', o.L, false, o.kL); else if (o.Lw === 'ribbon' && ribbonAt) reach('Left', ribbonAt, true, 1);
   if (o.R && free && o.kR > 0.002) reach('Right', o.R, false, o.kR);
   // props
-  if (o.prop && o.prop.type === 'helm') { const h = prop(J, c, 'helm'); B.LeftHand.getWorldPosition(h.position); _a.set(0, 0.07, 0.02).applyQuaternion(_rq); h.position.add(_a); h.quaternion.copy(_rq); h.rotateZ(-0.25 + Math.sin(c.t * 14) * 0.08); h.scale.setScalar(1); h.visible = true; }
+  if (o.prop && o.prop.type === 'helm') { const h = prop(J, c, 'helm'); if (J._held === h) J.heldHelm(); B.LeftHand.getWorldPosition(h.position); _a.set(0, 0.07, 0.02).applyQuaternion(_rq); h.position.add(_a); h.quaternion.copy(_rq); h.rotateZ(-0.25 + Math.sin(c.t * 14) * 0.08); h.scale.setScalar(1); h.visible = true; }
   else if (c.props && c.props.helm) c.props.helm.visible = false;
   if (ribbon) { if (o.prop.caught) { B.LeftHand.getWorldPosition(ribbon.position); ribbon.position.y -= 0.0; ribbon.quaternion.set(0, 0, 0, 1); ribbon.rotation.z = 0.2 * Math.sin(c.t * 8); } flutter(ribbon, c.t); ribbon.visible = true; }
 }
