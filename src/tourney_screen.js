@@ -100,17 +100,17 @@ export function tourneyHTML(ctx) {
   } else if (t.you === 'in' && opp) {
     title = `${V.name}: ${T.roundName(t, t.cur)}`;
     text = `${day}. You meet <b>${esc(k.name)}</b>, of ${esc(k.land)}${p.lostTo && p.lostTo[opp] ? ', who has beaten you before' : ''}. ${t.cur === 0 ? `The entry (${marks(entryFee(t.v))}) is paid with this bout. ` : ''}${t.cur >= t.rc ? 'The Prize is at stake.' : t.cur === t.rc - 1 ? 'This is the last day of challenge: the best two on the roll ride the Prize Joust tomorrow.' : 'Win or lose, you ride on tomorrow.'}`;
-    btns = `${left}<button class="btn primary btn-primary" data-act="ride" ${tip('Ride your bout against this knight, with the rules and courses below.')}>${t.cur >= t.rc ? 'Ride the Prize Joust' : 'Ride Next Bout'}</button>`;
+    btns = `${back}${left}<button class="btn primary btn-primary" data-act="ride" ${tip('Ride your bout against this knight, with the rules and courses below.')}>${t.cur >= t.rc ? 'Ride the Prize Joust' : 'Ride Next Bout'}</button>`;
   } else if (!told) {
     title = `${V.name}: ${T.roundName(t, t.cur)}`;
     const rode = rd.pairs.some(m => m.a === 'you' || m.b === 'you');
     text = `${day}. ${rode ? (t.you === 'out' ? 'Your bout is told, but you are not among the best two on the roll: the Prize Joust goes on without you. ' : 'Your bout is told. ') : 'You are not riding today. '}The other pairs are to ride: watch them joust, or skip to the roll.`;
     const left_ = T.otherPairs(t, t.cur).filter(m => !m.watched).length;
-    btns = `${left}<button class="btn" data-tt="skip" ${tip('Show every other result at once.')}>Skip Round</button><button class="btn primary btn-primary" data-tt="watch" ${tip('Sit in the stands and watch the other pairs joust, one bout after another. Hold Space to skip a bout.')}>${left_ ? 'Watch Round' : 'Read the Roll'}</button>`;
+    btns = `${back}${left}<button class="btn" data-tt="skip" ${tip('Show every other result at once.')}>Skip Round</button><button class="btn primary btn-primary" data-tt="watch" ${tip('Sit in the stands and watch the other pairs joust, one bout after another. Hold Space to skip a bout.')}>${left_ ? 'Watch Round' : 'Read the Roll'}</button>`;
   } else {
     title = `${V.name}: ${T.roundName(t, t.cur)} told`;
     text = `${day} is told. The roll is updated; tomorrow's pairs are drawn from it.`;
-    btns = `${left}<button class="btn primary btn-primary" data-tt="next" ${tip('Draw the next day from the roll.')}>${t.cur + 1 >= t.rc ? 'On to the Prize Joust' : 'Next Day'}</button>`;
+    btns = `${back}${left}<button class="btn primary btn-primary" data-tt="next" ${tip('Draw the next day from the roll.')}>${t.cur + 1 >= t.rc ? 'On to the Prize Joust' : 'Next Day'}</button>`;
   }
   return hugh(title, text, btns) + body + (t.you === 'in' && opp && !t.leaveAsk ? ctx.rules : '') + ctx.honours + ctx.road;
 }

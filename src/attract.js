@@ -323,7 +323,7 @@ export function createAttract(ctx) {
   }
 
   // ------------------------------------------------------------------ lifecycle
-  const allowedNow = () => !!(P !== 'off' && (P === 'force' || (menuJoustOn() && GFX.tier !== 'low' && !joustCap())));
+  const allowedNow = () => !!(P !== 'off' && (P === 'force' || (menuJoustOn() && !joustCap())));
   function enter() {      // put the riders on the lists
     if (!A.parked) return;
     A.parked = false;

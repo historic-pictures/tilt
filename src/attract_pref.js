@@ -1,7 +1,7 @@
 // attract_pref.js - the player's choice for the menu joust (Settings > Graphics > "Menu joust") and the cap the frame-time check leaves when a device cannot keep it up.
 // A tiny module with no imports: Settings and the game both read it without pulling in the riders.
-const K = { pref: 'tilt.attract', cap: 'tilt.attractcap' };
-const CAP_DAYS = 30;
+const K = { pref: 'tilt.attract', cap: 'tilt.attractcap2' };      // (cap2, 28 Nov: the caps set while the game ran slowly before the performance fixes are forgotten; the joust is back for everyone)
+const CAP_DAYS = 3;
 const get = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const set = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
 const listeners = [];

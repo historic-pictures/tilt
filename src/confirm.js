@@ -117,6 +117,45 @@ export function confirmPay({ title, price, note, fine = 'You pay on Stripe\'s se
   });
 }
 
+/** "Are you sure you want to quit?" before leaving a match. Resolves true (Quit) or false (Stay / Esc / click outside). Y / N keys work too; the safe button has the focus. */
+export function confirmQuit({ title = 'Are you sure you want to quit?', note = '', button = 'Quit', stay = 'Keep riding' } = {}) {
+  if (open) return Promise.resolve(false);
+  open = true;
+  if (!styled) { const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s); styled = true; }
+  const back = document.createElement('div');
+  back.id = 'confirmBuy'; back.className = 'confirmQuit'; back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true');
+  back.innerHTML = `<div class="cf scroll"><i class="paper"></i><div class="page">
+    <h3>${esc(title)}</h3>
+    ${note ? `<p class="cfnote">${esc(note)}</p>` : ''}
+    <div class="cfbtns"><button class="btn primary" data-cf="n">${esc(stay)}</button><button class="btn" data-cf="y">${esc(button)}</button></div>
+  </div></div>`;
+  document.body.appendChild(back);
+  const opened = performance.now(), yes = back.querySelector('[data-cf="y"]'), no = back.querySelector('[data-cf="n"]');
+  no.focus();
+  return new Promise((resolve) => {
+    const done = (v) => {
+      window.removeEventListener('keydown', onKey, true);
+      back.remove(); open = false;
+      setTimeout(() => { blockUntil = performance.now() + 450; }, 0);
+      resolve(v);
+    };
+    const onKey = (e) => {
+      if (e.code === 'Escape' || e.code === 'KeyN' || e.code === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); done(false); }
+      else if (e.code === 'KeyY') { e.preventDefault(); e.stopImmediatePropagation(); done(true); }
+      else if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); e.stopImmediatePropagation(); done(document.activeElement === yes); }
+      else if (e.code === 'Tab' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); (document.activeElement === yes ? no : yes).focus(); }
+      else e.stopImmediatePropagation();
+    };
+    window.addEventListener('keydown', onKey, true);
+    back.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const b = e.target.closest('[data-cf]');
+      if (b) return done(b.dataset.cf === 'y');
+      if (e.target === back && performance.now() - opened > 400) done(false);
+    });
+  });
+}
+
 /** A confirmation that must be typed (deleting an account): resolves true only if the player types `word` exactly and presses the button; Cancel, Esc or a click outside resolve false. */
 export function confirmTyped({ title, note, word = 'DELETE', button = 'Delete' } = {}) {
   if (open) return Promise.resolve(false);

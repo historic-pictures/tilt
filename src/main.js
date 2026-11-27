@@ -1,3 +1,4 @@
+import { confirmQuit } from './confirm.js';
 import * as THREE from 'three';
 import { buildWorld, LANE_X, BARRIER_X, LAT_CLOSE, LAT_SHAVE, LAT_WIDE, START_Z, LIST_HALF } from './world.js';
 import { Jouster, preloadHorse } from './jouster.js';
@@ -4280,7 +4281,13 @@ function pzSync() {
   $('pmLeft').textContent = mine ? pl(n) : `${pl(n)} for him · you have ${my}`;
 }
 function netWatch() { if (NET.net && NET.lastRx && performance.now() - NET.lastRx > 12000) netForfeit(); }
-function leaveLists() { if (M && (S.paused || S.online)) { setPaused(false); if (M.spec) { specLeave(); return; } endMatch(); menus.show('main'); } }      // (watching the roll: Stop watching)
+/** Leave the match, after "Are you sure you want to quit?" (owner 28 Nov: always confirm). Watching the roll needs no confirm (Stop watching). */
+function leaveLists() {
+  if (!M || !(S.paused || S.online)) return;
+  if (M.spec) { setPaused(false); specLeave(); return; }
+  const note = S.online && !M.result ? 'You forfeit the match: it counts as a loss.' : M.result ? '' : M.practice ? 'Your lesson is not finished.' : M.circuit || M.tourn ? 'The bout is abandoned: you take nothing from it.' : 'The joust is abandoned.';
+  const m = M; confirmQuit({ note }).then((yes) => { if (!yes || M !== m) return; setPaused(false); endMatch(); menus.show('main'); });
+}
 /** Settings from the pause menu: the same Settings screen, and Done comes back here. */
 function pauseSettings(on) {
   if (!M || !S.paused) return;
@@ -4779,7 +4786,8 @@ function frame(dtReal) {
 // ------------------------------------------------------------------ boot
 const previews = createPreviews();
 const stable = createStable();
-let bgDone = false;      // the background downloads (trees, props, the player's rider) have finished: only then does the menu joust start fetching its own
+let bgDone = false;
+G.attractReady = () => ({ bgDone, scans: SCANS.ready, worldScans, M: !!M, preparing });      // (debug: why the menu joust waits)      // the background downloads (trees, props, the player's rider) have finished: only then does the menu joust start fetching its own
 attract = createAttract({ scene, camera, fx, S, audio: new Proxy({}, { get: (_, k) => { const v = audio[k]; return typeof v === 'function' ? v.bind(audio) : v; } }) /* `audio` is rebound once the sound module loads: always reach the live one */, makeRider: (def, dir) => { const j = makeRider(def, dir, false), hp = new THREE.Vector3(); j.onHoof = (i, leg) => { leg.hoof.getWorldPosition(hp); hp.y = 0.05; fx.hoof(hp, j.speed, j.dir, leg.hind); if (j.speed > 6 && leg.hind) fx.clods(hp, 3, j.dir * j.speed); if (attract && attract.running && !S.muted && audio.ctx) { const [d, pan] = hear(hp); audio.hoof(j.speed / 9, pan, d); } /* the menu joust's hoofbeats, distance-mixed like a match's; the bus is lowered by setMenuMix */ }; return j; },
   world: () => world, ready: () => bgDone && SCANS.ready && worldScans && !M && !preparing, shake: (v) => { S.shake = Math.max(S.shake, v); },
   crowd: (kind) => { const Rk = REACT[kind]; if (!Rk) return; if (!S.muted && audio.ctx) { const gasp = Rk.snd.some(x => x[0] === 'gasp'); for (const [snd, str, ld] of Rk.snd) audio.crowd(snd, str, (ld || 0) + (gasp && snd !== 'gasp' && kind !== 'near' ? 0.2 : 0), { fav: 0 }); }      // cheers and gasps (Settings > Sound > Crowd still silences them)
@@ -4799,6 +4807,23 @@ const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen, pauseBack:
   setVenue, musicVol, setMusic, musicNext, musicOff: () => musicOffNow, setMusicOff, musicMine, voicesOn, setVoices, commentaryOn, setCommentary, chatterOn, setChatter, replaysMode, setReplays, checkFeats() { withFeats(() => checkFeats(profile)); }, ui: (k) => { initAudio(); audio.ui(k); }, S, onShow: (name) => { S.menuView = name; },
 });
 $('soundBtn').addEventListener('click', () => setSound(S.muted));
+// The YouTube radio's own little button, always in the top-left corner on desktop (owner 28 Nov): off -> switches the radio on; on -> folds the player to its bar and back.
+{ const b = document.createElement('button'); b.id = 'ytIcon'; b.setAttribute('aria-label', 'YouTube radio');
+  b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="#c4302b"/><path d="M10 9l5 3-5 3z" fill="#fff"/></svg>';
+  import('./mymusic.js').then(({ mymusic, isPhone }) => {
+    if (touchMode || isPhone) return;
+    document.body.appendChild(b); document.body.classList.add('hasYtIcon');
+    const sync = () => { b.classList.toggle('on', mymusic.source === 'yt' && !musicOffNow); };
+    setInterval(sync, 1000); sync();
+    b.addEventListener('click', () => {
+      initAudio();
+      const y = audio.music && audio.music.yt;
+      if (mymusic.source !== 'yt' || !y || !y.box || !y.box.isConnected) { mymusic.setSource('yt'); if (musicOffNow) setMusicOff(false); musicMine(); if (y && y.setCollapsed) y.setCollapsed(false); }
+      else y.setCollapsed(!y.collapsed);
+      sync(); if (menus && menus.refreshAudio) menus.refreshAudio();
+    });
+  });
+}
 $('musicBtn').addEventListener('click', () => { if (musicOffNow || musicVol() <= 0) { if (musicVol() <= 0) setMusic(60); setMusicOff(false); } else setMusicOff(true); if (menus && menus.refreshAudio) menus.refreshAudio(); });
 showMusicBtn();
 { // show the saved sound state on the button (no save); browsers need a gesture before audio starts

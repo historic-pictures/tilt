@@ -898,3 +898,12 @@ body.spec #replayYou, body.spec #replayHim, body.spec #rplCtl, body.spec #replay
 #specSkipAll { position: fixed; right: 16px; top: 74px; z-index: 40; display: none; padding: 8px 16px; }
 body.touch #specSkipAll { top: auto; bottom: 18px; right: 14px; padding: 12px 20px; }
 body.touch #pmMain kbd { display: none; }
+
+/* the YouTube radio button, top-left (desktop): the player docks beside it */
+#ytIcon { position: fixed; left: max(10px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); z-index: 59; width: 40px; height: 40px; padding: 0; display: grid; place-items: center; background: var(--vellum); border: 1px solid var(--ink2); border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, .45); cursor: pointer; opacity: .8; }
+#ytIcon svg { width: 24px; height: 24px; display: block; filter: grayscale(.7); }
+#ytIcon.on { opacity: 1; border-color: var(--gold2); } #ytIcon.on svg { filter: none; }
+#ytIcon:hover { background: var(--vellum3); opacity: 1; }
+body.hasYtIcon #ytbox { left: max(58px, env(safe-area-inset-left)); }
+body.hasYtIcon.ytdock:not(.touch) .menu.main { left: max(5vw, 396px); }
+body.hasYtIcon.ytdock:not(.touch):has(#ytbox.min) .menu.main { left: max(5vw, 276px); }

@@ -36,7 +36,6 @@ const row = (label, ctl, when, tip, extra = '') => `<div class="row" data-tip="$
 /** What the Menu joust row says beside its switch. */
 function joustWhen() {
   if (!menuJoustOn()) return 'a still backdrop';
-  if (GFX.tier === 'low') return 'not shown on Low graphics';
   const c = joustCap(); return c ? 'switched off: the menus ran slowly (turn it off and on to try again)' : LIVE;
 }
 /** The values the selects show: 'auto' when there is no override. */
@@ -60,7 +59,7 @@ export function renderGfxSettings(host, ctx = {}) {
     ${row('Depth of field', `<button class="toggle" role="switch" data-tg="dof" aria-checked="${GFX.dof && dofOk ? 'true' : 'false'}" ${dofOk ? '' : 'disabled'}>${GFX.dof && dofOk ? 'On' : 'Off'}</button>`, dofOk ? LIVE : 'needs Full post effects', 'Blurs the background in the replay and cinematic shots. Needs Full post effects.')}
     ${row('Crowd', sel('crowd', [['auto', 'Auto'], [1, 'Full'], [0.75, 'Large'], [0.5, 'Half'], [0.25, 'Sparse']], ovv('crowd')), NEXT, 'How many people fill the stands and the field. The notable ones always stay.')}
     ${row('Frame rate', sel('cap', [['auto', 'Auto (60)'], [30, '30'], [60, '60'], ...(touchMode ? [] : [[0, 'Uncapped']])], ovv('cap')), LIVE, 'The most frames drawn a second in a match. 30 saves battery and heat; Uncapped follows your screen (desktop only). The menus always stay at 30 or less.')}
-    ${row('Menu joust', `<button class="toggle" role="switch" data-tg="joust" aria-checked="${menuJoustOn() ? 'true' : 'false'}">${menuJoustOn() ? 'On' : 'Off'}</button>`, joustWhen(), 'Two knights ride endless passes in the lists behind the menus. It is not shown on Low graphics, and it switches itself off if your device cannot keep it smooth.')}
+    ${row('Menu joust', `<button class="toggle" role="switch" data-tg="joust" aria-checked="${menuJoustOn() ? 'true' : 'false'}">${menuJoustOn() ? 'On' : 'Off'}</button>`, joustWhen(), 'Two knights ride endless passes in the lists behind the menus. It switches itself off for a few days if your device cannot keep it smooth.')}
     ${row('Show FPS', `<button class="toggle" role="switch" data-tg="fps" aria-checked="${fpsOn() ? 'true' : 'false'}">${fpsOn() ? 'On' : 'Off'}</button>`, softwareGpu() ? 'hardware acceleration is OFF in this browser' : LIVE, 'A small readout in the corner: frames a second, the slowest frames, draw calls, the graphics tier and your graphics card. Handy for a screenshot when the game runs badly.')}
     <div class="row"><span class="sctl"><button class="btn" data-g="reset" data-tip="Put every setting above back to Auto (the preset stays).">Reset to Auto</button><button class="btn primary btn-primary" data-g="reload" ${GFX.pref !== startPref ? '' : 'hidden'}>Reload now</button></span></div>
     <p class="note" data-status role="status" aria-live="polite">${pend ? 'The game reloads in a moment to apply the preset.' : ''}</p>
