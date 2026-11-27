@@ -21,10 +21,11 @@ export const DEFAULT_BODY = { sex: 'm', h: BASE_H, build: 'medium', face: 0, ski
 /** Anything (a saved profile, a message from the other player) -> a valid body. */
 export function cleanBody(b) {
   b = b && typeof b === 'object' ? b : {};
-  const sex = b.sex === 'f' ? 'f' : 'm', int = (v, n, d) => (Number.isInteger(v) && v >= 0 && v < n ? v : d);
+  const sex = 'm', int      // (a knight is always a man, whatever an old profile or another player's message says; the crowd keeps its women)
+    = (v, n, d) => (Number.isInteger(v) && v >= 0 && v < n ? v : d);
   const h = BASE_H;      // height is not a choice for a knight (owner's rule): every knight is the average man, whatever an old profile or another player's message says
   const faces = FACES.filter(f => f.sex === sex), face = int(b.face, FACES.length, -1);
-  return { sex, h, build: BUILDS.includes(b.build) ? b.build : 'medium', face: face >= 0 && FACES[face].sex === sex ? face : FACES.indexOf(faces[0]), skin: int(b.skin, SKINS.length, DEFAULT_BODY.skin), hair: int(b.hair, HAIRS.length, DEFAULT_BODY.hair) };
+  return { sex, h, build: BUILDS.includes(b.build) ? b.build : 'medium', face: face >= 0 && FACES[face].sex === sex ? face : FACES.indexOf(faces[0]), skin: DEFAULT_BODY.skin, hair: int(b.hair, HAIRS.length, DEFAULT_BODY.hair) };
 }
 /** A body for a knight who has none of his own (the AI's knights): always the same for the same id. */
 export function bodyFor(id) {

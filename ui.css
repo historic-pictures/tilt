@@ -505,7 +505,7 @@ input.name { font-size: 18px; }      /* 16 px or more: iOS Safari zooms the page
 body.touch.kb #tA2hs { display: none !important; }
 body.touch.kb .menu.welcome .plaque.big .qseal { display: none; }
 
-/* the Support coin (src/donate.js) on a phone held sideways: the picture and Play online fill the top of the page, so it sits in the bottom row beside the purse */
+/* the Support coin (src/donate.js) on a phone held sideways: the picture and Play Online fill the top of the page, so it sits in the bottom row beside the purse */
 body.touch.compact:not(.portrait) .menu button.donate-btn { top: auto; bottom: 8px; right: 110px; font-size: 14px; padding: 3px 10px 4px 7px; }
 /* painted icons (assets/ui/icons: AI-generated for TILT, cut out) */
 .pic { display: inline-block; vertical-align: middle; -webkit-user-drag: none; user-select: none; }
@@ -624,6 +624,67 @@ body.touch.portrait #royalCap.scrollcall { max-width: calc(100vw - 16px); top: 1
 body.touch #toast.scrollcall { top: calc(var(--st) + 78px); }
 body.touch #royalCap.scrollcall { top: calc(var(--st) + 86px); }
 
+/* ---------- the Armoury item tabs: a large preview and its description above, the cards to choose from below ---------- */
+#screen[data-name="armoury"] .sheet.itemtab { left: 5vw; }
+#screen[data-name="armoury"] .sheet.armscr .page { display: flex; flex-direction: column; overflow: hidden; }
+.armscr .tabbody { flex: 1 1 auto; min-height: 0; }
+.armscr .tabbody.form { overflow-y: auto; scrollbar-width: thin; padding-right: 8px; }
+.armscr .tabbody.armlay { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; padding-top: 10px; }
+.armstage { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; min-height: 0; border: 1.5px solid rgba(138, 100, 38, .55); border-radius: 3px; background: rgba(255, 250, 228, .28); box-shadow: inset 0 0 0 1px rgba(255, 245, 205, .5); padding: 8px 14px; }
+.armview { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.armscr canvas.pv.big { pointer-events: auto; width: 100%; height: 100%; margin: 0; cursor: grab; touch-action: none; }
+.armscr canvas.pv.big:active { cursor: grabbing; }
+.armscr canvas.face.big { height: 92%; width: auto; aspect-ratio: 6 / 7; border: 1px solid var(--rule); border-radius: 2px; }
+.zoomhint { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; font: italic 13px var(--body); color: var(--ink2); opacity: .75; pointer-events: none; }
+.arminfo { min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 4px 4px 4px 0; }
+.arminfo h4 { font-family: var(--display); font-weight: 700; font-size: 34px; line-height: 1.1; margin: 0 0 2px; color: var(--red); }
+.arminfo p { font-size: 18px; margin: 3px 0 6px; } .arminfo p.subline { font-family: var(--caps); font-size: 15px; letter-spacing: .08em; color: var(--red2); } .arminfo p.blurb { font-style: italic; } .arminfo p.note { font-size: 17px; }
+.armstats { max-width: 340px; margin: 8px 0 10px; } .armstats .stat { grid-template-columns: 84px 1fr; font-size: 14px; } .armstats .stat .bar { height: 6px; }
+.armact { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
+.armact .btn .coin, .armact .chip .coin { display: inline-flex; align-items: center; gap: .2em; vertical-align: middle; }
+.armact .btn.cant { opacity: .7; } .armact .nowon { cursor: default; }
+.armcards { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 4px 2px 8px; scrollbar-width: thin; }
+.armcard { flex: 0 0 148px; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 6px 8px 8px; min-height: 0; }
+.armcard canvas.pv { width: 100%; height: 92px; margin: 0 0 2px; } .armcard canvas.face { width: 54px; height: 63px; margin: 4px 0; border: 1px solid var(--rule); float: none; }
+.armcard b { font-size: 17px; line-height: 1.1; } .armcard .sub { font-size: 12px; color: var(--ink2); font-family: var(--caps); }
+.armcard em, .pick.armcard em.own, .pick.armcard em.cost { position: static; float: none; margin-top: 4px; }
+.armcard.view:not(.sel) { border-color: var(--gold); background: rgba(255, 250, 228, .62); }
+.chip.view { outline: 2px solid var(--gold); }
+.armscr .pv { pointer-events: none; } .armscr canvas.pv.big { pointer-events: auto; }
+@media (max-height: 800px) and (min-width: 700px) { .armscr .tabbody.armlay { gap: 6px; } .arminfo h4 { font-size: 28px; } .arminfo p { font-size: 16px; margin: 2px 0 4px; } .armcard { flex-basis: 128px; } .armcard canvas.pv { height: 76px; } .sheet.armscr .page { padding-top: 24px; padding-bottom: 20px; } }
+/* a phone: the preview takes the top of the page (about 45%), the cards scroll below */
+@media (max-width: 700px), (max-height: 520px) {
+  .armstage { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; gap: 4px; padding: 4px 8px; overflow-y: auto; }
+  .arminfo { overflow: visible; } .arminfo h4 { font-size: 24px; } .arminfo p { font-size: 15px; margin: 2px 0; } .armstats { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; max-width: none; margin: 4px 0; }
+  .armcard { flex-basis: 112px; } .armcard canvas.pv { height: 64px; } .armcard b { font-size: 15px; }
+}
+body.touch.portrait #screen[data-name="armoury"] .sheet.itemtab { inset: 6px calc(var(--sr) + 6px) calc(var(--sb) + 6px) calc(var(--sl) + 6px); left: calc(var(--sl) + 6px); top: 6px; }
+body.touch.portrait .armscr .tabbody.armlay { grid-template-rows: 45% minmax(0, 1fr); }
+body.touch.portrait .armcards { flex-wrap: wrap; overflow-x: hidden; overflow-y: auto; align-content: flex-start; justify-content: center; }
+body.touch.compact #screen[data-name="armoury"] .sheet.itemtab { left: 5vw; }
+@media (max-height: 520px) { .armscr .tabbody.armlay { grid-template-rows: minmax(0, 1fr) auto; } .armstage { grid-template-columns: 1fr 1fr; grid-template-rows: none; } .armcard canvas.pv { height: 54px; } }
+
+/* the Discord button (src/menus.js, URL in src/config.js): a round gold-and-ink seal in the bottom-right corner of the main menu */
+#discordBtn { position: fixed; right: 14px; bottom: 14px; z-index: 60; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); background: radial-gradient(circle at 35% 30%, #fff3c2, #e8c768 55%, #b8862b); border: 2px solid var(--ink); box-shadow: 0 0 0 2px var(--gold2), 0 3px 8px rgba(0, 0, 0, .5); }
+#discordBtn[hidden] { display: none; }
+#discordBtn svg { width: 24px; height: 24px; fill: currentColor; display: block; }
+#discordBtn:hover { filter: brightness(1.1); transform: translateY(-1px); color: var(--red); }
+body.touch #discordBtn { right: calc(var(--sr, 0px) + 56px); bottom: calc(var(--sb, 0px) + 8px); width: 36px; height: 36px; } body.touch #discordBtn svg { width: 20px; height: 20px; }
+body.touch.portrait #discordBtn { right: calc(var(--sr, 0px) + 56px); bottom: calc(var(--sb, 0px) + 10px); }
+.menu .trio .plaque { display: flex; align-items: center; justify-content: center; text-align: center; }
+.sheet.armscr .page { padding-top: 26px; padding-bottom: 12px; }
+.armcard canvas.pv { height: 84px; }
+
+/* ---------- the help strip: one info bar along the bottom of each menu panel (replaces the floating tooltips in the menus) ---------- */
+.scroll > .helpstrip { position: relative; z-index: 2; font-family: var(--body); color: var(--ink); line-height: 1.22; overflow: hidden; }
+.sheet.scroll > .helpstrip { position: absolute; left: 50px; right: 50px; bottom: 32px; height: 54px; padding: 6px 14px 4px; border-top: 1px solid var(--gold); background: linear-gradient(rgba(255, 250, 228, .0), rgba(226, 191, 94, .16)); }
+.menu.scroll > .helpstrip { margin: 0 34px 38px; min-height: 52px; padding: 6px 4px 0; border-top: 1px solid var(--gold); font-size: 15px; }
+.helpstrip .ht { display: block; font-family: var(--caps); font-size: 13px; letter-spacing: .12em; color: var(--red); font-weight: 400; text-transform: none; }
+.helpstrip .hb { font-size: 17px; font-style: italic; } .menu .helpstrip .hb { font-size: 15px; }
+.helpstrip .coin { display: inline-flex; align-items: center; gap: .15em; vertical-align: middle; font-style: normal; } .helpstrip .coin img, .helpstrip .coin svg { width: 1.1em; height: 1.1em; }
+.sheet.scroll > .page { inset: 0 0 92px 0; }
+@media (max-width: 700px), (max-height: 520px) { .sheet.scroll > .helpstrip { left: 22px; right: 22px; bottom: 22px; height: 46px; padding: 3px 8px 0; } .helpstrip .hb { font-size: 14px; } .helpstrip .ht { font-size: 11px; } .sheet.scroll > .page { inset: 0 0 74px 0; } }
+@media (max-height: 800px) and (min-width: 700px) { .armscr .tabbody.armlay { grid-template-rows: minmax(0, 1fr) auto; } .armcard { flex-basis: 120px; } .armcard canvas.pv { height: 60px; } .arminfo h4 { font-size: 26px; } .armstats .stat { margin: 1px 0; } .arminfo p.note, .arminfo p { font-size: 15px; } }
 /* the title ("Joust Revival", emblem beside it) stays on ONE line at every width: the lettering shrinks to the room left of the emblem */
 .menu h1.wmark.txt { container-type: inline-size; }
 .menu h1.wmark.txt .wm-text { white-space: nowrap !important; max-width: none !important; text-wrap: nowrap; min-width: 0; }
@@ -633,3 +694,27 @@ body.touch.compact .menu h1.wmark.txt .wm-text { font-size: min(40px, calc((100c
 body.touch.compact .menu.welcome h1.wmark.txt .wm-text { font-size: min(36px, calc((100cqw - 68px) / 6.2)) !important; }
 /* the welcome banner (painted unhorsing scene, 21:9): fills the header box, the falling knight and the broken lance stay in view */
 .menu.welcome .mini img { width: 100%; height: 132px; object-fit: cover; object-position: 38% 22%; display: block; }
+
+/* phones: the title wraps onto two lines ("Joust" / "Revival") at a comfortable size instead of shrinking; every panel scrolls inside its frame */
+body.touch .menu h1.wmark.txt .wm-text { white-space: normal !important; text-wrap: balance; line-height: .98; font-size: 44px !important; max-width: 5.5em !important; }
+body.touch.compact .menu h1.wmark.txt .wm-text, body.touch.compact .menu.welcome h1.wmark.txt .wm-text { font-size: 34px !important; }
+body.touch .scroll > .page, body.touch .tabbody.form, body.touch .arminfo, body.touch .armcards { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+body.touch .scroll > .page { overflow-y: auto; }
+body.touch .armcards { touch-action: pan-x pan-y; }
+body.touch .sheet.scroll > .page { padding-left: max(24px, var(--sl, 0px)); padding-right: max(24px, var(--sr, 0px)); }
+
+/* colour rows: the label in its own column, every swatch beside it; a row that cannot fit wraps into an even second row under the swatches, never under the label */
+.swatches:has(> .sw) { display: grid; grid-template-columns: 96px repeat(auto-fill, 30px); gap: 6px 8px; align-items: center; justify-content: start; }
+.swatches:has(> .sw) > span.lbl { grid-column: 1; grid-row: 1 / span 3; align-self: start; padding-top: 4px; }
+.swatches:has(> .sw) > .sw { margin: 0; }
+.welcome .swatches:has(> .sw) { grid-template-columns: 78px repeat(auto-fill, 28px); gap: 4px 6px; }
+@media (max-width: 480px) { .swatches:has(> .sw) { grid-template-columns: 70px repeat(auto-fill, 26px); gap: 5px 6px; } }
+body.touch #screen .sheet.scroll > .page, body.touch.portrait #screen .sheet.scroll > .page, body.touch.compact #screen .sheet.scroll > .page { inset: 0 0 76px 0; }
+body.touch.portrait .armstage { grid-template-rows: 150px minmax(0, 1fr); overflow: hidden; }
+body.touch.portrait .armview { min-height: 150px; } body.touch.portrait .armscr canvas.pv.big { height: 150px; }
+body.touch.portrait .arminfo { overflow-y: auto; }
+body.touch.portrait .armscr .tabbody.armlay { grid-template-rows: 50% minmax(0, 1fr); }
+body.touch.portrait .sheet .top { padding-bottom: 2px; } body.touch.portrait .armscr .top .purseline { display: none; }
+body.touch.portrait .tabs .tab { padding: 4px 9px; min-height: 34px; font-size: 15px; }
+body.touch.compact .armstage { grid-template-columns: 1fr 1fr; grid-template-rows: none; }
+body.touch.compact .armscr .tabbody.armlay { grid-template-rows: minmax(0, 1fr) 96px; }

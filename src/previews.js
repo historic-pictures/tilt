@@ -8,7 +8,7 @@ import { RIG, preloadRider, HARNESSES, HELMS } from './rider_rig.js';
 import { HORSES, ARMOURS, LANCES, harness } from './data.js';
 import { applyBody } from './body_types.js';
 
-const BW = 560, BH = 360;            // drawing buffer; every preview is drawn into a corner of it
+const BW = 1000, BH = 640;            // drawing buffer; every preview is drawn into a corner of it
 const SPIN = 0.55;                   // radians per second
 
 export function createPreviews() {
@@ -28,7 +28,7 @@ export function createPreviews() {
   }
 
   const under = (o, top) => { for (let p = o; p; p = p.parent) if (p === top) return true; return false; };
-  const onlyShow = (j, keep) => j.root.traverse(o => { if ((o.isMesh || o.isLine || o.isPoints) && !keep(o)) o.visible = false; });
+  const onlyShow = (j, keep) => { j.root.traverse(o => { if ((o.isMesh || o.isLine || o.isPoints) && !keep(o)) o.visible = false; }); j.root.traverse(o => { if (/lance|spear|pole/i.test(o.name || '')) o.visible = false; const g = o.geometry; if (g && g.type === 'CylinderGeometry' && g.parameters.radiusTop < 0.03 && g.parameters.height >= 0.9) o.visible = false; }); };      // (and the stirrup leathers: thin one-metre straps that run up to a saddle that is not there, two black strokes from the knight to the corners of the card)      // (a lance, held or hung on the rider, is never part of the stand)
 
   /** Build what one card shows. Returns { tt (the turntable), look, dist, fov, tick? }. */
   function build(kind, id, arms) {
@@ -65,12 +65,13 @@ export function createPreviews() {
     }
     if (kind === 'body') {      // you, with your helm off: the Body section of the menus (the code-built rider of the low tier shows its one body)
       j.helmOff = true; j.lance.visible = false; j.lance.scale.setScalar(1e-4); j.update(0); j.root.updateMatrixWorld(true);
-      onlyShow(j, o => under(o, j.rider));
+      onlyShow(j, o => under(o, j.rider) && !under(o, j.lance));
       const f = frame(j, j.rider, 0.8); return Object.assign({ tt, j, fov: 24, lift: 0.05, body: true }, f, { look: [0, f.look[1] + f.h * 0.3, 0], h: f.h * 0.56, wide: f.wide * 0.62 });      // (the upper half: the face and the shoulders)
     }
+
     if (j.rig) {      // the rigged rider on the stand, helm and all (no lance)
       j.lance.visible = false; j.lance.scale.setScalar(1e-4); j.update(0); j.root.updateMatrixWorld(true);      // (no lance: out of sight and out of the measuring)
-      onlyShow(j, o => under(o, j.rider));
+      onlyShow(j, o => under(o, j.rider) && !under(o, j.lance));      // (the lance shaft is left out: seen end-on it was a long black stroke down to the corner of the card)
       return Object.assign({ tt, j, fov: 26, lift: 0.12 }, frame(j, j.rider, 0.8));
     }
     // harness: body, arms and shield without the helm, as on an armourer's stand
@@ -119,9 +120,11 @@ export function createPreviews() {
       const s = Math.min(1, BW / cw, BH / ch), w = Math.max(2, Math.floor(cw * s)), h = Math.max(2, Math.floor(ch * s));
       if (it.pre) it.pre();
       if (it.tick) it.tick(dt * 2);
-      it.tt.visible = true; it.tt.rotation.y = ang + (it.j ? 0.6 : 0);
+      let yaw = 0, zoom = 1;      // the large preview can be turned by hand (data-yaw) and zoomed (data-zoom): once touched it stops spinning on its own
+      if (cv.dataset.yaw !== undefined || cv.dataset.zoom !== undefined) { if (cv._frozen === undefined) cv._frozen = ang; yaw = cv._frozen - ang + (+cv.dataset.yaw || 0); zoom = +cv.dataset.zoom || 1; } else cv._frozen = undefined;
+      it.tt.visible = true; it.tt.rotation.y = ang + yaw + (it.j ? 0.6 : 0);
       cam.fov = it.fov; cam.aspect = w / h; cam.updateProjectionMatrix();
-      const tf = Math.tan(cam.fov * Math.PI / 360), dist = it.dist || (Math.max(it.h / (2 * tf), it.wide / (2 * tf * cam.aspect)) * 1.06 + it.wide * 0.3);
+      const tf = Math.tan(cam.fov * Math.PI / 360), dist = (it.dist || (Math.max(it.h / (2 * tf), it.wide / (2 * tf * cam.aspect)) * 1.06 + it.wide * 0.3)) / zoom;
       cam.position.set(it.look[0], it.look[1] + (it.lift || 0) * dist / 3, it.look[2] + dist); cam.lookAt(it.look[0], it.look[1], it.look[2]);
       renderer.setViewport(0, 0, w, h); renderer.setScissor(0, 0, w, h); renderer.setScissorTest(true);
       renderer.clear(); renderer.render(scene, cam);

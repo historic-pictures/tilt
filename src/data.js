@@ -345,6 +345,7 @@ export const HISTORIC_ARMS = [
   { name: 'Warenne', note: 'Checky or and azure', arms: { c1: '#e0b83c', c2: '#1f4690', c3: '#1f4690', pattern: 'chequy', charge: 'none' } },
   { name: 'Albret', note: 'Gules plain', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#a81e1e', pattern: 'plain', charge: 'none' } },
   { name: 'Waldeck', note: 'Or, a star sable (the arms bear it of eight points)', arms: { c1: '#e0b83c', c2: '#e0b83c', c3: '#191919', pattern: 'plain', charge: 'mullet' } },
+  { name: 'Serbia', note: 'Gules, a double-headed eagle displayed argent (the Nemanjić arms; the crowns left off)', arms: { c1: '#a81e1e', c2: '#a81e1e', c3: '#ece8dc', pattern: 'plain', charge: 'eagletwo' } },
 ];
 
 export const DISCOVERY_SECONDS = 10;   // how long an "art discovered" notice stays on screen

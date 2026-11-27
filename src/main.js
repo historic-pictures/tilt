@@ -3,7 +3,7 @@ import { buildWorld, LANE_X, BARRIER_X, LAT_CLOSE, LAT_SHAVE, LAT_WIDE, START_Z,
 import { Jouster, preloadHorse } from './jouster.js';
 import { cleanBody, bodyFor, applyBody } from './body_types.js';
 import { preloadRider, rigHas, RIG } from './rider_rig.js';
-import { CELEBS, celStart, celClear, celCam, aiPick, aiLoser, favourites, promptChoices, showPrompt, hidePrompt, promptKey, cleanCel, heraldLine } from './celebrate.js';
+import { CELEBS, celStart, celClear, celActive, celCam, aiPick, aiLoser, favourites, promptChoices, showPrompt, hidePrompt, promptKey, cleanCel, heraldLine } from './celebrate.js';
 import { FX } from './fx.js';
 import { clamp, lerp, damp, smoothstep, wobble, drawCrest, TAU } from './util.js';
 import { loadHeraldry, tinctureName } from './heraldry.js';
@@ -46,6 +46,7 @@ import { Hit, sweepCapCap, sweepCapObb, capCapGap, capObbGap } from './collide.j
 import { createNet, makeCode, cleanCode, validCode, failText, preloadNet, useLocal } from './net.js';
 import * as ranks from './ranks.js';
 import * as account from './account.js';
+import * as signin from './signin.js';
 import * as store from './store.js';      // purchases: the Knight's Charter, the packs (the server decides; src/store.js)
 import { PACKS } from './cosmetics.js';
 import { cleanName, Remote, SEND_HZ, packProfile, cleanProfile, onlineOd, cleanRoom, onlineModeIds, packRider, cleanState, applyRider, mirrorVec, MIRROR_RESULT, cleanRes, cleanNear, clampNum } from './online.js';
@@ -3339,7 +3340,8 @@ let pendingJoin = '';
 try { const q = new URLSearchParams(location.search), j = q.get('join'); if (j !== null) { const c = String(j).toUpperCase(); if (validCode(c)) pendingJoin = c; q.delete('join'); const qs = q.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash); } } catch (e) { /* ignore */ }
 setInterval(() => {
   if (!pendingJoin || M || typeof menus === 'undefined' || !menus.root.classList.contains('on') || menus.root.dataset.name !== 'main') return;
-  const c = pendingJoin; pendingJoin = ''; lobbyOpen(); menus.show('online'); lobbyJoin(c, { invite: true });
+  const c = pendingJoin; pendingJoin = '';
+  signin.needsAccount().then((need) => { if (need) { signin.stashJoin(c); menus.show('online'); return; } lobbyOpen(); menus.show('online'); lobbyJoin(c, { invite: true }); });      // signed out and accounts exist: the Play Online gate first, the code waits in sessionStorage (src/signin.js)
 }, 400);
 const roomMsg = (t = 'room') => Object.assign({ t }, LOBBY.room);
 function netClose() {
@@ -4112,7 +4114,7 @@ function updateCamera(dtReal) {
     const c = player ? player.root.position : _a.set(0, 0, 0);
     if (S.menuView === 'armoury') {
       // the knight stands on the left of the page, as in a manuscript portrait
-      const a = S.menuAng * 1.6, px = c.x + Math.sin(a) * 5.4, pz = c.z + Math.cos(a) * 5.4;
+      const a = S.celPrev ? Math.PI / 2 : S.menuAng * 1.6, px = c.x + Math.sin(a) * 5.4, pz = c.z + Math.cos(a) * 5.4;
       want.set(px, 2.0, pz);
       const vx = c.x - px, vz = c.z - pz, len = Math.hypot(vx, vz) || 1;
       wantLook.set(c.x + (-vz / len) * 1.7, 1.45, c.z + (vx / len) * 1.7); rate = 4; wantFov = 44;
@@ -4336,7 +4338,7 @@ function frame(dtReal) {
     ceremony.skipUI(true, S.skipWanted.me ? 1 : S.skipHold / SKIP_HOLD, lbl);
     if (S.skipHold >= SKIP_HOLD && !S.skipWanted.me) skipVote();
     if (S.mode === 'intro' && S.introT > (introNew() ? INTRO_END : 8.4)) finishIntro();
-  } else if (S.mode === 'menu') { if (attract.update(dtReal, dt)) { if (player) player.root.visible = false; } else { if (player) { player.root.visible = true; player.update(dt); } } if ((S.menuView === 'armoury' || S.menuView === 'welcome')) previews.update(dtReal, menus.root, profile.arms, profile.body, { armour: profile.armour, helm: profile.helm }); if (S.menuView === 'stable') stable.update(dtReal, menus.root, menus.stableHorse(), profile.arms, menus.stableCap()); else stable.release(); }
+  } else if (S.mode === 'menu') { if (S.celPrev) { if (S.menuView !== 'armoury' || !player) { S.celPrev = null; if (player) celClear(player); } else if (!celActive(player) && (S.celPrevT += dtReal) > 0.9) { S.celPrevT = 0; celStart(player, S.celPrev, { mode: 'course' }); } } if (attract.update(dtReal, dt)) { if (player) player.root.visible = false; } else { if (player) { player.root.visible = true; player.update(dt); } } if ((S.menuView === 'armoury' || S.menuView === 'welcome')) previews.update(dtReal, menus.root, profile.arms, profile.body, { armour: profile.armour, helm: profile.helm }); if (S.menuView === 'stable') stable.update(dtReal, menus.root, menus.stableHorse(), profile.arms, menus.stableCap()); else stable.release(); }
   else if (S.mode === 'replay') updateReplay(dtReal, dt);
   else if (M && C) { if (C.patCd > 0) C.patCd -= dtReal; updateRide(dt, dtReal); }
   if (S.online && M) netTick(dtReal);
@@ -4393,6 +4395,8 @@ const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
   setBody(b) { profile.body = cleanBody(b); if (player) applyBody(player, profile.body); saveProfile(); },      // (the Body section of the menus: looks only, so the rider is reshaped where he sits)
   online: onlineApi, account: accountApi,
   resetCircuit() { career.newSeasonFor(profile); profile.venue = 0; saveProfile(); },
+  celPreview(id) { S.celPrev = id && CELEBS[id] ? id : null; S.celPrevT = 0; if (player) { celClear(player); if (S.celPrev) celStart(player, S.celPrev, { mode: 'course' }); } },      // the Armoury's Knight tab: the chosen celebration plays on the knight, again and again
+  celPreviewId: () => S.celPrev || null,
   startPractice(restart) { if (restart) { profile.lesson = 0; saveProfile(); } startMatch(Math.max(0, venueIdx), null, false, true); },
   setVenue, musicVol, setMusic, musicNext, musicOff: () => musicOffNow, setMusicOff, musicMine, voicesOn, setVoices, commentaryOn, setCommentary, chatterOn, setChatter, replaysMode, setReplays, checkFeats() { withFeats(() => checkFeats(profile)); }, ui: (k) => { initAudio(); audio.ui(k); }, S, onShow: (name) => { S.menuView = name; },
 });
@@ -4432,7 +4436,10 @@ setVenue(Math.min(profile.venue || 0, VENUES.length - 1));
 rebuildPlayer();
 menus.show('main');
 tick();
-(async () => { const fresh = await account.handleReturn(); if (fresh) await account.afterSignIn(); else if (account.signedIn()) await account.fetchMe(); if (fresh || account.message) menus.show('account');
+(async () => { const fresh = await account.handleReturn(); if (fresh) await account.afterSignIn(); else if (account.signedIn()) await account.fetchMe();
+  const back = signin.takeReturn();      // he left for Google / Discord from the Play Online gate (or with an invite link): bring him back there, and into the invited room
+  if (back && account.signedIn()) { lobbyOpen(); menus.show('online'); if (back.join && validCode(back.join)) lobbyJoin(back.join, { invite: true }); }
+  else if (fresh || account.message) menus.show('account');
   await store.handleReturn({ show: menus.show }); })().catch((e) => console.warn('[account]', e));      // back from Google / Discord with ?auth=, back from Stripe Checkout with ?pay=, or a returning signed-in player
 window.__tiltUp = true;      // the menu is up (the watchdog in index.html stops waiting)
 bootDone();      // (src/gfx.js: this start finished loading)

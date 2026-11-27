@@ -41,7 +41,7 @@ export const PACKS = {
 };
 
 /** The starter set of charges every player has (plus the old pre-editor names, which old saves still use). Everything else in heraldry.js CHARGES is the Herald's Book. */
-export const FREE_CHARGES = ['lion', 'eagle', 'boar', 'fleur', 'rose', 'crescent', 'mullet', 'tower', 'roundel', 'lozenge', 'billet', 'crosspattee', 'cross', 'star', 'diamond', 'feathers'];
+export const FREE_CHARGES = ['lion', 'eagle', 'boar', 'fleur', 'rose', 'crescent', 'mullet', 'tower', 'roundel', 'lozenge', 'billet', 'crosspattee', 'cross', 'star', 'diamond', 'feathers', 'eagletwo'];
 /** What the Rolls of Arms needs beyond the free pieces, so that every arms in its roll can be worn: two charges and the fur (the Herald's Book opens them too). */
 export const ROLL_CHARGES = ['leopard', 'crosscrosslet'];
 

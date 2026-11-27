@@ -6,6 +6,7 @@ import { FIELDS, ORDINARIES, CHARGES as CHARGE_ROLL, ERMINE, VAIR, armsParts, se
 import { GFX, setPref, PREFS } from './gfx.js';
 import { renderGfxSettings } from './settings_gfx.js';
 import { mountAccountPanel } from './account_panel.js';
+import * as signin from './signin.js';      // the main-menu sign-in chip and the Play Online gate
 import { ensurePanelCss } from './panel_css.js';
 import { featCount } from './achievements.js';
 import { ANNOUNCER } from './drama_lines.js';
@@ -19,11 +20,11 @@ import { mymusic } from './mymusic.js';
 import { ytmusic } from './ytmusic.js';
 import { safeName } from './online.js';
 import { confirmBuy, buyAsk } from './confirm.js';
-import { initTooltips, tip, tipAttr } from './tooltips.js';
+import { initTooltips, tip, tipAttr, setHelpDefault } from './tooltips.js';
 import { gi, icon, coin, coinsTxt, GAME_NAME, WORDMARK_IMAGE } from './icons.js';
 import * as store from './store.js';      // what has been bought (the server's word), the store screen, the gates
 import { mountDonate } from './donate.js';
-import { PAY, EQUAL_GEAR } from './config.js';
+import { PAY, EQUAL_GEAR, DISCORD_URL } from './config.js';
 import { PACKS, allowedArms, skuOfCharge, ROLL_CHARGES } from './cosmetics.js';
 const ownedSkus = () => ['herald', 'rolls', 'patron', 'finishes', 'charter'].filter((k) => store.has(k));      // the packs this account holds (heraldry gating)
 import { openUpsell, maybeAuto, exhibitionAllowed } from './upsell.js';      // the "unlock the full game" popup
@@ -43,7 +44,32 @@ export function rankBar(renown) {
   return `<div class="rankline"><span>Rank: ${here.name} — ${next ? `${renown}/${next.at}` : renown} renown</span><div class="bar"><div style="width:${Math.round(Math.max(0.03, Math.min(1, f)) * 100)}%"></div></div></div>`;
 }
 
+// The Discord link: a small round button in the bottom-right corner of the main menu. Hidden when DISCORD_URL (src/config.js) is empty, so there is never a dead link.
+const DISCORD_GLYPH = 'M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.74 19.74 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.1 13.1 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.3 12.3 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.84 19.84 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z';
+let discordBtn = null;
+function makeDiscordBtn() {
+  if (!DISCORD_URL || typeof document === 'undefined') return null;
+  const a = document.createElement('a'); a.id = 'discordBtn'; a.href = DISCORD_URL; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.setAttribute('aria-label', 'Join our Discord'); a.hidden = true;
+  a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${DISCORD_GLYPH}"/></svg>`; document.body.appendChild(a); return a;
+}
+// The default line of each menu's help strip (shown while nothing is under the pointer); [title, text]
+const HELP = {
+  any: ['', 'Point at a control (or hold a finger on it) to read what it does.'],
+  main: ['The lists', 'Point at a button to read what it does. Play Online, a Career, a single Joust or the tiltyard; the shields hold your kit and settings.'],
+  welcome: ['Your name and arms', 'Choose a name and paint your shield. You can change all of this later in the Armoury.'],
+  settings: ['Settings', 'Difficulty, view, sound, graphics and your account. Point at a setting to read what it does.'],
+  stable: ['The Stable', 'Choose or buy a horse and its caparison. Drag the horse to turn it. Stabling is charged at each circuit tourney.'],
+  'armoury.helm': ['Helm', 'Choose your helm. Point at a card to see it large; click to buy or wear it. A helm decides what you see.'],
+  'armoury.armour': ['Harness', 'Choose your harness and its finish. Point at a card to see it large; click to buy or wear it.'],
+  'armoury.lance': ['Lance', 'Choose your lance. You pay for every lance you break.'],
+  'armoury.men': ['Retinue', 'Hire a man to serve you. Each draws his wage at every circuit tourney.'],
+  'armoury.knight': ['Your knight', 'Your name, celebrations and arms. Point at a celebration to see your knight perform it.'],
+  circuit: ['The Career', 'A season of knockout tournaments across Europe. Win purses and honours.'],
+  exhibition: ['A single joust', 'Choose the rules, the lists and your opponent. No entry fee and no ransom.'],
+  online: ['Play Online', 'Quick match, ranked ladder, public rooms or a private room for a friend.'],
+};
 export function initMenus(api) {
+  if (!discordBtn) discordBtn = makeDiscordBtn();
   const root = el('screen');
   initTooltips();
   ['joust-miniature', 'welcome-banner-800', 'icons/emblem-128', ...['armoury', 'stable', 'renown', 'settings'].map((n) => `icons/${n}-128`), ...['career', 'joust', 'learn', 'coins'].map((n) => `icons/${n}-64`)].forEach((n) => { new Image().src = `assets/ui/${n}.webp`; });      // warm the cache so the title-page picture is there when the menu is drawn
@@ -58,7 +84,7 @@ export function initMenus(api) {
   const crests = () => root.querySelectorAll('canvas[data-arms]').forEach(c => drawCrest(c, JSON.parse(c.dataset.arms)));
   const crest = (arms, w = 40, h = 48) => `<canvas width="${w}" height="${h}" data-arms='${JSON.stringify(arms)}'></canvas>`;
   // every screen is a scroll: the skin, then the page that is written on (and scrolls)
-  const scroll = (cls, html) => `<div class="${cls} scroll"><i class="paper"></i><div class="page">${html}</div></div>`;
+  const scroll = (cls, html) => `<div class="${cls} scroll"><i class="paper"></i><div class="page">${html}</div><div class="helpstrip" aria-live="polite"></div></div>`;
 
   /** "Your own music": songs from the player's own computer, kept in this browser only (src/mymusic.js). */
   const mmMsg = { text: '' };
@@ -118,14 +144,14 @@ export function initMenus(api) {
       <div class="mini"><img src="assets/ui/joust-miniature.webp" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>
       ${title()}
       <div class="mbtns">
-        <button class="plaque big" data-go="online" ${tipAttr('Play online', 'Quick match, ranked ladder, public rooms|or a private room for a friend.')}>Play online${tip('Play online', 'Quick match, ranked ladder, public rooms|or a private room for a friend.', 'tonly')}</button>
+        <button class="plaque big" data-go="online" ${tipAttr('Play Online', 'Quick match, ranked ladder, public rooms|or a private room for a friend.')}>Play Online${tip('Play Online', 'Quick match, ranked ladder, public rooms|or a private room for a friend.', 'tonly')}</button>
         <div class="trio">
-          <button class="plaque blue" data-go="circuit" ${tipAttr('The Career', 'A season of knockout tournaments across Europe.|Win purses and honours.')}>${icon('career', 64, 'pl')}${CS.done ? 'Season run' : started ? 'Career' : 'Begin career'}</button>
-          <button class="plaque blue" data-go="exhibition" ${tipAttr('A single joust', 'Choose the rules, the lists and your opponent.')}>${icon('joust', 64, 'pl')}Joust</button>
-          <button class="plaque blue" data-act="practice" ${tipAttr('The tiltyard', 'Learn to ride, couch the lance and strike.|Nothing is at stake.')}>${icon('learn', 64, 'pl')}${learn}</button>
+          <button class="plaque blue" data-go="circuit" ${tipAttr('The Career', 'A season of knockout tournaments across Europe.|Win purses and honours.')}>${CS.done ? 'Season Run' : started ? 'Career' : 'Begin Career'}</button>
+          <button class="plaque blue" data-go="exhibition" ${tipAttr('A single joust', 'Choose the rules, the lists and your opponent.')}>Joust</button>
+          <button class="plaque blue" data-act="practice" ${tipAttr('The tiltyard', 'Learn to ride, couch the lance and strike.|Nothing is at stake.')}>${learn}</button>
         </div>
         <div class="shields">
-          ${shield('armoury', 'Armoury', icon('armoury', 128), '', tipAttr('Armoury', 'Horse, helm, harness, lance, retinue and your arms.'))}
+          ${shield('armoury', 'Armoury', icon('armoury', 128), '', tipAttr('Armoury', 'Helm, harness, lance, retinue and your arms. (Horses are in the Stable.)'))}
           ${shield('stable', 'Stable', icon('stable', 128), '', tipAttr('The Stable', 'Choose or buy a horse and its caparison.'))}
           ${shield('skills', 'Renown', icon('renown', 128), pts > 0 ? pts : '', tipAttr('Renown, skills and feats', pts > 0 ? `You have ${pts} skill${pts > 1 ? 's' : ''} to learn.` : 'Every joust adds to your name.|Ranks teach skills.'))}
           ${shield('settings', 'Settings', icon('settings', 128), '', tipAttr('Settings', 'Difficulty, view, sound, graphics and your account.'))}
@@ -133,6 +159,7 @@ export function initMenus(api) {
       </div>
       <div class="standing"><span class="rankb" ${tipAttr('Your rank', `${rank.name}${nh ? `|${nh} honour${nh > 1 ? 's' : ''}` : ''}`)}><i class="shield mini"><b>${rankOf(p.renown) + 1}</b></i>${rank.name}${store.badges().includes('patron') ? ' · Grand Patron' : store.badges().includes('donor') ? ' · Patron of the Lists' : ''}</span>${PAY.live ? `<span class="chip" data-go="store" ${tipAttr('The Store', "The Knight's Charter and the cosmetic packs.")}>Store</span>` : ''}<span>${purseText(p.gold)}</span></div>`);
     mountDonate(root.querySelector('.menu .page'), { ui: api.ui });      // the little Support coin button, top right (src/donate.js)
+    signin.mountChip(root.querySelector('.menu .page'), { show });      // the optional sign-in chip, top left (src/signin.js)
   }
 
   /** Settings: everything that used to be chips on the main screen, in one place. */
@@ -192,10 +219,8 @@ export function initMenus(api) {
     const sws = (k, list) => list.map((c, i) => `<div class="sw ${b[k] === i ? 'sel' : ''}" title="${c.name}" style="background:${c.hex}" data-body="${k}|${i}"></div>`).join('');
     return `<section class="body"><h5>Your Body <small>how you look, helm on or off; it changes nothing in the lists</small></h5>
       <div class="arms-row body-row"><canvas class="pv bodypv" data-pv="body:me" width="300" height="380" style="width:150px;height:190px"></canvas><div>
-        <div class="row swatches"><span class="lbl">Sex</span>${chip('sex', 'm', 'Man')}${chip('sex', 'f', 'Woman')}</div>
         <div class="row swatches"><span class="lbl">Build</span>${BUILDS.map(x => chip('build', x, BUILD_NAMES[x])).join('')}</div>
         <div class="row swatches"><span class="lbl">Face</span><select class="select" id="bodyFace">${FACES.map((f, i) => (f.sex === b.sex ? `<option value="${i}" ${b.face === i ? 'selected' : ''}>${f.name}</option>` : '')).join('')}</select></div>
-        <div class="row swatches"><span class="lbl">Skin</span>${sws('skin', SKINS)}</div>
         <div class="row swatches"><span class="lbl">Hair</span>${sws('hair', HAIRS)}</div>
       </div></div></section>`;
   };
@@ -367,6 +392,9 @@ export function initMenus(api) {
       head = 'The room could not be opened.';
       body = `<p class="err">${L.err}</p><div class="onrow"><button class="btn primary" data-on="retry">Try again</button></div>`;
     }
+    const gate = signin.onlineGate(() => { if (root.dataset.name === 'online') show('online'); });      // signed out and accounts exist: sign in first (src/signin.js)
+    if (gate) { signin.style(); root.innerHTML = scroll('sheet online slim', `<div class="top"><div><h3>Play Online</h3></div><div class="actions"><button class="btn" data-go="main">Back</button></div></div>${gate}`); signin.bind(root.querySelector('[data-si-host]') || root); return; }
+    if (ph === 'choose') body += signin.onlineNote();
     root.innerHTML = scroll('sheet online slim', `<div class="top"><div><h3>Play Online</h3>${head ? `<p>${head}</p>` : ''}</div><div class="actions">${actions}</div></div>${body}`);
     crests();
     if (host || ph === 'joined') api.setVenue(room.v);
@@ -401,13 +429,69 @@ export function initMenus(api) {
     paint(); if (!heraldryReady()) whenHeraldry(() => { if (root.dataset.name === 'armoury') paint(); });
   }
 
-  let armTab = 'horse';
-  const ARM_TABS = [['horse', 'Horse'], ['helm', 'Helm'], ['armour', 'Harness'], ['lance', 'Lance'], ['men', 'Retinue'], ['knight', 'Knight']];
+  let armTab = 'helm';
+  const armFocus = {};      // the item each Armoury tab last showed in its large preview
+  let armData = null;
+  const ARM_TABS = [['helm', 'Helm'], ['armour', 'Harness'], ['lance', 'Lance'], ['men', 'Retinue'], ['knight', 'Knight']];
   /** The Knight tab's celebrations: your favourites (up to four) are what the prompt offers after a win, and the default if you do not choose. */
   function celebrationsHtml(p) {
     initCelUi(); const fav = favourites(p), chosen = p.celebs && p.celebs.length ? p.celebs : [];
-    return `<div class="swatches cels">${WIN_IDS.map(id => `<div class="chip ${chosen.includes(id) ? 'sel' : ''}" data-cel="${id}" data-tip-title="${CELEBS[id].name}" data-tip="${CELEBS[id].blurb.replace(/"/g, '&quot;')}">${celIcon(id)} ${CELEBS[id].name}</div>`).join('')}</div>
+    return `<div class="swatches cels">${WIN_IDS.map(id => `<div class="chip ${chosen.includes(id) ? 'sel' : ''} ${api.celPreviewId && api.celPreviewId() === id ? 'view' : ''}" data-cel="${id}" data-tip-title="${CELEBS[id].name}" data-tip="${CELEBS[id].blurb.replace(/"/g, '&quot;')}">${celIcon(id)} ${CELEBS[id].name}</div>`).join('')}</div>
       <p class="aside">${chosen.length ? `Chosen: ${fav.map(id => CELEBS[id].name).join(', ')}.` : `None chosen: the herald's favourites are used (${fav.map(id => CELEBS[id].name).join(', ')}).`} A beaten knight nods or slaps his helm.</p>`;
+  }
+  /** Wire the item tabs: hovering a card (or the first tap on a phone) shows it in the large preview; drag turns it, wheel or pinch zooms. Click and buy logic is untouched (onClick). */
+  function armBind() {
+    const stage = el('armStage'), cards = el('armCards'); if (!stage || !cards || !armData) return;
+    const show1 = (id) => {
+      const it = armData.its.find(i => String(i.id) === id); if (!it || armFocus[armTab] === id) return;
+      armFocus[armTab] = id; stage.innerHTML = armData.stage(it); faces();
+      cards.querySelectorAll('.armcard.view').forEach(c => c.classList.remove('view')); const c = cards.querySelector(`[data-focus="${id}"]`); if (c) c.classList.add('view');
+    };
+    const cur = cards.querySelector(`[data-focus="${armFocus[armTab]}"]`); if (cur) cur.classList.add('view');
+    cards.addEventListener('mouseover', (e) => { const c = e.target.closest('[data-focus]'); if (c && !document.body.classList.contains('touch')) show1(c.dataset.focus); });
+    cards.addEventListener('focusin', (e) => { const c = e.target.closest('[data-focus]'); if (c) show1(c.dataset.focus); });
+    // a phone has no hover: the first tap on a card shows it, a second tap (or the button in the panel) does what the card does
+    cards.addEventListener('click', (e) => { const c = e.target.closest('[data-focus]'); if (!c || !document.body.classList.contains('touch')) return;
+      if (armFocus[armTab] !== c.dataset.focus) { e.stopPropagation(); show1(c.dataset.focus); } }, true);
+    // drag to turn, wheel or pinch to zoom, double-click to reset (previews.js reads data-yaw and data-zoom of the big canvas)
+    const ptrs = new Map(); let pinch = 0;
+    const big = () => stage.querySelector('canvas.pv.big');
+    const zoomBy = (cv, f) => { cv.dataset.zoom = String(Math.max(0.6, Math.min(3.2, (+cv.dataset.zoom || 1) * f))); };
+    stage.addEventListener('pointerdown', (e) => { const cv = big(); if (!cv || e.target !== cv) return; cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); pinch = 0; cv.dataset.drag = '1'; });
+    stage.addEventListener('pointermove', (e) => { const cv = big(); if (!cv || !ptrs.has(e.pointerId)) return; const o = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) zoomBy(cv, d / pinch); pinch = d; }
+      else cv.dataset.yaw = String((+cv.dataset.yaw || 0) + (e.clientX - o[0]) * 0.012); });
+    const up = (e) => { ptrs.delete(e.pointerId); pinch = 0; const cv = big(); if (cv && !ptrs.size) delete cv.dataset.drag; };
+    stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+    stage.addEventListener('wheel', (e) => { const cv = big(); if (!cv || e.target !== cv) return; e.preventDefault(); zoomBy(cv, e.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
+    stage.addEventListener('dblclick', (e) => { const cv = big(); if (cv && e.target === cv) { delete cv.dataset.zoom; delete cv.dataset.yaw; } });
+  }
+  /** Wire the item tabs: hovering a card (or the first tap on a phone) shows it in the large preview; drag turns it, wheel or pinch zooms. Click and buy logic is untouched (onClick). */
+  function armBind() {
+    const stage = el('armStage'), cards = el('armCards'); if (!stage || !cards || !armData) return;
+    const show1 = (id) => {
+      const it = armData.its.find(i => String(i.id) === id); if (!it || armFocus[armTab] === id) return;
+      armFocus[armTab] = id; stage.innerHTML = armData.stage(it); faces();
+      cards.querySelectorAll('.armcard.view').forEach(c => c.classList.remove('view')); const c = cards.querySelector(`[data-focus="${id}"]`); if (c) c.classList.add('view');
+    };
+    const cur = cards.querySelector(`[data-focus="${armFocus[armTab]}"]`); if (cur) cur.classList.add('view');
+    cards.addEventListener('mouseover', (e) => { const c = e.target.closest('[data-focus]'); if (c && !document.body.classList.contains('touch')) show1(c.dataset.focus); });
+    cards.addEventListener('focusin', (e) => { const c = e.target.closest('[data-focus]'); if (c) show1(c.dataset.focus); });
+    // a phone has no hover: the first tap on a card shows it, a second tap (or the button in the panel) does what the card does
+    cards.addEventListener('click', (e) => { const c = e.target.closest('[data-focus]'); if (!c || !document.body.classList.contains('touch')) return;
+      if (armFocus[armTab] !== c.dataset.focus) { e.stopPropagation(); show1(c.dataset.focus); } }, true);
+    // drag to turn, wheel or pinch to zoom, double-click to reset (previews.js reads data-yaw and data-zoom of the big canvas)
+    const ptrs = new Map(); let pinch = 0;
+    const big = () => stage.querySelector('canvas.pv.big');
+    const zoomBy = (cv, f) => { cv.dataset.zoom = String(Math.max(0.6, Math.min(3.2, (+cv.dataset.zoom || 1) * f))); };
+    stage.addEventListener('pointerdown', (e) => { const cv = big(); if (!cv || e.target !== cv) return; cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); pinch = 0; });
+    stage.addEventListener('pointermove', (e) => { const cv = big(); if (!cv || !ptrs.has(e.pointerId)) return; const o = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) zoomBy(cv, d / pinch); pinch = d; }
+      else cv.dataset.yaw = String((+cv.dataset.yaw || 0) + (e.clientX - o[0]) * 0.012); });
+    const up = (e) => { ptrs.delete(e.pointerId); pinch = 0; };
+    stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+    stage.addEventListener('wheel', (e) => { const cv = big(); if (!cv || e.target !== cv) return; e.preventDefault(); zoomBy(cv, e.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
+    stage.addEventListener('dblclick', (e) => { const cv = big(); if (cv && e.target === cv) { delete cv.dataset.zoom; delete cv.dataset.yaw; } });
   }
   function armoury() {
     const p = api.profile, a = p.arms, broke = (p.gold || 0) < 0;
@@ -441,34 +525,51 @@ export function initMenus(api) {
     const q = (t) => String(t).replace(/"/g, '&quot;');
     const badge = (owned, cur, curWord, price) => `<em class="${owned ? 'own' : (p.gold || 0) < price ? 'cost cant' : 'cost'}">${owned ? curWord : marks(price)}</em>`;
     let body = '', hint = '';
-    if (armTab === 'horse') {
-      hint = tip('Your horse', `Stabling is charged at each circuit tourney.|Caparison: ${(CAPARISONS[p.caparison] || CAPARISONS.livery).name}.`);
-      body = `<div class="grid">${Object.values(HORSES).map(h => `<div class="pick ${p.horse === h.id ? 'sel' : ''}" data-horse="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb + '|Keep: ' + marks(ECON.keep[h.id] ?? 2) + ' a tourney.')}">${pv('horse', h.id)}<b>${h.name}</b>${badge(p.owned.horses.includes(h.id), p.horse, (p.horse === h.id ? 'Riding' : 'Owned') + ' · bond ' + BOND_NAMES[bondLevel((p.bond || {})[h.id])], h.price)}${stat('Speed', (h.top - 7.2) / 2)}${stat('Accel', h.accel / 3.7)}${stat('Shock', (h.mass - 0.7) / 0.6)}${stat('Smooth', h.steady)}${stat('Temper', h.nerve)}${stat('Wind', h.stamina)}</div>`).join('')}</div>${SAME}
-        <p class="aside"><span class="chip" data-go="stable">Visit the stable</span></p>`;
-    } else if (armTab === 'helm') {
-      hint = tip('Your helm', 'Bought and worn on its own.|It decides what you see.');
-      body = `<div class="grid">${Object.values(HELMS).map(h => `<div class="pick ${p.helm === h.id ? 'sel' : ''}" data-helm="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb)}">${pv('helm', h.id)}<b>${h.name}</b>${badge(p.owned.helms.includes(h.id), p.helm, p.helm === h.id ? 'Worn' : 'Owned', h.price)}${stat('Protect', h.protection)}${stat('Vision', h.vision)}${stat('Light', 1.15 - h.kg / 10)}</div>`).join('')}</div>${SAME}`;
-    } else if (armTab === 'armour') {
-      hint = tip('Your harness', 'Body armour.|The armourer mends it after every joust.');
-      body = `${finishRow}<div class="grid">${Object.values(ARMOURS).map(r => `<div class="pick ${p.armour === r.id ? 'sel' : ''}" data-armour="${r.id}" data-tip-title="${r.name}" data-tip="${q(r.blurb)}">${pv('armour', r.id)}<b>${r.name}</b>${badge(p.owned.armours.includes(r.id), p.armour, p.armour === r.id ? 'Worn' : 'Owned', r.price)}${stat('Protect', r.protection)}${stat('Light', 1.9 - r.weight * 1.2)}</div>`).join('')}</div>${SAME}`;
-    } else if (armTab === 'lance') {
-      hint = tip('Your lance', 'You pay for every lance you break.');
-      body = `<div class="grid">${Object.values(LANCES).map(l => `<div class="pick lance ${(p.lance || 'standard') === l.id ? 'sel' : ''}" data-lance="${l.id}" data-tip-title="${l.name}" data-tip="${q(l.blurb)}">${pv('lance', l.id)}<b>${l.name}</b><em>${marks(ECON.lance[l.id])} each</em>${stat('Shock', (l.power - 0.7) / 0.5)}${stat('Steady', 1.55 - l.sway)}${stat('Arm', 1.2 - l.fatigue * 0.55)}</div>`).join('')}</div>${SAME}`;
-    } else if (armTab === 'men') {
-      hint = tip('Your retinue', 'Hired once.|Each draws his wage at every circuit tourney.');
-      body = `<div class="grid">${Object.keys(RETINUE).map(id => manCard(p, id)).join('')}</div>`;
+    // The item tabs share one layout: a large preview with the full description above, the cards to choose from below (no tooltips on the cards).
+    const own = (list, id) => list.includes(id);
+    const itemsOf = (tab) => {
+      if (tab === 'horse') return Object.values(HORSES).map(h => { const has = own(p.owned.horses, h.id), on = p.horse === h.id; return { kind: 'horse', id: h.id, name: h.name, blurb: h.blurb, attr: 'data-horse', has, on, price: h.price, word: on ? 'Riding' : 'Owned', verb: 'Ride',
+        lines: [`Keep: ${marks(ECON.keep[h.id] ?? 2)} a tourney.`, has ? `Bond with you: ${BOND_NAMES[bondLevel((p.bond || {})[h.id])]} of IV.` : ''], stats: [['Speed', (h.top - 7.2) / 2], ['Accel', h.accel / 3.7], ['Shock', (h.mass - 0.7) / 0.6], ['Smooth', h.steady], ['Temper', h.nerve], ['Wind', h.stamina]], extra: '<span class="chip" data-go="stable">Visit the stable</span>' }; });
+      if (tab === 'helm') return Object.values(HELMS).map(h => { const has = own(p.owned.helms, h.id), on = p.helm === h.id; return { kind: 'helm', id: h.id, name: h.name, blurb: h.blurb, attr: 'data-helm', has, on, price: h.price, word: on ? 'Worn' : 'Owned', verb: 'Wear', lines: [],
+        stats: [['Protect', h.protection], ['Vision', h.vision], ['Light', 1.15 - h.kg / 10]] }; });
+      if (tab === 'armour') return Object.values(ARMOURS).map(r => { const has = own(p.owned.armours, r.id), on = p.armour === r.id; return { kind: 'armour', id: r.id, name: r.name, blurb: r.blurb, attr: 'data-armour', has, on, price: r.price, word: on ? 'Worn' : 'Owned', verb: 'Wear', lines: [],
+        stats: [['Protect', r.protection], ['Light', 1.9 - r.weight * 1.2]], extra: finishRow }; });
+      if (tab === 'lance') return Object.values(LANCES).map(l => { const on = (p.lance || 'standard') === l.id; return { kind: 'lance', id: l.id, name: l.name, blurb: l.blurb, attr: 'data-lance', has: true, on, word: on ? 'Carried' : 'Owned', verb: 'Carry', tag: `${marks(ECON.lance[l.id])} each`, lines: [`You pay ${marks(ECON.lance[l.id])} for each lance you break.`],
+        stats: [['Shock', (l.power - 0.7) / 0.5], ['Steady', 1.55 - l.sway], ['Arm', 1.2 - l.fatigue * 0.55]] }; });
+      return Object.keys(RETINUE).map(id => { const r = RETINUE[id], rec = (p.retinue || {})[id], T = rec && TRAITS[rec.trait]; if (!rec) return { kind: 'man', id, name: r.name, blurb: r.role, attr: 'data-hire', has: false, on: false, price: r.hire, verb: 'Hire', lines: [r.wage ? `Wage: ${marks(r.wage)} a tourney.` : '', 'A man is found for you when you hire.'], stats: [] };
+        const cost = trainCost(id, rec), w = wageOf(id, rec), can = (p.gold || 0) >= cost;
+        return { kind: 'man', id, name: rec.name, sub: `${r.name} · level ${rec.level}`, blurb: r.role, has: true, on: true, word: `Level ${rec.level}`, face: `${rec.name.replace(/"/g, '')}|${T.color}|${r.cap}`, lines: [`<i style="color:${T.color}">${T.name}.</i> ${T.text}`, w ? `Wage: ${marks(w)} a tourney.` : 'In your service, no wage.'], stats: [],
+          extra: `${cost ? `<span class="chip ${can ? '' : 'dim'}" data-train="${id}">Train (${marks(cost)})</span>` : rec.level >= RETINUE_UP.max ? '<span class="dimtxt">Fully trained</span>' : ''}${id === 'squire' ? '' : `<span class="chip dismiss ${dismissArm === id ? 'armed' : ''}" data-dismiss="${id}">${dismissArm === id ? 'Click again to dismiss' : 'Dismiss'}</span>`}` }; });
+    };
+    const armCard = (it) => `<div class="pick armcard ${it.kind} ${it.on ? 'sel' : ''}" ${it.attr && !it.has ? `${it.attr}="${it.id}"` : it.attr && it.kind !== 'man' ? `${it.attr}="${it.id}"` : ''} data-focus="${it.id}">${it.face ? `<canvas class="face" width="72" height="84" data-face="${it.face}"></canvas>` : pv(it.kind, it.id)}<b>${it.name}</b>${it.sub ? `<span class="sub">${it.sub}</span>` : ''}${it.tag ? `<em class="own">${it.tag}</em>` : it.has ? `<em class="own">${it.word}</em>` : `<em class="${(p.gold || 0) < it.price ? 'cost cant' : 'cost'}">${marks(it.price)}</em>`}</div>`;
+    /** The stat bars of one item in the preview panel: the single place that draws them (a one-line note can stand in for them here). */
+    const gearBars = (it) => !it.stats.length ? '' : EQUAL_GEAR ? SAME : `<div class="armstats">${it.stats.map(([n, v]) => stat(n, v)).join('')}</div>`;
+    const armStage = (it) => {
+      const act = it.kind === 'man' ? (it.has ? '' : `<button class="btn primary" data-hire="${it.id}">Hire · ${marks(it.price)}</button>`)
+        : it.on ? `<span class="chip sel nowon">${it.word}</span>` : it.has ? `<button class="btn primary" ${it.attr}="${it.id}">${it.verb}</button>` : `<button class="btn primary ${(p.gold || 0) < it.price ? 'cant' : ''}" ${it.attr}="${it.id}">Buy · ${marks(it.price)}</button>`;
+      return `<div class="armview">${it.face ? `<canvas class="face big" width="216" height="252" data-face="${it.face}"></canvas>` : `<canvas class="pv big" data-pv="${it.kind}:${it.id}"></canvas><span class="zoomhint">Drag to turn · wheel or pinch to zoom · double-click to reset</span>`}</div>
+        <div class="arminfo"><h4>${it.name}</h4>${it.sub ? `<p class="subline">${it.sub}</p>` : ''}<p class="blurb">${it.blurb}</p>${it.lines.filter(Boolean).map(l => `<p class="note">${l}</p>`).join('')}
+          ${gearBars(it)}<div class="armact">${act}${it.extra || ''}</div></div>`;
+    };
+    if (armTab !== 'knight') {
+      const its = itemsOf(armTab), pick = its.find(i => i.id === armFocus[armTab]) || its.find(i => i.on) || its[0];
+      armFocus[armTab] = pick.id; armData = { its, stage: armStage };
+      hint = '';
+      body = `<div class="armstage" id="armStage">${armStage(pick)}</div><div class="armcards" id="armCards">${its.map(armCard).join('')}</div>`;
     } else {
-      hint = tip('Your knight', 'The herald cries your name when you ride in.|Your arms are painted on shield, horse and banner.');
+      hint = '';
       body = `<h5>Your Name</h5><input class="name" id="nameIn" name="knight-title" maxlength="22" value="${p.name.replace(/"/g, '')}" ${NOFILL}>
       <h5>Celebrations <small>pick up to ${MAX_FAVS}: one of these plays when you win (you may choose another on the day)</small></h5>${celebrationsHtml(p)}
       <h5>Blazon <small>your arms go on your shield, surcoat, trapper, banner and the roll</small></h5>${blazon}
       <!-- slot: Body (build and height options are added here by the character-creation module) -->
       ${bodyBlock(p)}`;
     }
-    root.innerHTML = scroll('sheet armscr', `<div class="top"><div><h3>Armoury</h3><p class="purseline"><b>${purseText(p.gold)}</b>${(p.honours || []).length ? ` · ${career.honoursLine(p)}` : ''}${broke ? ' <span class="debt">· no buying while in debt</span>' : ''}</p></div>
+    root.innerHTML = scroll(`sheet armscr ${armTab === 'knight' ? 'knighttab' : 'itemtab'}`, `<div class="top"><div><h3>Armoury</h3><p class="purseline"><b>${purseText(p.gold)}</b>${(p.honours || []).length ? ` · ${career.honoursLine(p)}` : ''}${broke ? ' <span class="debt">· no buying while in debt</span>' : ''}</p></div>
       <div class="actions"><button class="btn primary" data-go="main">Done</button></div></div>
       <div class="tabs" role="tablist">${ARM_TABS.map(([id, n]) => `<button class="tab ${armTab === id ? 'sel' : ''}" role="tab" data-artab="${id}">${n}</button>`).join('')}<span class="tabhint">${hint}</span></div>
-      <div class="tabbody">${body}</div>`);
+      <div class="tabbody ${armTab === 'knight' ? 'form' : 'armlay'}">${body}</div>`);
+    if (armTab !== 'knight') { armBind(); if (api.celPreview && api.celPreviewId && api.celPreviewId()) api.celPreview(null); }
+    else if (api.celPreview && api.celPreviewId && !api.celPreviewId()) api.celPreview(favourites(p)[0]);
     if (el('crestBig')) { drawCrest(el('crestBig'), a); armsPreviews(a, P); }
     faces();
     const ni = el('nameIn'); if (ni) ni.addEventListener('change', (e) => { p.name = cleanName(e.target.value); e.target.value = p.name; api.saveProfile(); });
@@ -620,6 +721,8 @@ export function initMenus(api) {
     if (api.checkFeats) api.checkFeats();      // purchases and training are checked for feats whenever a screen is drawn
     if (name !== 'circuit') stopTourneyWatch();
     root.classList.add('on'); screens[name](); root.dataset.name = name;
+    if (discordBtn) discordBtn.hidden = name !== 'main';
+    { const hs = root.querySelector('.scroll > .helpstrip'); if (hs) { const h = HELP[name === 'armoury' ? 'armoury.' + armTab : name] || HELP[name] || HELP.any; setHelpDefault(hs, h[0], h[1]); } }
     const pg = root.querySelector('.page'); if (pg) pg.scrollTop = keep;
     if (api.onShow) api.onShow(name);
   }
@@ -656,7 +759,7 @@ export function initMenus(api) {
     if (d.act === 'aimspeed') { setAimSpeed(d.v); return show('settings'); }
     if (d.lock === 'charter') { const [why, v] = String(d.why || 'store').split(':'); openUpsell({ reason: why, venue: +v || 0, show }); return; }      // free content ends here: the popup
     if (d.lock) { store.focus(d.lock); return show('store'); }      // a pack's piece: the store, at that pack
-    if (d.cel) { toggleFav(p, d.cel); api.saveProfile(); return show('armoury'); }
+    if (d.cel) { toggleFav(p, d.cel); if (api.celPreview) api.celPreview(d.cel); api.saveProfile(); return show('armoury'); }
     if (d.fin) { p.finish = d.fin !== 'plain' && store.has('finishes') && PACKS.finishes.finishes[d.fin] ? d.fin : undefined; api.saveProfile(); api.rebuildPlayer(); return show('armoury'); }
     if (d.roll !== undefined) { if (store.has('rolls') && PACKS.rolls.arms[+d.roll]) { p.arms = JSON.parse(JSON.stringify(PACKS.rolls.arms[+d.roll].arms)); api.saveProfile(); api.rebuildPlayer(); } return show('armoury'); }
     if (d.act === 'fullscreen') { if (api.fullscreen) api.fullscreen(); return; }
@@ -749,6 +852,7 @@ export function initMenus(api) {
     api.saveProfile(); api.rebuildPlayer(); show('armoury');
   };
   root.addEventListener('click', onClick);
+  root.addEventListener('mouseover', (e) => { const c = e.target.closest && e.target.closest('[data-cel]'); if (c && api.celPreview && c.dataset.cel !== (api.celPreviewId && api.celPreviewId())) { api.celPreview(c.dataset.cel); root.querySelectorAll('[data-cel].view').forEach(x => x.classList.remove('view')); c.classList.add('view'); } });
 
   return { show, root, refreshAudio: () => { if (root.dataset.name === 'settings' && root.classList.contains('on')) show('settings'); }, stableHorse: () => stableSel, stableCap: () => stableCap || 'livery' };
 }

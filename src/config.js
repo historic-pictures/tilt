@@ -7,7 +7,14 @@
 //   (docs/payments-setup.md, "Founders' Season / PAY.live").
 export const PAY = { live: false };
 
+// The Discord button in the corner of the main menu. Paste the permanent invite link here; while it is empty the button is not shown at all.
+export const DISCORD_URL = '';
 // EQUAL_GEAR = true: while there are few players, every horse, harness, helm and lance plays with the SAME stats (the gear is cosmetic: looks and size only).
 //   data.js applyEqualGear() overwrites the stat fields of HORSES / ARMOURS / HELMS / LANCES and PHYS.horseKg / armourKg / lance with one standard set the moment it loads,
 //   so the sim, the AI and the online peers all read the same numbers; the raw values are kept in RAW_GEAR. The menus hide the stat bars. Set false to bring the differences back.
 export const EQUAL_GEAR = true;
+
+// ONLINE_NEEDS_ACCOUNT = true: Play Online asks the player to sign in (Google or Discord) first, so names, ranks and rewards are his. It only bites when the server reports at least one
+//   sign-in switched on (src/signin.js): if accounts are not set up yet, or the server cannot be reached, online play stays open as before, with a small note.
+//   Single player never needs an account. Set false to make signing in optional everywhere (the main-menu chip stays).
+export const ONLINE_NEEDS_ACCOUNT = true;

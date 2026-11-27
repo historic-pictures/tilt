@@ -18,6 +18,19 @@ export const tipAttr = (title, body) => `data-tip-title="${esc(title || '')}" da
 /** A small "?" seal that opens a tip when tapped (always) or hovered (desktop). */
 export const tip = (title, body, cls = '') => `<b class="qseal ${cls}" role="button" tabindex="0" aria-label="${esc(title || 'Help')}" ${tipAttr(title, body)}>?</b>`;
 
+// A tip's text may carry a little markup (the coin icon and number): keep only inline, harmless elements and attributes, drop the rest as plain text.
+const KEEP = new Set(['SPAN', 'B', 'I', 'EM', 'IMG', 'SVG', 'USE', 'PATH', 'BR']), KEEPA = /^(class|src|srcset|alt|viewbox|href|d|draggable|aria-hidden)$/i;
+export function safeHtml(s) {
+  const d = new DOMParser().parseFromString('<body>' + String(s) + '</body>', 'text/html').body;
+  (function walk(n) { for (const c of [...n.childNodes]) { if (c.nodeType !== 1) continue; if (!KEEP.has(c.tagName.toUpperCase())) { c.replaceWith(document.createTextNode(c.textContent)); continue; } for (const a of [...c.attributes]) if (!KEEPA.test(a.name)) c.removeAttribute(a.name); walk(c); } })(d);
+  return d.innerHTML;
+}
+/** The help strip along the bottom of a menu panel (EA-FC style): hovering or long-pressing a control fills it; with nothing under the pointer it shows the screen's own hint. */
+function fillStrip(st, title, html) { st.innerHTML = `${title ? `<b class="ht">${esc(title)}</b>` : ''}<span class="hb">${html}</span>`; }
+export function setHelpDefault(st, title, text) { if (!st) return; st.dataset.title = title || ''; st.dataset.body = text || ''; fillStrip(st, title, safeHtml(text || '')); }
+const stripOf = (el) => { const h = el && el.closest && el.closest('#screen .scroll'); return h ? h.querySelector(':scope > .helpstrip') : null; };
+let strip = null;
+
 let box = null, cur = null, timer = 0, hideTimer = 0, pressTimer = 0, lastTouch = 0;
 
 function ensure() {
@@ -48,6 +61,7 @@ function place(el) {
 }
 
 export function hideTip() {
+  if (strip) { fillStrip(strip, strip.dataset.title, safeHtml(strip.dataset.body || '')); strip = null; cur = null; }
   clearTimeout(timer); clearTimeout(hideTimer); clearTimeout(pressTimer);
   if (!box || box.classList.contains('hidden')) { cur = null; return; }
   box.classList.remove('open'); cur = null;
@@ -56,6 +70,8 @@ export function hideTip() {
 
 export function showTip(el) {
   const { title, lines } = textOf(el); if (!title && !lines.length) return;
+  const st = stripOf(el);
+  if (st) { if (strip && strip !== st) fillStrip(strip, strip.dataset.title, safeHtml(strip.dataset.body || '')); strip = st; cur = el; if (box) { box.classList.remove('open'); box.classList.add('hidden'); } fillStrip(st, title, lines.map(safeHtml).join(' ')); return; }
   ensure(); clearTimeout(hideTimer); cur = el;
   box.querySelector('.tt').textContent = title; box.querySelector('.tt').style.display = title ? '' : 'none';
   box.querySelector('.tb').innerHTML = lines.map((l) => `<p>${esc(l)}</p>`).join('');
@@ -97,7 +113,7 @@ export function initTooltips() {
   document.addEventListener('touchstart', (e) => {
     lastTouch = performance.now(); clearTimeout(pressTimer);
     const el = tipEl(e.target); if (!el || el.classList.contains('qseal')) return;
-    pressTimer = setTimeout(() => { showTip(el); lastTouch = performance.now(); el.dataset.tipLong = String(Date.now()); }, 520);
+    pressTimer = setTimeout(() => { showTip(el); lastTouch = performance.now(); el.dataset.tipLong = String(Date.now()); }, 400);
   }, { passive: true });
   const endPress = () => { lastTouch = performance.now(); clearTimeout(pressTimer); };
   document.addEventListener('touchend', endPress, { passive: true }); document.addEventListener('touchmove', endPress, { passive: true }); document.addEventListener('touchcancel', endPress, { passive: true });
