@@ -1,3 +1,4 @@
+import { EQUAL_GEAR } from './config.js';
 // All tuning lives here as plain data so it can be ported to another engine later.
 
 export const GAITS = ['HALT', 'WALK', 'TROT', 'CANTER', 'GALLOP'];
@@ -13,22 +14,22 @@ export const GAIT_SPEED = [0, 1.8, 4.2, 6.2, 1];
 // `scale` is only the size of the older code-built horse, used if the rigged model fails to load.
 export const HORSES = {
   destrier: {
-    id: 'destrier', name: 'Destrier', hands: 15.2, withers: 1.575, kg: 540, length: 1.65, blurb: 'The great horse. Heavy, steady and hard-hitting, slow to get going.',
+    id: 'destrier', name: 'Destrier', hands: 15.2, withers: 1.575, kg: 540, length: 1.65, blurb: 'The great horse of the lists, bred for this and little else. Expensive to keep, and he knows it.', blurbStats: 'The great horse. Heavy, steady and hard-hitting, slow to get going.',
     price: 260, top: 7.7, accel: 2.4, mass: 1.25, steady: 0.85, nerve: 0.8, stamina: 0.7, scale: 1.07, girth: 1.08,
     coat: 0x2a211b, mane: 0x0e0c0b,
   },
   courser: {
-    id: 'courser', name: 'Courser', hands: 15.0, withers: 1.524, kg: 470, length: 1.58, blurb: 'Fast and hot-blooded. Brings great speed to the strike, but the lance bounces.',
+    id: 'courser', name: 'Courser', hands: 15.0, withers: 1.524, kg: 470, length: 1.58, blurb: 'Hot-blooded and long in the leg, a horse for the chase and the road. Chroniclers admired him more than grooms did.', blurbStats: 'Fast and hot-blooded. Brings great speed to the strike, but the lance bounces.',
     price: 170, top: 9.0, accel: 3.2, mass: 1.0, steady: 0.58, nerve: 0.5, stamina: 0.85, scale: 1.0, girth: 1.04,
     coat: 0x6a3f22, mane: 0x16110d,
   },
   andalusian: {
-    id: 'andalusian', name: 'Andalusian', hands: 14.3, withers: 1.499, kg: 450, length: 1.52, blurb: 'Iberian warhorse. Collected, smooth-gaited and quick off the mark.',
+    id: 'andalusian', name: 'Andalusian', hands: 14.3, withers: 1.499, kg: 450, length: 1.52, blurb: 'The warhorse of the Iberian courts, grey as a wet slate. Spanish knights rode nothing else, and said so.', blurbStats: 'Iberian warhorse. Collected, smooth-gaited and quick off the mark.',
     price: 130, top: 8.3, accel: 3.5, mass: 0.92, steady: 0.8, nerve: 0.68, stamina: 0.8, scale: 0.97, girth: 1.03,
     coat: 0xb9b5ac, mane: 0x8d8a84, socks: false,
   },
   rouncey: {
-    id: 'rouncey', name: 'Rouncey', hands: 14.1, withers: 1.448, kg: 420, length: 1.48, blurb: 'An honest all-rounder. Unflappable and tireless, but light in the shock.',
+    id: 'rouncey', name: 'Rouncey', hands: 14.1, withers: 1.448, kg: 420, length: 1.48, blurb: 'A common riding horse, kept by every household that could afford one. Nobody ever wrote a poem about him.', blurbStats: 'An honest all-rounder. Unflappable and tireless, but light in the shock.',
     price: 0, top: 7.9, accel: 2.8, mass: 0.84, steady: 0.52, nerve: 0.92, stamina: 1.0, scale: 0.93, girth: 1.03,
     coat: 0x7b4a26, mane: 0x2a1c12, socks: true,
   },
@@ -36,19 +37,19 @@ export const HORSES = {
 
 export const ARMOURS = {
   mail: {
-    id: 'mail', name: 'Mail & Surcoat', era: 'c. 1250', blurb: 'A mail hauberk under a surcoat of your arms. Light, but a lance will find you.',
+    id: 'mail', name: 'Mail & Surcoat', era: 'c. 1250', blurb: 'A mail shirt under a surcoat of your arms. Knights wore the same in the Crusades, and looked much the same.', blurbStats: 'A mail hauberk under a surcoat of your arms. Light, but a lance will find you.',
     price: 0, protection: 0.55, weight: 0.82, vision: 0.72, helm: 'greathelm', torso: 'surcoat', tint: 0xb9bdc4, rough: 0.5,
   },
   bascinet: {
-    id: 'bascinet', name: 'Coat of Plates', era: 'c. 1380', blurb: 'Plates riveted inside a jupon of your arms, with plate arms and legs.',
+    id: 'bascinet', name: 'Coat of Plates', era: 'c. 1380', blurb: 'Plates riveted inside a jupon of your arms, with plate arms and legs. The cloth was fashionable; the iron was underneath.', blurbStats: 'Plates riveted inside a jupon of your arms, with plate arms and legs.',
     price: 70, protection: 0.7, weight: 0.92, vision: 0.84, helm: 'bascinet', torso: 'jupon', tint: 0xc4c9d1, rough: 0.34,
   },
   milanese: {
-    id: 'milanese', name: 'Milanese Harness', era: 'c. 1450', blurb: 'Full white harness of plate. The balanced choice of the tourney field.',
+    id: 'milanese', name: 'Milanese Harness', era: 'c. 1450', blurb: 'Full white harness, the work of the Milan armourers. Made to measure, and priced to match.', blurbStats: 'Full white harness of plate. The balanced choice of the tourney field.',
     price: 140, protection: 0.85, weight: 1.0, vision: 0.7, helm: 'armet', torso: 'plate', tint: 0xd2d7de, rough: 0.2,
   },
   stechzeug: {
-    id: 'stechzeug', name: 'Stechzeug', era: 'c. 1500', blurb: 'German jousting armour, bolted and doubled on the left side. Near-impregnable, and heavy.',
+    id: 'stechzeug', name: 'Stechzeug', era: 'c. 1500', blurb: 'German jousting harness, bolted to the saddle-tree of the man. You do not so much wear it as move into it.', blurbStats: 'German jousting armour, bolted and doubled on the left side. Near-impregnable, and heavy.',
     price: 220, protection: 1.0, weight: 1.16, vision: 0.42, helm: 'frogmouth', torso: 'plate', tint: 0xaab1bb, rough: 0.3,
   },
 };
@@ -56,10 +57,10 @@ export const ARMOURS = {
 // `deflect` (degrees): how much sooner a point skids off this helm than off a plain round one (a flat-fronted great helm catches it instead).
 // The helm is bought and worn on its own. Each body harness above names the helm it was made with (`helm`), which is what the other knights wear.
 export const HELMS = {
-  greathelm: { id: 'greathelm', name: 'Great Helm', era: 'c. 1250', blurb: 'Flat-topped and plain. Fair sight, but a square stroke rings it like a bell.', price: 0, protection: 0.55, vision: 0.72, kg: 3, deflect: -4 },
-  bascinet:  { id: 'bascinet', name: 'Houndskull Bascinet', era: 'c. 1380', blurb: 'Pointed skull and a snouted visor that sheds a lance point. The best sight of any closed helm.', price: 40, protection: 0.7, vision: 0.84, kg: 4, deflect: 8 },
-  armet:     { id: 'armet', name: 'Armet', era: 'c. 1450', blurb: 'Closes round the head like a shell. Strong and well balanced.', price: 80, protection: 0.85, vision: 0.7, kg: 3.5, deflect: 5 },
-  frogmouth: { id: 'frogmouth', name: 'Frog-mouth Helm', era: 'c. 1500', blurb: 'Bolted to the breastplate. Nothing gets in, and you only see out when you lean in.', price: 120, protection: 1.0, vision: 0.42, kg: 9, deflect: 10 },
+  greathelm: { id: 'greathelm', name: 'Great Helm', era: 'c. 1250', blurb: 'Flat-topped and plain, the helm of the crusading age. The whole face was a slit and a coat of arms.', blurbStats: 'Flat-topped and plain. Fair sight, but a square stroke rings it like a bell.', price: 0, protection: 0.55, vision: 0.72, kg: 3, deflect: -4 },
+  bascinet:  { id: 'bascinet', name: 'Houndskull Bascinet', era: 'c. 1380', blurb: 'A pointed skull and a snouted visor, said to look like the head of a hound. The Germans called it a Hundsgugel.', blurbStats: 'Pointed skull and a snouted visor that sheds a lance point. The best sight of any closed helm.', price: 40, protection: 0.7, vision: 0.84, kg: 4, deflect: 8 },
+  armet:     { id: 'armet', name: 'Armet', era: 'c. 1450', blurb: 'Closes round the head like a shell, hinged cheeks and all. An Italian idea, quickly borrowed.', blurbStats: 'Closes round the head like a shell. Strong and well balanced.', price: 80, protection: 0.85, vision: 0.7, kg: 3.5, deflect: 5 },
+  frogmouth: { id: 'frogmouth', name: 'Frog-mouth Helm', era: 'c. 1500', blurb: 'The Stechhelm of the German joust, bolted to the breastplate. It has the look of a toad and the manners of a vault.', blurbStats: 'Bolted to the breastplate. Nothing gets in, and you only see out when you lean in.', price: 120, protection: 1.0, vision: 0.42, kg: 9, deflect: 10 },
 };
 /** The harness a rider actually wears: a body armour with any helm. Helm strokes meet the helm's protection, the rest meets the body's. */
 export function harness(armourId, helmId) {
@@ -203,9 +204,9 @@ export function bondedHorse(h, xp) { const l = bondLevel(xp) - 1; return Object.
 
 // Duarte of Portugal: do not bear a lance too heavy for your strength.
 export const LANCES = {
-  light: { id: 'light', name: 'Light lance', blurb: 'Hollow-fluted fir. Easy on the arm and quick to the mark, but a soft shock.', power: 0.88, sway: 0.8, fatigue: 0.55, scale: 0.86 },
-  standard: { id: 'standard', name: 'Tourney lance', blurb: 'Solid fir with a three-pronged coronel. The honest measure.', power: 1.0, sway: 1.0, fatigue: 1.0, scale: 1.0 },
-  heavy: { id: 'heavy', name: 'Great lance', blurb: 'A beam of ash. Brutal in the shock, if your arm can hold it true.', power: 1.15, sway: 1.28, fatigue: 1.7, scale: 1.16 },
+  light: { id: 'light', name: 'Light lance', blurb: 'Hollow-fluted fir, turned by a lance-maker and painted at both ends. Lances were bought by the dozen.', blurbStats: 'Hollow-fluted fir. Easy on the arm and quick to the mark, but a soft shock.', power: 0.88, sway: 0.8, fatigue: 0.55, scale: 0.86 },
+  standard: { id: 'standard', name: 'Tourney lance', blurb: 'Solid fir with a three-pronged coronel. The lance of the lists, as the rule books describe it.', blurbStats: 'Solid fir with a three-pronged coronel. The honest measure.', power: 1.0, sway: 1.0, fatigue: 1.0, scale: 1.0 },
+  heavy: { id: 'heavy', name: 'Great lance', blurb: 'A long lance of ash, the kind the chronicles call a beam. A fine thing to see carried.', blurbStats: 'A beam of ash. Brutal in the shock, if your arm can hold it true.', power: 1.15, sway: 1.28, fatigue: 1.7, scale: 1.16 },
 };
 export const DIFFICULTY = [
   { name: 'Squire', sway: 0.8, ai: -0.12, zone: 1.12 },
@@ -591,6 +592,33 @@ export const PHYS = {
     dazeBase: 0.9, dazePower: 1.1, dazeHelm: 1.35, dazeMax: 3, dazeAim: 2.2, oppDaze: 1.6, dazeBlur: 0.8 },
   lanceArm: { wnLoose: 5.5, wnSet: 11.5, zetaLoose: 0.35, zetaSet: 0.68, refKg: 5.5, lever: 0.36, tremor: 0.5, tremorFatigue: 2.6, tremorAgit: 1.4 },
 };
+
+// EQUAL_GEAR (config.js): the one choke point. While it is on, the stat fields of every horse, harness, helm and lance (and PHYS.horseKg / armourKg / lance) are overwritten, once, at load,
+// with one standard set; looks, size, names, prices and ids stay. Every reader (jouster.js, main.js, physics, AI, online, attract, menus) then sees the same numbers on both peers.
+// The standard: horses = the mean of the four; harness = Coat of Plates (the middle one); helm = the Houndskull Bascinet's protection and vision, the mean kg and deflect; kg = the mean;
+// lances = the Tourney lance. The raw numbers are kept in RAW_GEAR; set EQUAL_GEAR false to bring the differences back.
+export const RAW_GEAR = { horses: {}, armours: {}, helms: {}, lances: {}, lanceKg: JSON.parse(JSON.stringify(PHYS.lance)), horseKg: { ...PHYS.horseKg }, armourKg: { ...PHYS.armourKg } };
+export const STANDARD_GEAR = {};
+(function applyEqualGear() {
+  const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const keep = (src, dst) => { for (const k in src) dst[k] = { ...src[k] }; };
+  keep(HORSES, RAW_GEAR.horses); keep(ARMOURS, RAW_GEAR.armours); keep(HELMS, RAW_GEAR.helms); keep(LANCES, RAW_GEAR.lances);
+  const hs = Object.values(RAW_GEAR.horses), hl = Object.values(RAW_GEAR.helms), mid = RAW_GEAR.armours.bascinet, std = RAW_GEAR.lances.standard;
+  STANDARD_GEAR.horse = {}; for (const k of ['top', 'accel', 'mass', 'steady', 'nerve', 'stamina']) STANDARD_GEAR.horse[k] = mean(hs.map(h => h[k]));
+  STANDARD_GEAR.horseKg = mean(Object.values(RAW_GEAR.horseKg));
+  STANDARD_GEAR.armour = { protection: mid.protection, weight: mid.weight, vision: mid.vision };
+  STANDARD_GEAR.armourKg = mean(Object.values(RAW_GEAR.armourKg));
+  STANDARD_GEAR.helm = { protection: RAW_GEAR.helms.bascinet.protection, vision: RAW_GEAR.helms.bascinet.vision, kg: mean(hl.map(h => h.kg)), deflect: mean(hl.map(h => h.deflect)) };
+  STANDARD_GEAR.lance = { power: std.power, sway: std.sway, fatigue: std.fatigue, ...RAW_GEAR.lanceKg.standard };
+  if (!EQUAL_GEAR) return;
+  for (const h of Object.values(HORSES)) Object.assign(h, STANDARD_GEAR.horse);
+  for (const a of Object.values(ARMOURS)) Object.assign(a, STANDARD_GEAR.armour);
+  for (const h of Object.values(HELMS)) Object.assign(h, STANDARD_GEAR.helm);
+  for (const l of Object.values(LANCES)) { l.power = std.power; l.sway = std.sway; l.fatigue = std.fatigue; }
+  for (const k in PHYS.horseKg) PHYS.horseKg[k] = STANDARD_GEAR.horseKg;
+  for (const k in PHYS.armourKg) PHYS.armourKg[k] = STANDARD_GEAR.armourKg;
+  for (const k in PHYS.lance) Object.assign(PHYS.lance[k], RAW_GEAR.lanceKg.standard);
+})();
 
 // Feats: pure honours. They give no power in the lists, only a small renown bonus (`renown`, default ACH_RENOWN) so that they feel worth having.
 // `rule` is read by src/achievements.js: ev = an event fired at that moment · stat = [counter, n] · in = [list, id] · rank = a rank index reached ·

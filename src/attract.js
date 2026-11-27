@@ -177,8 +177,8 @@ export function createAttract(ctx) {
   function sound(kind, power, at, extra) {
     try {
       if (S.muted || !audio.ctx || audio.ctx.state !== 'running') return;
-      const d = Math.max(6, at.distanceTo(camera.position)) * 1.2;      // (far and soft: this is a backdrop, not the match)
-      if (kind === 'impact') audio.impact(power * 0.7, extra, d); else audio.lanceBreak(power * 0.7, d, extra);
+      const d = Math.max(5, at.distanceTo(camera.position)) * 0.9;      // (a backdrop, not the match: the whole effects bus is already 9 dB down in the menu, see audio.setMenuMix)
+      if (kind === 'impact') audio.impact(power, extra, d); else audio.lanceBreak(power, d, extra);
     } catch (e) { /* audio not ready */ }
   }
   function react(kind) { try { ctx.crowd(kind); } catch (e) { /* no crowd */ } }

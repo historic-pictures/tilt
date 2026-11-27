@@ -176,7 +176,7 @@ b, strong { font-weight: 400; color: var(--red2); }
 #verdict > #vtech, #verdict > #vtip, #verdict > #vhint { grid-column: 1 / -1; }
 .vcol { display: grid; grid-template-columns: 170px 1fr; column-gap: 12px; align-content: center; text-align: left; }
 .vcol.you { border-right: 1px solid var(--rule); padding-right: 14px; }
-.vcol canvas.hitmap, .hitmap { grid-row: 1 / span 3; width: 170px; height: 190px; display: block; border: 1px solid var(--rule); }
+.vcol canvas.hitmap, .hitmap { grid-row: 1 / span 3; width: 170px; height: 200px; display: block; border: 1px solid var(--rule); }
 .vwho { align-self: end; font-family: var(--caps); font-size: 17px; letter-spacing: .08em; color: var(--red2); }
 .vwhat { font-family: var(--caps); font-size: 22px; line-height: 1.1; margin: 4px 0; }
 #vwhatYou small, #vwhatHim small { display: block; font-family: var(--body); font-size: 14px; opacity: .85; margin-top: 2px; }
@@ -184,8 +184,12 @@ b, strong { font-weight: 400; color: var(--red2); }
 .vpts.neg { color: var(--red); }
 #vtech { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 6px 14px; padding-top: 9px; border-top: 1px solid var(--rule); }
 .vt { display: inline-flex; align-items: center; gap: 7px; font-family: var(--caps); font-size: 16px; letter-spacing: .04em; }
-.vi { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #9a8b66; color: #fff8e0; font: 14px/1 var(--body); }
+.vi { position: relative; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #9a8b66; color: #fff8e0; font: 14px/1 var(--body); }
+.vi img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; filter: drop-shadow(0 0 0 transparent); }
 .vt.good .vi { background: var(--green); } .vt.ok .vi { background: var(--gold); color: var(--ink); } .vt.bad .vi { background: var(--red2); }
+/* painted badge covers the glyph disc; the verdict reads from a coloured halo (green good, red weak) and a dimmed badge when weak */
+.vt .vi { box-shadow: 0 0 0 2px var(--gold); } .vt.good .vi { box-shadow: 0 0 0 2px var(--green); } .vt.bad .vi { box-shadow: 0 0 0 2px var(--red2); }
+.vt.bad .vi img { filter: grayscale(.55) brightness(.9); }
 .vt.good { color: #2c5018; } .vt.bad { color: var(--red2); }
 #vtip { text-align: center; font-size: 19px; font-style: italic; }
 #vhint { text-align: center; font-family: var(--caps); font-size: 12px; letter-spacing: .2em; color: var(--red2); }
@@ -201,7 +205,7 @@ b, strong { font-weight: 400; color: var(--red2); }
 .rmap { position: fixed; bottom: 56px; width: 208px; z-index: 6; pointer-events: none; padding: 10px 19px 12px; }
 #replayYou { left: 14px; } #replayHim { right: 14px; }
 .rmap label { margin-top: 0; }
-.rmap .hitmap { width: 170px; height: 190px; display: block; border: 1px solid var(--rule); margin-top: 4px; }
+.rmap .hitmap { width: 170px; height: 200px; display: block; border: 1px solid var(--rule); margin-top: 4px; }
 .rmap div { font-family: var(--caps); font-size: 15px; line-height: 1.15; margin-top: 6px; }
 #replayKeys { position: fixed; left: 16px; bottom: 16px; z-index: 6; pointer-events: none; font-family: var(--caps); font-size: 16px; letter-spacing: .06em; color: var(--vellum3); text-shadow: 0 0 6px #000, 0 2px 8px #000; }
 #replayKeys kbd { background: var(--vellum); color: var(--ink); border: 0; padding: 0 8px 1px; border-radius: 3px; box-shadow: 0 2px 0 var(--ink2), 0 3px 6px rgba(0, 0, 0, .5); text-shadow: none; margin-right: 4px; }
@@ -822,3 +826,19 @@ canvas.chg.locked { opacity: .5; outline: 1px dashed var(--ink-soft, #8a7a5a); o
 #rplSeek::-moz-range-thumb { width: 14px; height: 22px; background: var(--gold2); border: 2px solid var(--ink, #2a1a0a); border-radius: 4px; }
 #rplNotch { position: absolute; top: 2px; width: 4px; height: 26px; margin-left: -2px; background: #e2432a; border: 1px solid var(--vellum3, #f3e6c4); box-sizing: border-box; border-radius: 1px; pointer-events: none; box-shadow: 0 0 3px rgba(0, 0, 0, .7); }
 body.touch #rplCtl .rseek { width: clamp(120px, 30vw, 240px); height: 40px; } body.touch #rplSeek { height: 40px; } body.touch #rplSeek::-webkit-slider-thumb { width: 24px; height: 32px; margin-top: -14px; } body.touch #rplNotch { height: 34px; }
+.samegear { font-size: 13px; font-style: italic; color: var(--ink2); margin: 8px 0 0; }
+#reticle.edge .ring { border-color: #ffb347; border-width: 3px; box-shadow: 0 0 0 1px #20140a, 0 0 14px #ffb347; } #reticle.edge .ring::before { content: "\2316"; }
+body.touch #cardReplays kbd { display: none; } body:not(.touch) #rplCtl .touchonly { display: none; }
+body.touch #vhint { pointer-events: auto; } #vhint .btn.small { padding: 4px 14px; font-size: 13px; letter-spacing: .1em; margin-left: 4px; }
+body.touch #skipHold { left: var(--tx, 50%); top: var(--ty, 70%); right: auto; bottom: auto; transform: translate(-50%, -135%); flex-direction: column; gap: 4px; opacity: 1; }
+body.touch #skipHold svg { width: 64px; height: 64px; } body.touch #skipHold circle { stroke-width: 4; } body.touch #skipHold span::after { text-align: center; white-space: nowrap; }
+
+/* Play Online: the count of knights, the quiet line, the invite button */
+.online .presence { text-align: center; font-family: var(--caps); font-size: 20px; letter-spacing: .06em; color: var(--ink2); margin: 10px 0 4px; }
+.online .presence b { color: var(--red2); font-weight: inherit; }
+.online .presence.quiet { font-style: italic; font-family: inherit; letter-spacing: 0; font-size: 21px; }
+.online .invlink { width: 100%; box-sizing: border-box; font-size: 15px; }
+.online .onrow.invite { justify-content: center; margin: 12px 0 4px; }
+.online .onrow.invite .btn { font-size: 20px; padding: 8px 26px; }
+/* the result card is up: the ready-phase prompt lines stay out from under it */
+body:has(#verdict:not(.hidden)) :is(#prompt, .tCoach) { visibility: hidden; }

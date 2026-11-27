@@ -6,3 +6,8 @@
 // PAY.live = true: the store, the locks, the upsell popup and the donate button come back exactly as they were. Flip it only after Stripe is set up and the Worker is deployed
 //   (docs/payments-setup.md, "Founders' Season / PAY.live").
 export const PAY = { live: false };
+
+// EQUAL_GEAR = true: while there are few players, every horse, harness, helm and lance plays with the SAME stats (the gear is cosmetic: looks and size only).
+//   data.js applyEqualGear() overwrites the stat fields of HORSES / ARMOURS / HELMS / LANCES and PHYS.horseKg / armourKg / lance with one standard set the moment it loads,
+//   so the sim, the AI and the online peers all read the same numbers; the raw values are kept in RAW_GEAR. The menus hide the stat bars. Set false to bring the differences back.
+export const EQUAL_GEAR = true;

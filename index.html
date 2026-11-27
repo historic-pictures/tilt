@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="assets/fonts/fonts.css">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="ui.css">
+<link rel="stylesheet" href="install.css">
 <!-- browsers without import maps (iOS before 16.4, older Android WebViews) get them from es-module-shims; browsers that have them ignore it -->
 <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
@@ -90,7 +91,7 @@
 <div id="replayTag" class="hidden">INSTANT REPLAY</div>
 <div id="replayYou" class="panel rmap hidden"><label>YOUR LANCE</label><canvas class="hitmap" id="rhitYou" width="170" height="190"></canvas><div id="rwhatYou"></div></div>
 <div id="replayHim" class="panel rmap hidden"><label>HIS LANCE</label><canvas class="hitmap" id="rhitHim" width="170" height="190"></canvas><div id="rwhatHim"></div></div>
-<div id="rplCtl" class="hidden"><button data-k="back" aria-label="Back one frame">&#9664;|</button><button data-k="pp" id="rplPause">PAUSE</button><button data-k="fwd" aria-label="Forward one frame">|&#9654;</button><i></i><button data-s="1">1&times;</button><button data-s="0.5">&frac12;&times;</button><button data-s="0.25">&frac14;&times;</button><button data-s="0.1">0.1&times;</button><i></i><span class="rseek"><input type="range" id="rplSeek" min="0" max="1" step="0.001" value="0" aria-label="Replay timeline"><b id="rplNotch" title="Impact"></b></span><i></i><button data-k="view">VIEW</button></div>
+<div id="rplCtl" class="hidden"><button data-k="back" aria-label="Back one frame">&#9664;|</button><button data-k="pp" id="rplPause">PAUSE</button><button data-k="fwd" aria-label="Forward one frame">|&#9654;</button><i></i><button data-s="1">1&times;</button><button data-s="0.5">&frac12;&times;</button><button data-s="0.25">&frac14;&times;</button><button data-s="0.1">0.1&times;</button><i></i><span class="rseek"><input type="range" id="rplSeek" min="0" max="1" step="0.001" value="0" aria-label="Replay timeline"><b id="rplNotch" title="Impact"></b></span><i></i><button data-k="view">VIEW</button><button data-k="skip" class="touchonly">SKIP</button></div>
 <div id="replayKeys" class="hidden"><kbd>V</kbd> change view &nbsp;&nbsp; <kbd>SPACE</kbd> skip</div>
 <div id="lesson" class="hidden"><div id="lessonTitle"></div><div id="lessonGoal"></div><ul id="lessonList"></ul><div id="lessonNote"></div></div>
 <div id="toast" class="scrollcall"><i class="paper"></i><b></b><span></span></div>
@@ -98,7 +99,7 @@
 
 <div id="pmenu" class="scroll hidden"><i class="paper"></i><div class="page">
   <div id="pmMain"><div id="pmTop">THE LISTS ARE STILL</div><h2>Paused</h2>
-    <button class="btn primary" id="pmRide">Ride on <kbd>Esc</kbd></button><button class="btn" id="pmRpl">Replays <kbd>R</kbd></button><button class="btn quiet" id="pmLeave">Leave the lists <kbd>Backspace</kbd></button></div>
+    <button class="btn primary" id="pmRide">Ride on <kbd>Esc</kbd></button><button class="btn" id="pmRpl">Replays <kbd>R</kbd></button><button class="btn" id="pmFs">Full screen</button><button class="btn quiet" id="pmLeave">Leave the lists <kbd>Backspace</kbd></button></div>
   <div id="pmList" class="hidden"></div>
 </div></div>
 <button id="hlBack" class="btn hidden">Back to the replays</button>
@@ -161,6 +162,10 @@
   setTimeout(function () { if (!window.__tiltUp) fail('the menu did not appear within 40 seconds'); }, 40000);
 })();
 </script>
-<script type="module" src="src/main.js"></script>
+<script src="src/install.js"></script>
+<script>
+// a phone or tablet that has not installed the game gets the install page (src/install.js) and the game is not even downloaded behind it
+if (!window.__tiltGated) { var m = document.createElement('script'); m.type = 'module'; m.src = 'src/main.js'; document.body.appendChild(m); }
+</script>
 </body>
 </html>

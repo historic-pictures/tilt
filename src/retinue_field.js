@@ -50,6 +50,14 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h =
 const HOME = { squire: [3.0, -1.3], groom: [2.6, 2.8], armourer: [3.5, 0.9], farrier: [3.5, 2.5], pursuivant: [2.6, 5.0], master: [7.2, 2.0] };      // the master of arms stands by the rail, not in the retinue
 const SPOT = { pile: [3.0, -2.6], stirrup: [0.95, 0.3], head: [0.55, 1.8], flank: [1.0, -0.25], leg: [0.85, 1.0], front: [1.8, 3.4] };
 const WALK = 1.9;
+// Keep clear of the horse: an ellipse about the horse's body (1.6 m long x 0.8 m wide) plus a 0.4 m margin, in the frame of the end ([out, fwd], the horse's axis as given).
+// Every man walks round it on the OUTER side (out is away from the tilt; the tilt side is a hand's breadth from the horse's flank, so nobody goes there), and is pushed out if he is inside.
+const HORSE_A = 0.4 + 0.4, HORSE_B = 0.8 + 0.4;      // half-width, half-length (m): body + margin
+/** Does the segment (o0,f0)->(o1,f1) cross the ellipse? (coordinates already in the horse's frame, scaled to a unit circle) */
+function crosses(u0, v0, u1, v1) {
+  const du = u1 - u0, dv = v1 - v0, L = du * du + dv * dv; if (L < 1e-9) return u0 * u0 + v0 * v0 < 1;
+  const k = Math.max(0, Math.min(1, -(u0 * du + v0 * dv) / L)), x = u0 + du * k, y = v0 + dv * k; return x * x + y * y < 1;
+}
 
 function lance(parent, c1, c2) {      // a lance in your colours: shaft, a band, a steel point
   const g = grp(parent); mesh(G.shaft, c1, g); mesh(G.band, c2, g, 0, 1.1, 0); mesh(G.band, c2, g, 0, 2.2, 0); mesh(G.point, '#b9bcc2', g, 0, 3.36, 0);
@@ -60,7 +68,7 @@ function lance(parent, c1, c2) {      // a lance in your colours: shaft, a band,
 function makeSide(scene, isLate) {
   const root = new THREE.Group(); root.visible = false; scene.add(root);
   const endG = grp(root);
-  let men = {}, tD = 0, prevMode = '', t = 0, serving = 0, rack = [], arms = null, pile = [], pileN = 0, lo = 0, lf = 0, gs = null;      // gs: the stump the rider threw down
+  let men = {}, hAng = 0, tD = 0, prevMode = '', t = 0, serving = 0, rack = [], arms = null, pile = [], pileN = 0, lo = 0, lf = 0, gs = null;      // gs: the stump the rider threw down
   const F = { root, men: () => men };
 
   function build(id, rec, c1, c2, extras) {
@@ -190,12 +198,29 @@ function makeSide(scene, isLate) {
   /** A man's head, for the speech label above him (null when he is not on the field). */
   F.head = (id) => (men[id] && !(isLate && isLate(id)) ? men[id].head : null);
 
+  // ---- keeping clear of the horse (see HORSE_A / HORSE_B)
+  const toH = (o, f) => { const c = Math.cos(hAng), s = Math.sin(hAng), x = o - lo, y = f - lf; return [(x * c - y * s) / HORSE_A, (x * s + y * c) / HORSE_B]; };      // out/fwd -> the horse's unit-circle frame (u across, v along)
+  const fromH = (u, v) => { const c = Math.cos(hAng), s = Math.sin(hAng), x = u * HORSE_A, y = v * HORSE_B; return [lo + x * c + y * s, lf - x * s + y * c]; };
+  /** Waypoints round the horse for a walk from where the man is to `to`: via the corner by the horse's head or tail, on the outer (+out) side. */
+  function detour(a, to) {
+    const [u0, v0] = toH(a.o, a.f), [u1, v1] = toH(to[0], to[1]); if (!crosses(u0, v0, u1, v1)) return [];
+    const K = 1.35, cs = (v) => fromH(K, v >= 0 ? K : -K), side = v0 >= 0 ? 1 : -1, tside = v1 >= 0 ? 1 : -1, way = [cs(side)];
+    if (tside !== side) way.push(cs(tside));
+    return way;
+  }
+  /** Out of the horse's ellipse and clear of the tilt side: push him to its edge (on the outer side when he is level with the middle of the horse). */
+  function clear(a) {
+    let [u, v] = toH(a.o, a.f), r = Math.hypot(u, v);
+    if (r < 1) { if (r < 0.05) { u = 1; v = 0; r = 1; } const k = 1.001 / r; [a.o, a.f] = fromH(u * k, v * k); }
+  }
+
   // ---- the step runner
   function runStep(a, dt, env) {
     const s = a.q[0]; a.moving = false;
     if (!s) { a.pose = 'idle'; return; }
     if (s.set) { a.o = s.set[0]; a.f = s.set[1]; a.q.shift(); return runStep(a, dt, env); }      // jump to a spot (the camera is already on him)
     if (s.walk) {
+      if (!s.routed) { s.routed = true; const way = detour(a, s.walk); if (way.length) { a.q.splice(0, 0, ...way.map(w => ({ walk: w, fast: s.fast, up: s.up, routed: true }))); return runStep(a, dt, env); } }
       const dx = s.walk[0] - a.o, dz = s.walk[1] - a.f, d = Math.hypot(dx, dz);
       if (d < 0.06) { a.q.shift(); return runStep(a, dt, env); }
       const st = Math.min(d, (s.fast ? 4.8 : a.id === 'squire' ? 2.5 : WALK) * dt); a.o += dx / d * st; a.f += dz / d * st; a.moving = true; a.walkYaw = Math.atan2(-dx, dz); a.pose = s.up ? 'runup' : 'walk'; a.fast = !!s.fast;
@@ -268,6 +293,7 @@ function makeSide(scene, isLate) {
     }
     // where you are, in the frame of your end (for looking)
     const dx = (env.px - endG.position.x) * (tD > 0 ? 1 : -1), dz = (env.pz - endG.position.z) * (tD > 0 ? 1 : -1); lo = -dx; lf = dz;
+    { const s = tD > 0 ? 1 : -1, co = -(env.hx || 0) * s, cf = (env.hz || 0) * s; hAng = Math.hypot(co, cf) > 0.3 ? Math.atan2(co, cf) : 0; if (hAng > Math.PI / 2) hAng -= Math.PI; else if (hAng < -Math.PI / 2) hAng += Math.PI; }      // the horse's axis (it has no front or back for this); a way off the lists' line is left as straight
     if (gs && gs.active && gs.t < gs.T + 1) {      // the thrown stump: a short arc, tumbling, then it lies flat
       gs.t += dt; const u = Math.max(0, Math.min(1, gs.t / gs.T)), tt = Math.max(0, Math.min(gs.t, gs.T));
       if (!gs.thud && gs.t >= gs.T) { gs.thud = true; if (F.onThud) F.onThud(gs.mesh.getWorldPosition(new THREE.Vector3())); }
@@ -277,7 +303,7 @@ function makeSide(scene, isLate) {
     for (const a of Object.values(men)) {
       const here = present(a); a.g.visible = here; if (!here) continue;
       a.talkT = Math.max(0, a.talkT - dt);
-      runStep(a, dt, env);
+      runStep(a, dt, env); clear(a);
       if (a.moving) a.wph += dt * (a.fast ? 11 : 7.5);
       target(a, t);
       const A = a.ang, tg = a.moving ? a.walkYaw : Math.atan2(-(lo - a.o), lf - a.f);
@@ -320,7 +346,7 @@ export function createField(scene, isLate) {
     /** env: as for one end, plus ox, oz (the opponent in the world). */
     update(dt, env) {
       mine.update(dt, env);
-      his.update(dt, env.mode === 'menu' || env.mode === 'replay' ? env : Object.assign({}, env, { tD: -env.tD, px: env.ox, pz: env.oz, helmOff: false }));
+      his.update(dt, env.mode === 'menu' || env.mode === 'replay' ? env : Object.assign({}, env, { tD: -env.tD, px: env.ox, pz: env.oz, hx: env.ohx, hz: env.ohz, helmOff: false }));
     },
   };
 }

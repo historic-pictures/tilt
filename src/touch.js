@@ -64,7 +64,7 @@ export function initTouch(h) {
   const coach = mk('div', 'tCoach', '', ui);
   const tipEl = isIOS && !standalone && lsGet('tilt.a2hs', '') !== '1' ? mk('div', 'tA2hs', '<span>For full screen, tap <b>Share</b> then <b>Add to Home Screen</b>.</span><button aria-label="Close">OK</button>', body) : null;
   if (tipEl) tipEl.querySelector('button').addEventListener('click', () => { lsSet('tilt.a2hs', '1'); tipEl.remove(); });
-  mk('div', 'tPauseMenu', '<button id="tRide">Ride on</button><button id="tRpl">Replays</button><button id="tLeave">Leave the lists</button>', ui);
+  mk('div', 'tPauseMenu', '<button id="tRide">Ride on</button><button id="tRpl">Replays</button><button id="tInstall">Install / Full screen</button><button id="tLeave">Leave the lists</button>', ui);
 
   const press = (el, fn, onUp) => {
     el.addEventListener('pointerdown', (e) => {
@@ -84,6 +84,13 @@ export function initTouch(h) {
   press(document.getElementById('tRide'), () => h.setPaused(false));
   press(document.getElementById('tRpl'), () => { if (h.openReplays) h.openReplays(); });
   press(document.getElementById('tLeave'), () => h.leave());
+  // Install / Full screen: not installed -> the same explainer as the gate (dismissible here); installed (Android) -> toggle full screen; installed on iOS has nothing to offer
+  const bInst = document.getElementById('tInstall'), canFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  if (standalone && (isIOS || !canFs)) bInst.remove(); else if (standalone) bInst.textContent = 'Full screen';
+  press(bInst, () => {
+    if (!standalone && window.TiltInstall) { window.TiltInstall.show(); return; }
+    if (document.fullscreenElement) { try { document.exitFullscreen(); } catch (e) { /* ignore */ } } else goFullscreen();
+  });
 
   // ---- the layer: one finger aims (relative, like a trackpad), any finger can tap or hold
   const pts = new Map(); let aim = null, skipHeld = false;
@@ -100,6 +107,7 @@ export function initTouch(h) {
     try { layer.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     const r = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: performance.now(), moved: 0, skip: skippable(), aim: false };
     pts.set(e.pointerId, r);
+    document.documentElement.style.setProperty('--tx', e.clientX + 'px'); document.documentElement.style.setProperty('--ty', e.clientY + 'px');      // (the hold-to-skip ring draws above the finger: ceremony.js skipUI)
     if (!document.fullscreenElement && S.mode !== 'menu') goFullscreen();      // Android: a touch is the user gesture the Fullscreen API wants
     if (getAimMode() === 'joy' && !joy && aiming() && !(h.rpl && h.rpl.active()) && e.clientX < window.innerWidth * JOY.zoneX && e.clientY > window.innerHeight * JOY.zoneY) {
       readSafe();

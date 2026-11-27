@@ -426,7 +426,7 @@ body.touch #tPause { top: calc(var(--st) + 8px); left: calc(var(--sl) + 10px); w
 #tJoyHint.on { display: block; }
 #tJoyHint i { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px; border-radius: 50%; background: rgba(232, 199, 104, .35); border: 1px solid rgba(232, 199, 104, .6); }
 #tJoy.on ~ #tJoyHint { display: none; }
-body.touch #skipHold { bottom: calc(var(--sb) + 14px); }
+
 body.touch #soundBtn { top: calc(var(--st) + 8px); left: auto; right: calc(var(--sr) + 10px); }
 body.touch.touch-play #soundBtn { display: none; }
 body.touch.touch-play #banner { top: 40%; }
@@ -623,3 +623,13 @@ body.touch.portrait #royalCap.scrollcall { max-width: calc(100vw - 16px); top: 1
 .scrollcall .ci { color: #e2492f; -webkit-text-stroke: .07em var(--inkdeep); }
 body.touch #toast.scrollcall { top: calc(var(--st) + 78px); }
 body.touch #royalCap.scrollcall { top: calc(var(--st) + 86px); }
+
+/* the title ("Joust Revival", emblem beside it) stays on ONE line at every width: the lettering shrinks to the room left of the emblem */
+.menu h1.wmark.txt { container-type: inline-size; }
+.menu h1.wmark.txt .wm-text { white-space: nowrap !important; max-width: none !important; text-wrap: nowrap; min-width: 0; }
+.menu h1.wmark.txt .wm-text { font-size: min(54px, calc((100cqw - 108px) / 6.2)) !important; }
+.menu.welcome h1.wmark.txt .wm-text { font-size: min(46px, calc((100cqw - 92px) / 6.2)) !important; }
+body.touch.compact .menu h1.wmark.txt .wm-text { font-size: min(40px, calc((100cqw - 84px) / 6.2)) !important; }
+body.touch.compact .menu.welcome h1.wmark.txt .wm-text { font-size: min(36px, calc((100cqw - 68px) / 6.2)) !important; }
+/* the welcome banner (painted unhorsing scene, 21:9): fills the header box, the falling knight and the broken lance stay in view */
+.menu.welcome .mini img { width: 100%; height: 132px; object-fit: cover; object-position: 38% 22%; display: block; }

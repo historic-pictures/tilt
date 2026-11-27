@@ -154,7 +154,7 @@ class LocalNet extends Base {
     return new Promise((resolve, reject) => {
       let n = 0;
       const iv = setInterval(() => { if (this.open) return; if (++n > 8) { clearInterval(iv); clearTimeout(t); this.close(); reject(new Error('notfound')); return; } this.ch.postMessage({ k: 'hello', from: this.id }); }, 250);
-      const t = setTimeout(() => { clearInterval(iv); }, 3000);
+      const t = setTimeout(() => { clearInterval(iv); if (!this.open) { this.close(); reject(new Error('notfound')); } }, 3000);      // (a busy page may not have ticked 8 times by now: never hang)
       this.ch.postMessage({ k: 'hello', from: this.id });
       this._joined = () => { clearInterval(iv); clearTimeout(t); resolve(); };
     });

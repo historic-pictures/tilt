@@ -7,6 +7,7 @@ import { CELEBS, celStart, celClear, celCam, aiPick, aiLoser, favourites, prompt
 import { FX } from './fx.js';
 import { clamp, lerp, damp, smoothstep, wobble, drawCrest, TAU } from './util.js';
 import { loadHeraldry, tinctureName } from './heraldry.js';
+import { EQUAL_GEAR } from './config.js';
 import { purse, HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, modeKit, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
 import { initMenus, purseText, rankBar } from './menus.js';
 import { reckon, settle } from './economy.js';
@@ -42,7 +43,7 @@ import * as career from './career.js';
 import { FIELD } from './career_story.js';
 import { ACH_BY_ID, ensureFeats, checkFeats, courseFeats, matchFeats, circuitFeat, courtesyFeat, ladyFeat, rankLine } from './achievements.js';
 import { Hit, sweepCapCap, sweepCapObb, capCapGap, capObbGap } from './collide.js';
-import { createNet, makeCode, cleanCode, validCode, failText, preloadNet } from './net.js';
+import { createNet, makeCode, cleanCode, validCode, failText, preloadNet, useLocal } from './net.js';
 import * as ranks from './ranks.js';
 import * as account from './account.js';
 import * as store from './store.js';      // purchases: the Knight's Charter, the packs (the server decides; src/store.js)
@@ -271,7 +272,7 @@ ranks.setAuthSource(() => account.token());
 /** Joust a friend (see src/net.js, src/online.js and the 'online' block below): the link, who is host, the friend's interpolated rider. */
 const NET = { mid: '', oppPlay: null, net: null, host: false, token: 0, od: null, remote: new Remote(), rem: null, rLb: 0, rGuardAge: 9, sendT: 0, lastRx: 0, kaT: 0, rdyOut: -1, rdyIn: -1, ka: 0 };
 let world = null, worldKey = -1, venueIdx = -1, player = null, opp = null, M = null, C = null, R = null, attract = null;      // (attract: the menu joust, built at boot)
-const G = window.G = { S, auto: false, get M() { return M; }, get C() { return C; }, get R() { return R; }, get player() { return player; }, get opp() { return opp; }, get world() { return world; }, camera, scene, renderer };
+const G = window.G = { S, auto: false, get M() { return M; }, get C() { return C; }, get R() { return R; }, get player() { return player; }, get opp() { return opp; }, get world() { return world; }, get field() { return field; }, camera, scene, renderer };
 S.fp = !!profile.firstPerson;
 /** Which beat of the match we are in, for the voice director: intro | ready | charge | strike (a lance has landed) | replay | after (verdict, wheeling about) | end (the result card). */
 function voicePhase() {
@@ -711,11 +712,14 @@ function hisRemark() {
 }
 
 /** What the field needs to know each frame. Your men change ends while you are far off, mid-lists. */
+/** Which way each horse is pointing (world x, z of its forward), for the retinue to keep clear of it. */
+const _fax = new THREE.Vector3();
+function horseAxes() { const r = {}; if (player) { player.root.getWorldDirection(_fax); r.hx = _fax.x; r.hz = _fax.z; } if (opp && opp.root) { opp.root.getWorldDirection(_fax); r.ohx = _fax.x; r.ohz = _fax.z; } return r; }
 function fieldEnv() {
   if (!player || !M || S.mode === 'menu') return { mode: 'menu' };
   const out = S.mode === 'charge' || (S.mode === 'after' && C && C.turn.p.stage !== 'done');
   const st = C && C.rb && S.mode === 'after' ? C.turn.p.stage : '', marker = st === 'free' || st === 'settle' || st === 'hand';      // riding back by hand: your men wait at the end where the mark is
-  return { marker, onMark: marker && (st !== 'free' || !!C.rb.onMark), mode: S.mode, tD: st === 'free' || st === 'settle' ? -dirP() : out && player.z * dirP() > 0 ? -dirP() : dirP(), px: player.root.position.x, pz: player.root.position.z, ox: opp ? opp.root.position.x : 0, oz: opp ? opp.root.position.z : 0, helmOff: player.helmOff };
+  return { marker, onMark: marker && (st !== 'free' || !!C.rb.onMark), mode: S.mode, tD: st === 'free' || st === 'settle' ? -dirP() : out && player.z * dirP() > 0 ? -dirP() : dirP(), px: player.root.position.x, pz: player.root.position.z, ox: opp ? opp.root.position.x : 0, oz: opp ? opp.root.position.z : 0, ...horseAxes(), helmOff: player.helmOff };
 }
 /** Did a hard blow land on you last course? */
 const heavyBlow = (c) => { const o = c.oL.res; return !!(o && o.pts > 0 && (o.broke || o.unhorse)) || M.hp.body < (c.hp0 ?? 1) - 0.08; };
@@ -1587,7 +1591,17 @@ function updateRide(dt, dtReal) {
     _a.copy(o).addScaledVector(d, t);
     player.gripWorld(_b); _c.subVectors(_a, _b).normalize();
     // work in the rider's own frame so the same code serves both directions of travel
-    const cmdYaw = Math.atan2(_c.x * D, _c.z * D), cmdPitch = Math.asin(clamp(_c.y, -1, 1));
+    let cmdYaw = Math.atan2(_c.x * D, _c.z * D), cmdPitch = Math.asin(clamp(_c.y, -1, 1));
+    {      // the lance can only swing inside the cone Jouster.setAim already holds it to (PHYS.aim): the reticle and the mouse/touch point stop at its edge instead of drifting past it
+      const AM = PHYS.aim, cy = clamp(cmdYaw, AM.yawMin, AM.yawMax), cp = clamp(cmdPitch, AM.pitchMin, AM.pitchMax);
+      C.aimEdge = cmdYaw <= AM.yawMin + 0.01 || cmdYaw >= AM.yawMax - 0.01 || cmdPitch <= AM.pitchMin + 0.01 || cmdPitch >= AM.pitchMax - 0.01;      // (at the stop: the point is held on it, so test with a hair of slack)
+      if (C.aimEdge && !G.auto) {
+        const r = _a.distanceTo(_b);
+        _c.set(D * Math.sin(cy) * Math.cos(cp), Math.sin(cp), D * Math.cos(cy) * Math.cos(cp)); _a.copy(_b).addScaledVector(_c, r).project(camera);
+        if (Number.isFinite(_a.x + _a.y)) { mouse.set(clamp(_a.x, -1, 1), clamp(_a.y, -1, 1)); aimMouse.copy(mouse); }
+      }
+      cmdYaw = cy; cmdPitch = cp;
+    }
     // the saddle's vertical acceleration, felt through the arm
     // (taken as simple harmonic motion about the stride's mean height: a = -(2*pi*f)^2 * displacement)
     if (dt > 0) { const y = player.bob || 0, w = TAU * (0.78 + 0.12 * player.speed); bobHist.y = damp(bobHist.y, y, 1.5, dt); bobHist.a = -w * w * (y - bobHist.y) * clamp(player.speed / 3, 0, 1); }
@@ -1866,8 +1880,8 @@ function stepBeat(dtReal) {
     B.pend = false;
     if (!field.fitHelm(HELM_FIT, () => { if (C.beat && player.visor) player.visorUp = false; })) B.t = HELM_FIT;      // no squire: straight to the view through the visor
   }
-  const look = S.online ? 1.0 : HELM_LOOK, t1 = HELM_FIT + look;      // (online the beat stays short: the cuts are local only, and the signal does not wait for them)
-  if (B.stage === 0 && B.t >= HELM_FIT) { B.stage = 1; player.visorUp = false; C.cut = { kind: 'visor', t: 99 }; }
+  const look = !S.fp ? 0 : S.online ? 1.0 : HELM_LOOK, t1 = HELM_FIT + look;      // (online the beat stays short: the cuts are local only, and the signal does not wait for them)
+  if (B.stage === 0 && B.t >= HELM_FIT) { B.stage = 1; player.visorUp = false; if (S.fp) C.cut = { kind: 'visor', t: 99 }; }      // (the visor-slit look is first person only)
   if (B.stage === 1 && B.t >= t1 && !S.online) {      // the film's held gallery face before the first flag, then the herald's cry
     const L = world.crowd && world.crowd.ladies ? world.crowd.ladies(1, 0, 16).concat(world.crowd.ladies(-1, 0, 16)).sort((a, b) => a.d - b.d)[0] : null;
     if (L) { B.stage = 2; B.lady = true; C.cut = { kind: 'lady', t: 99, pos: new THREE.Vector3(L.x, L.y + 1.15, L.z) }; if (hasSpot()) world.crowd.spotlight(L.i, -1, 'clap'); }
@@ -2796,11 +2810,13 @@ function showVerdict() {
   drawHitMap($('hitYou'), p, C.pL.near, { quintain: M.practice, arms: M.od.arms });
   if (M.practice) drawHitMap($('hitHim'), null, null, { blank: true, ok: C.lessonOk }); else drawHitMap($('hitHim'), o, C.oL.near, { arms: profile.arms });
   const state = (v) => (v >= 0.75 ? 'good' : v >= 0.45 ? 'ok' : 'bad');
-  const item = (k, icon, label) => `<div class="vt ${state(t[k])}"><span class="vi">${icon}</span>${label}</div>`;
+  const TIP_ICON = { sight: 'aim', lance: 'lance', horse: 'horse', will: 'will' };
+  const item = (k, icon, label) => `<div class="vt ${state(t[k])}"><span class="vi">${icon}<img src="assets/ui/tips/${TIP_ICON[k]}-96.png" srcset="assets/ui/tips/${TIP_ICON[k]}-96.png 1x, assets/ui/tips/${TIP_ICON[k]}-256.png 3x" alt="" draggable="false" onerror="this.remove()"></span>${label}</div>`;
   $('vtech').innerHTML = item('sight', '◎', 'AIM') + item('lance', '⟋', 'LANCE TIMING') + item('horse', '♞', 'HORSE') + item('will', '✊', 'LEAN IN');
   const weakest = ['sight', 'lance', 'horse', 'will'].sort((a, b) => t[a] - t[b])[0];
   $('vtip').textContent = (harnessNotes() + ' ') + (t[weakest] >= 0.75 ? 'A fine course — nothing to mend.' : t.tips[weakest]);
-  $('vhint').innerHTML = 'Your knight wheels about for the next course &nbsp;·&nbsp; <b>R</b> watch the replay again';
+  $('vhint').innerHTML = touchMode ? 'Your knight wheels about for the next course' + (C.replayed && C.rec.f.length > 20 && !S.online ? ' &nbsp;·&nbsp; <button class="btn small" id="vhintReplay">Replay</button>' : '') : 'Your knight wheels about for the next course &nbsp;·&nbsp; <b>R</b> watch the replay again';
+  { const rb = $('vhintReplay'); if (rb) rb.onclick = (e) => { e.stopPropagation(); if (C && S.mode === 'after' && !C.cut && !R) startReplay({ frozen: true }); }; }
   $('flashTxt').className = '';
   $('verdict').classList.remove('hidden');
   scoreLine();
@@ -3288,7 +3304,7 @@ function doBrace() { if (S.mode !== 'charge' || C.braceCd > 0) return; C.braceT 
 // The HOST decides every stroke with the ordinary strike code (his rider against the interpolated friend) and tells the guest ('st' per stroke, 'course' when both are spent);
 // the guest never collides: he shows what he is told, mirrored (netApplyStroke, netApplyCourse). The host also gives the marshal's signal ('plan', 'sig') and starts each next course
 // ('next') once the guest says he is at his mark ('rdy'). Messages: hi (profile) · room / start (host's settings) · skip (intro vote) · s · plan · sig · st · course · rdy · next · tilt · ka · bye.
-const LOBBY = { find: null, mm: null, phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 }, pub: false, quick: false, qt: 0, fromList: false, rooms: [], relays: { open: 0, total: 0, failed: false }, watching: false, venueSet: false };
+const LOBBY = { find: null, mm: null, phase: 'choose', code: '', err: '', friend: null, room: { v: 0, m: 'planken', c: 5 }, pub: false, quick: false, qt: 0, fromList: false, rooms: [], relays: { open: 0, total: 0, failed: false }, watching: false, venueSet: false, pres: null, copied: false, invited: false };
 // The public list (src/lobby.js, loaded only when the online screen opens): LOBBY.phase 'list' shows LOBBY.rooms; a PUBLIC room waiting for a challenger is announced; Quick match = look for ~3 s, join the oldest, else host a public room.
 let lobbyP = null, lobbyObj = null;
 const lobbyApi = () => lobbyP || (lobbyP = import('./lobby.js').then((m) => (lobbyObj = m.createLobby())));
@@ -3306,6 +3322,25 @@ function startWatch() {
 function stopWatch() { LOBBY.watching = false; LOBBY.rooms = []; if (lobbyObj) lobbyObj.unwatch(); }
 const netSend = (o) => { if (NET.net) NET.net.send(o); };
 const lobbyShow = () => { syncAnnounce(); if (typeof menus !== 'undefined' && menus.root.classList.contains('on') && menus.root.dataset.name === 'online') menus.show('online'); };
+// Presence ("3 knights in the lists", see src/lobby.js): announced while the Play Online screen or an online match is up, silent otherwise. A 1 s check follows the screen.
+let presOn = '', presHooked = false;
+const wantPresence = () => (M && S.online ? 'match' : typeof menus !== 'undefined' && menus.root.classList.contains('on') && menus.root.dataset.name === 'online' ? 'lobby' : '');
+function syncPresence() {
+  const w = wantPresence(); if (w === presOn) return; presOn = w;
+  if (!w && !lobbyObj) return;
+  lobbyApi().then((l) => {
+    if (!presHooked) { presHooked = true; l.onPresence((p) => { LOBBY.pres = p; if (['choose', 'list', 'hostWait', 'hostReady', 'joined', 'friend'].includes(LOBBY.phase)) lobbyShow(); }); }
+    l.present(wantPresence() || null); if (!wantPresence()) LOBBY.pres = null;
+  }).catch((e) => console.warn('[presence]', e));
+}
+setInterval(syncPresence, 1000);
+// ?join=CODE (an invite link): read once, take it out of the address bar, and join that room as soon as the menu is up (after the welcome page if he has no name yet).
+let pendingJoin = '';
+try { const q = new URLSearchParams(location.search), j = q.get('join'); if (j !== null) { const c = String(j).toUpperCase(); if (validCode(c)) pendingJoin = c; q.delete('join'); const qs = q.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash); } } catch (e) { /* ignore */ }
+setInterval(() => {
+  if (!pendingJoin || M || typeof menus === 'undefined' || !menus.root.classList.contains('on') || menus.root.dataset.name !== 'main') return;
+  const c = pendingJoin; pendingJoin = ''; lobbyOpen(); menus.show('online'); lobbyJoin(c, { invite: true });
+}, 400);
 const roomMsg = (t = 'room') => Object.assign({ t }, LOBBY.room);
 function netClose() {
   NET.token++; clearInterval(NET.ka); NET.ka = 0;
@@ -3319,10 +3354,10 @@ function netWire(n) {
   n.onClose = () => onNetClose();
   clearInterval(NET.ka); NET.ka = setInterval(() => netSend({ t: 'ka' }), 1500);      // (the match loop sends nothing while a tab is hidden; this keeps the friend from thinking you left)
 }
-window.addEventListener('pagehide', () => { if (lobbyObj) lobbyObj.stop(); if (NET.net) { try { NET.net.send({ t: 'bye' }); } catch (e) { /* ignore */ } } });
+window.addEventListener('pagehide', () => { if (lobbyObj) { lobbyObj.stop(); lobbyObj.present(null); } if (NET.net) { try { NET.net.send({ t: 'bye' }); } catch (e) { /* ignore */ } } });
 const HOST_FAIL = "Couldn't reach the room server. Check your connection and try again.";
 async function lobbyCreate(pub = false, quick = false, fixedCode = '') {
-  netClose(); LOBBY.pub = !!pub; LOBBY.quick = !!quick; LOBBY.fromList = false; const my = NET.token; NET.host = true; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.phase = 'hostWait'; lobbyShow();
+  netClose(); LOBBY.pub = !!pub; LOBBY.quick = !!quick; LOBBY.fromList = false; const my = NET.token; NET.host = true; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = ''; LOBBY.copied = false; LOBBY.phase = 'hostWait'; lobbyShow();
   for (let i = 0; i < 6; i++) {
     const n = NET.net = createNet(), code = fixedCode || makeCode(); netWire(n);
     try { await n.host(code); } catch (e) {
@@ -3336,10 +3371,28 @@ async function lobbyCreate(pub = false, quick = false, fixedCode = '') {
   }
   LOBBY.phase = 'failed'; LOBBY.err = HOST_FAIL; lobbyShow();
 }
+const INVITE_GONE = 'That joust has already begun or the host has left.';
+/** The game's address with ?join=CODE (the origin and path only; ?net=local is kept because there it picks the transport). */
+function inviteLink(code) {
+  if (!validCode(code)) return '';
+  return location.origin + location.pathname + '?join=' + code + (useLocal() ? '&net=local' : '');
+}
+/** "Copy invite link": the share sheet on a phone, else the clipboard. */
+async function lobbyInvite() {
+  const url = inviteLink(LOBBY.code); if (!url) return;
+  let done = false;
+  if (touchMode && navigator.share) { try { await navigator.share({ title: 'Joust Revival', text: 'Join my joust:', url }); done = true; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  if (!done) {
+    try { await navigator.clipboard.writeText(url); done = true; } catch (e) { /* fall through */ }
+    if (!done) { const t = document.createElement('textarea'); t.value = url; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); try { done = document.execCommand('copy'); } catch (e) { /* ignore */ } t.remove(); }
+  }
+  LOBBY.copied = done ? true : 'fail'; lobbyShow(); const code = LOBBY.code;
+  setTimeout(() => { if (LOBBY.copied === true && LOBBY.code === code) { LOBBY.copied = false; lobbyShow(); } }, 3000);
+}
 async function lobbyJoin(raw, opts = {}) {
   const code = cleanCode(raw);
   if (!validCode(code)) { LOBBY.err = 'A room code is five letters.'; lobbyShow(); return false; }
-  netClose(); const my = NET.token; NET.host = false; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = code; LOBBY.pub = false; LOBBY.fromList = !!opts.listed || !!opts.quick; LOBBY.phase = opts.quick ? 'quickLook' : opts.mm ? 'mmConnect' : 'joining'; lobbyShow();
+  netClose(); const my = NET.token; NET.host = false; LOBBY.err = ''; LOBBY.friend = null; LOBBY.code = code; LOBBY.pub = false; LOBBY.invited = !!opts.invite; LOBBY.fromList = !!opts.listed || !!opts.quick || !!opts.invite; LOBBY.phase = opts.quick ? 'quickLook' : opts.mm ? 'mmConnect' : 'joining'; lobbyShow();
   const n = NET.net = createNet(); netWire(n);
   try { await n.join(code); } catch (e) {
     if (my !== NET.token) return false;
@@ -3347,6 +3400,7 @@ async function lobbyJoin(raw, opts = {}) {
     const gone = e && e.message === 'notfound';
     if (opts.quick) { LOBBY.phase = 'quickLook'; lobbyShow(); return false; }
     if (opts.mm) return false;      // (Find match: the host may not be ready yet; the caller tries again)
+    if (opts.invite) { LOBBY.phase = 'list'; LOBBY.err = gone ? INVITE_GONE : failText(e); startWatch(); lobbyShow(); return false; }
     if (opts.listed) { LOBBY.phase = 'list'; LOBBY.err = gone ? 'That room is no longer open.' : failText(e); lobbyShow(); return false; }
     LOBBY.phase = 'joinInput'; LOBBY.err = failText(e); lobbyShow(); return false;
   }
@@ -3426,8 +3480,8 @@ function onNetClose() {
     const filled = LOBBY.fromList && !LOBBY.friend;      // joined from the list and thrown out at once: somebody else got there first
     netClose(); LOBBY.friend = null;
     if (filled && LOBBY.quick) return;      // (Quick match carries on with the next room)
-    if (filled) { LOBBY.phase = 'list'; LOBBY.err = 'That room just filled'; startWatch(); }
-    else if (LOBBY.fromList) { LOBBY.phase = 'list'; LOBBY.err = 'The host has closed the room.'; startWatch(); }
+    if (filled) { LOBBY.phase = 'list'; LOBBY.err = LOBBY.invited ? INVITE_GONE : 'That room just filled'; startWatch(); }
+    else if (LOBBY.fromList) { LOBBY.phase = 'list'; LOBBY.err = LOBBY.invited ? INVITE_GONE : 'The host has closed the room.'; startWatch(); }
     else { LOBBY.phase = 'joinInput'; LOBBY.err = 'The host has closed the room.'; }
     lobbyShow();
   }
@@ -3768,7 +3822,7 @@ const accountApi = { signedIn: account.signedIn, info: account.info, providers: 
   if (r.ok) { const me = await account.fetchMe(); if (!me) profile.gold = r.wallet.gold; }
   return r;
 } };
-const onlineApi = { find: lobbyFind, get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic };
+const onlineApi = { find: lobbyFind, get lobby() { return LOBBY; }, lobbyObjNow: () => lobbyObj, open: lobbyOpen, create: lobbyCreate, join: lobbyJoin, leave: lobbyLeave, ride: lobbyRide, setRoom: lobbySetRoom, modeIds: onlineModeIds, list: lobbyList, joinListed: lobbyJoinListed, quick: lobbyQuick, back: lobbyBack, setPublic: lobbySetPublic, invite: lobbyInvite, inviteLink };
 
 // ------------------------------------------------------------------ input
 /** Keys common to every replay: 1-4 speed, , and . step a frame, K pauses (the automatic one skips on Space), and the free camera's WASD / arrows (R resets it). True when it took the key. */
@@ -3868,11 +3922,13 @@ function setPaused(v) {
 // the pause menu's buttons (desktop), its Replays list, and the highlight's Back button
 $('pmRide').addEventListener('click', () => setPaused(false));
 $('pmRpl').addEventListener('click', () => openReplays('pause'));
+{ const fs = $('pmFs'), de = document.documentElement; const can = !!(de.requestFullscreen || de.webkitRequestFullscreen);      // desktop pause menu: a Full screen toggle
+  if (!can || touchMode) fs.remove(); else fs.addEventListener('click', () => { try { if (document.fullscreenElement) document.exitFullscreen(); else (de.requestFullscreen || de.webkitRequestFullscreen).call(de); } catch (e) { /* ignore */ } }); }
 $('pmLeave').addEventListener('click', () => { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } });
 $('hlBack').addEventListener('click', () => closeHL());
 $('rplCtl').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b || !R) return; e.stopPropagation();
-  if (b.dataset.s) rplSpeed(+b.dataset.s); else if (b.dataset.k === 'pp') rplPause(); else if (b.dataset.k === 'back') rplStep(-1); else if (b.dataset.k === 'fwd') rplStep(1); else if (b.dataset.k === 'view') replayView();
+  if (b.dataset.s) rplSpeed(+b.dataset.s); else if (b.dataset.k === 'pp') rplPause(); else if (b.dataset.k === 'back') rplStep(-1); else if (b.dataset.k === 'fwd') rplStep(1); else if (b.dataset.k === 'view') replayView(); else if (b.dataset.k === 'skip') endReplay();
 });
 $('cardReplays').addEventListener('click', (e) => { e.stopPropagation(); openReplays('card'); });
 $('pmList').addEventListener('click', (e) => {
@@ -3976,7 +4032,7 @@ function updateReticle() {
   if (zone === 'shield' && S.mode === 'charge') { C.onMarkT += 1 / 60; if (C.onMarkT > 0.3) C.flags.onmark = true; }
   _p.project(camera);
   ret.style.left = `${(_p.x * 0.5 + 0.5) * w}px`; ret.style.top = `${(-_p.y * 0.5 + 0.5) * h}px`;
-  ret.className = (C.couch < 0.9 ? 'up ' : '') + zone;
+  ret.className = (C.couch < 0.9 ? 'up ' : '') + (C.aimEdge ? 'edge ' : '') + zone;
   $('zoneTxt').textContent = zone ? zone.toUpperCase() : '';
 }
 
@@ -3985,7 +4041,7 @@ function updateMask() {
   const rfp = S.mode === 'replay' && R && R.sp && (R.shot === 6 || R.shot === 7), who = R && R.shot === 7 ? opp : player, snap = R && R.shot === 7 ? R.so : R && R.sp;      // a replay through somebody's visor: his mask, as the snapshot has him
   if (rfp) {
     if (snap.unhorsed || snap.visorUp || snap.helmOff) { if (m.style.display !== 'none') m.style.display = 'none'; return; }
-    const vis = who.armourDef.vision, frog = who.armourDef.helm === 'frogmouth' || (who === player && M.kit.bolted);
+    const vis = who.armourDef.vision, frog = (!EQUAL_GEAR && who.armourDef.helm === 'frogmouth') || (who === player && M.kit.bolted);
     const half = (5 + vis * 30) * (1 - PHYS.damage.helmView * (who.dmg ? who.dmg.helm : 0)), c = 47 - (snap.brace || 0) * (frog ? 36 : 8);
     m.style.display = 'block';
     m.style.background = `linear-gradient(to bottom, #050505 0, #050505 ${c - half}%, rgba(5,5,5,0) ${c - half + 3}%, rgba(5,5,5,0) ${c + half - 3}%, #050505 ${c + half}%, #050505 100%)`;
@@ -3993,7 +4049,7 @@ function updateMask() {
   }
   const on = (M && C && player && C.cut && C.cut.kind === 'visor') || S.fp && M && C && (S.mode === 'ready' || S.mode === 'charge' || S.mode === 'after') && !player.unhorsed && !C.cut && !(C.cine) && !player.visorUp && !player.helmOff;      // visor up or helm off: the full view
   if (!on) { if (m.style.display !== 'none') m.style.display = 'none'; return; }
-  const vis = player.armourDef.vision, frog = player.armourDef.helm === 'frogmouth' || M.kit.bolted;      // the bolted Stechhelm: the slit sits high, so sit up at the last moment to see
+  const vis = player.armourDef.vision, frog = (!EQUAL_GEAR && player.armourDef.helm === 'frogmouth') || M.kit.bolted;      // the bolted Stechhelm: the slit sits high, so sit up at the last moment to see
   const half = (5 + vis * 30) * (1 - PHYS.damage.helmView * player.dmg.helm), c = 47 - player.brace * (frog ? 36 : 8);   // sit up in the frog-mouth and the sight lifts to the sky
   m.style.display = 'block';
   m.style.background = `linear-gradient(to bottom, #050505 0, #050505 ${c - half}%, rgba(5,5,5,0) ${c - half + 3}%, rgba(5,5,5,0) ${c + half - 3}%, #050505 ${c + half}%, #050505 100%)`;
@@ -4306,6 +4362,7 @@ function frame(dtReal) {
     if (attract.running) world.focusShadow(attract.focus(_a));
     else if (player) world.focusShadow(S.mode === 'intro' && introNew() ? ceremony.focus(S.introT, player, opp, _a) : S.mode === 'intro' && S.introT < 4.2 && opp ? opp.root.position : (C && C.cine && S.mode === 'after' ? C.cine.rider.position : player.root.position));
   }
+  audio.setMenuMix(S.mode === 'menu' && attract.running);      // the menu joust's sound sits under the menu music
   audio.update(dtReal, { excitement: S.excite, anticipation: S.antic || 0, speed: player && M && S.mode !== 'replay' ? player.speed : 0, favour: M ? M.favour : 0 });
   if (S.mode !== 'replay' && !R) fx.update(S.hold && S.online ? dt * 0.05 : dt);
   updateCamera(dtReal);
@@ -4323,16 +4380,18 @@ function frame(dtReal) {
 const previews = createPreviews();
 const stable = createStable();
 let bgDone = false;      // the background downloads (trees, props, the player's rider) have finished: only then does the menu joust start fetching its own
-attract = createAttract({ scene, camera, fx, S, audio, makeRider: (def, dir) => { const j = makeRider(def, dir, false), hp = new THREE.Vector3(); j.onHoof = (i, leg) => { leg.hoof.getWorldPosition(hp); hp.y = 0.05; fx.hoof(hp, j.speed, j.dir, leg.hind); if (j.speed > 6 && leg.hind) fx.clods(hp, 3, j.dir * j.speed); }; return j; },
+attract = createAttract({ scene, camera, fx, S, audio: new Proxy({}, { get: (_, k) => { const v = audio[k]; return typeof v === 'function' ? v.bind(audio) : v; } }) /* `audio` is rebound once the sound module loads: always reach the live one */, makeRider: (def, dir) => { const j = makeRider(def, dir, false), hp = new THREE.Vector3(); j.onHoof = (i, leg) => { leg.hoof.getWorldPosition(hp); hp.y = 0.05; fx.hoof(hp, j.speed, j.dir, leg.hind); if (j.speed > 6 && leg.hind) fx.clods(hp, 3, j.dir * j.speed); if (attract && attract.running && !S.muted && audio.ctx) { const [d, pan] = hear(hp); audio.hoof(j.speed / 9, pan, d); } /* the menu joust's hoofbeats, distance-mixed like a match's; the bus is lowered by setMenuMix */ }; return j; },
   world: () => world, ready: () => bgDone && SCANS.ready && worldScans && !M && !preparing, shake: (v) => { S.shake = Math.max(S.shake, v); },
-  crowd: (kind) => { const Rk = REACT[kind]; if (!Rk) return; S.excite = Math.max(S.excite, Rk.ex); S.scorer = 0; if (Rk.ex > 0.75) S.waveT = S.time; S.crowdEv = { id: ++crowdEvId, kind: { rouse: 'break', sandbag: 'taunt' }[kind] || kind, by: 0 }; } });
+  crowd: (kind) => { const Rk = REACT[kind]; if (!Rk) return; if (!S.muted && audio.ctx) { const gasp = Rk.snd.some(x => x[0] === 'gasp'); for (const [snd, str, ld] of Rk.snd) audio.crowd(snd, str, (ld || 0) + (gasp && snd !== 'gasp' && kind !== 'near' ? 0.2 : 0), { fav: 0 }); }      // cheers and gasps (Settings > Sound > Crowd still silences them)
+    S.excite = Math.max(S.excite, Rk.ex); S.scorer = 0; if (Rk.ex > 0.75) S.waveT = S.time; S.crowdEv = { id: ++crowdEvId, kind: { rouse: 'break', sandbag: 'taunt' }[kind] || kind, by: 0 }; } });
 const touch = initTouch({ S, mouse, rpl: { active: () => !!R && S.mode === 'replay', orbit: (dx, dy) => freeOrbit(dx, dy), zoom: (k) => freeZoom(k) }, openReplays: () => openReplays('pause'), inMatch: () => !!M && S.mode !== 'menu', getC: () => C, spur, brace: doBrace, advance, setPaused, initAudio, setSkip: (v) => { skipKey = v; },
   guard(v) { if (v && !keys.guard && C) C.guardAge = 0; keys.guard = v; }, portraitOk: () => S.mode === 'replay' || S.rpl || !$('card').classList.contains('hidden'),
   leave() { if (M && S.paused) { setPaused(false); endMatch(); menus.show('main'); } } });
 store.bindProfile(() => profile); store.onChange(() => { if (!M && player) rebuildPlayer(); });
 const menus = initMenus({ touch: touchMode, fullscreen: goFullscreen,
   get profile() { return profile; }, saveProfile, rebuildPlayer, startMatch, newTable,
-  setBody(b) { profile.body = cleanBody(b); if (player) applyBody(player, profile.body); saveProfile(); },      // (the Body section of the menus: looks only, so the rider is reshaped where he sits) online: onlineApi, account: accountApi,
+  setBody(b) { profile.body = cleanBody(b); if (player) applyBody(player, profile.body); saveProfile(); },      // (the Body section of the menus: looks only, so the rider is reshaped where he sits)
+  online: onlineApi, account: accountApi,
   resetCircuit() { career.newSeasonFor(profile); profile.venue = 0; saveProfile(); },
   startPractice(restart) { if (restart) { profile.lesson = 0; saveProfile(); } startMatch(Math.max(0, venueIdx), null, false, true); },
   setVenue, musicVol, setMusic, musicNext, musicOff: () => musicOffNow, setMusicOff, musicMine, voicesOn, setVoices, commentaryOn, setCommentary, chatterOn, setChatter, replaysMode, setReplays, checkFeats() { withFeats(() => checkFeats(profile)); }, ui: (k) => { initAudio(); audio.ui(k); }, S, onShow: (name) => { S.menuView = name; },

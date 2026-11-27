@@ -23,7 +23,7 @@ import { initTooltips, tip, tipAttr } from './tooltips.js';
 import { gi, icon, coin, coinsTxt, GAME_NAME, WORDMARK_IMAGE } from './icons.js';
 import * as store from './store.js';      // what has been bought (the server's word), the store screen, the gates
 import { mountDonate } from './donate.js';
-import { PAY } from './config.js';
+import { PAY, EQUAL_GEAR } from './config.js';
 import { PACKS, allowedArms, skuOfCharge, ROLL_CHARGES } from './cosmetics.js';
 const ownedSkus = () => ['herald', 'rolls', 'patron', 'finishes', 'charter'].filter((k) => store.has(k));      // the packs this account holds (heraldry gating)
 import { openUpsell, maybeAuto, exhibitionAllowed } from './upsell.js';      // the "unlock the full game" popup
@@ -31,7 +31,8 @@ import { FACES, SKINS, HAIRS, BUILDS, cleanBody } from './body_types.js';
 let buyOk = false;   // set for the one re-dispatched click after a purchase is confirmed
 
 const el = (id) => document.getElementById(id);
-const stat = (name, v) => `<div class="stat"><span>${name}</span><div class="bar"><div style="width:${Math.round(Math.max(0.05, Math.min(1, v)) * 100)}%"></div></div></div>`;
+const stat = (name, v) => EQUAL_GEAR ? '' : `<div class="stat"><span>${name}</span><div class="bar"><div style="width:${Math.round(Math.max(0.05, Math.min(1, v)) * 100)}%"></div></div></div>`;
+const SAME = EQUAL_GEAR ? '<p class="samegear">Same in the lists as every other — chosen for looks.</p>' : '';
 const marks = (n) => coin(n);      // money is shown as a gold coin and a number (the data still counts marks)
 /** The purse in words: what you hold, or what you owe. */
 export const purseText = (g) => (g || 0) < 0 ? `<span class="debt">In debt ${marks(-g)}</span>` : `<span class="purse" data-tip="Your purse">${marks(g || 0)}</span>`;
@@ -45,7 +46,7 @@ export function rankBar(renown) {
 export function initMenus(api) {
   const root = el('screen');
   initTooltips();
-  ['joust-miniature', 'gallery-manesse', 'icons/emblem-128', ...['armoury', 'stable', 'renown', 'settings'].map((n) => `icons/${n}-128`), ...['career', 'joust', 'learn', 'coins'].map((n) => `icons/${n}-64`)].forEach((n) => { new Image().src = `assets/ui/${n}.webp`; });      // warm the cache so the title-page picture is there when the menu is drawn
+  ['joust-miniature', 'welcome-banner-800', 'icons/emblem-128', ...['armoury', 'stable', 'renown', 'settings'].map((n) => `icons/${n}-128`), ...['career', 'joust', 'learn', 'coins'].map((n) => `icons/${n}-64`)].forEach((n) => { new Image().src = `assets/ui/${n}.webp`; });      // warm the cache so the title-page picture is there when the menu is drawn
   document.body.classList.toggle('lowui', GFX.tier === 'low' || GFX.pref === 'low');      // the painted frame is a picture; low tier gets the same frame drawn in CSS
   let exVenue = 0, exOpp = KNIGHTS[0].id, exMode = 'planken', exCourses = 5, dismissArm = null;
   const EX_COURSES = [3, 5, 7, 10, 15, 20], CIRC_COURSES = [3, 5, 7, 10, 15];
@@ -206,7 +207,7 @@ export function initMenus(api) {
     const p = api.profile, a = p.arms; if (wDraft === null) wDraft = '';
     const sw = (key) => `<div class="swatches"><span class="lbl">${{ c1: 'Field', c2: 'Division' }[key]}</span>${TINCTURES.map(t => `<div class="sw ${a[key] === t[1] ? 'sel' : ''}" title="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}</div>`;
     root.innerHTML = scroll('menu welcome', `
-      <div class="mini"><img src="assets/ui/gallery-manesse.webp" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>
+      <div class="mini"><img src="assets/ui/welcome-banner-1600.webp" srcset="assets/ui/welcome-banner-800.webp 800w, assets/ui/welcome-banner-1600.webp 1600w" sizes="(max-width: 600px) 100vw, 420px" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>
       ${title()}
       <h5>Your Name ${tip('Your name and colours', 'The herald cries your name when you ride in.|You can change all of this later in the Armoury.')}</h5><input class="name" id="wName" name="knight-title" maxlength="22" placeholder="Sir Roland of Tyre" value="${wDraft.replace(/"/g, '')}" ${NOFILL}>
       <div class="arms-row"><canvas id="wCrest" width="150" height="178"></canvas><div>
@@ -309,6 +310,12 @@ export function initMenus(api) {
       if (!rs.length) return `<p class="wait">${rl.failed ? 'Could not reach the lobby. Check your connection, or use Joust a friend.' : rl.open ? 'No open rooms yet: create one or try Quick match.' : 'Connecting to the lobby…'}</p>`;
       return `<div class="rooms">${rs.map(r => `<div class="rrow"><b>${r.name}</b><span>${VENUES[r.v].name}</span><span>${MODES[r.m].name}</span><span>${r.c} courses</span><button class="btn primary" data-on="joinlist" data-code="${r.code}">Join</button></div>`).join('')}</div>${L.rooms.length > 5 ? `<p class="dimtxt">and ${L.rooms.length - 5} more</p>` : ''}`;
     };
+    // How many knights are in the lists (heard over the same relays as the room list, src/lobby.js): a real number or the quiet line, never a made-up one.
+    const presenceLine = (btn) => {
+      const P = L.pres; if (!P || !P.listening) return '';
+      if (P.others > 0 && P.open) return `<p class="presence"><b>${P.knights} ${P.knights === 1 ? 'knight' : 'knights'}</b> in the lists${P.jousts > 0 ? ` &nbsp;·&nbsp; ${P.jousts} ${P.jousts === 1 ? 'joust' : 'jousts'} under way` : ''}</p>`;
+      return `<p class="presence quiet">The lists are quiet &mdash; challenge a friend</p>${btn ? '<div class="onrow"><button class="plaque big" data-on="create">Invite a friend</button></div>' : ''}`;
+    };
     if (ph === 'finding') {      // Find match: the searching panel
       const f = L.find || { ranked: false, t0: performance.now() }, secs = Math.max(0, Math.floor((performance.now() - f.t0) / 1000));
       head = 'Finding a match'; actions = '<button class="btn" data-on="back">Cancel</button>';
@@ -325,6 +332,7 @@ export function initMenus(api) {
       const pl = (cls, attrs, label, t, tb) => `<button class="plaque ${cls}" ${attrs} ${tipAttr(t, tb)}>${label}${tip(t, tb, 'tonly')}</button>`;
       body = `${L.err ? `<p class="err">${esc(L.err)}</p>` : ''}<div class="onrow main">${pl('big', 'data-on="find" data-ranked="0"', 'Find match', 'Find match', 'Unranked: paired by rating, friendly.|Your rating does not change.')}${pl('blue', 'data-on="find" data-ranked="1"', 'Ranked match', 'Ranked match', api.account && api.account.signedIn() ? 'Rated, and it pays a purse.' : 'Sign in to play ranked.')}</div>
         <div class="onrow three">${pl('blue', 'data-on="quick"', 'Quick match', 'Quick match', 'Join the next open room,|or wait for a challenger.')}${pl('blue', 'data-on="list"', 'Public rooms', 'Public rooms', 'See who is waiting, and pick a room.')}${pl('blue', 'data-on="friend"', 'Joust a friend', 'A private room', 'Share the code with a friend.|No account needed.')}</div>
+        ${presenceLine(true)}
         <p class="fineprint">${tip('Playing online', 'You ride with your own arms, horse and harness.|Nothing is paid and no renown is won.|Only your chosen name is shown to others.')} Friend rooms need no account.</p>`;
     } else if (ph === 'friend') {
       head = '';
@@ -332,7 +340,7 @@ export function initMenus(api) {
     } else if (ph === 'list') {
       head = 'Open public rooms. Pick one to join.';
       actions = '<button class="btn" data-on="back">Back</button><button class="btn" data-on="createpub">Create a room</button>';
-      body = `${L.err ? `<p class="err">${L.err}</p>` : ''}${rows()}`;
+      body = `${L.err ? `<p class="err">${L.err}</p>` : ''}${presenceLine(false)}${rows()}`;
     } else if (ph === 'quickLook') {
       head = 'Quick match'; actions = '<button class="btn" data-on="back">Cancel</button>';
       body = '<p class="wait">Looking for an open room…</p>';
@@ -342,7 +350,8 @@ export function initMenus(api) {
       actions = `<button class="btn" data-on="back">${ph === 'hostReady' ? 'Back' : 'Cancel'}</button>${ph === 'hostReady' ? '<button class="btn primary" data-on="ride">Ride!</button>' : ''}`;
       if (L.quick && ph === 'hostWait') body = `<p class="wait big">${L.code ? 'Waiting for a challenger…' : 'Opening a room…'}</p><p class="dimtxt">No open room was found, so yours is listed: ${V.name} · ${MODES[room.m].name} · ${fixed || room.c} courses</p>`;
       else body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code || '·····'}</b></div>
-        ${ph === 'hostReady' ? friendRow() : `<p class="wait">${L.code ? (L.pub ? 'Waiting for a challenger…' : 'Waiting for your friend…') : 'Opening the room…'}</p>${pubRow()}`}
+        ${ph === 'hostWait' && L.code && !L.quick ? `<div class="onrow invite"><button class="btn primary" data-on="invite" data-url="${O.inviteLink(L.code).replace(/&/g, '&amp;')}">${L.copied === true ? 'Link copied' : 'Copy invite link'}</button></div>${L.copied === 'fail' ? `<p class="dimtxt">Copying is blocked here. Select and copy the link:</p><input class="name invlink" readonly value="${O.inviteLink(L.code).replace(/&/g, '&amp;')}" onfocus="this.select()">` : ''}${presenceLine(false)}` : ''}
+        ${ph === 'hostReady' ? friendRow() + presenceLine(false) : `<p class="wait">${L.code ? (L.pub ? 'Waiting for a challenger…' : 'Waiting for your friend…') : 'Opening the room…'}</p>${pubRow()}`}
         ${chips()}`;
     } else if (ph === 'joinInput') {
       head = 'Type the five letters your friend gives you.';
@@ -353,7 +362,7 @@ export function initMenus(api) {
       body = `<div class="roomcode"><span>ROOM CODE</span><b>${L.code}</b></div><p class="wait">Looking for your friend… this can take a few seconds.</p>`;
     } else if (ph === 'joined') {
       head = fr ? `You are in ${fr.name}'s room.` : 'Connected…';
-      body = `${friendRow()}<p class="wait">Waiting for ${fr ? fr.name : 'the host'} to start the joust…</p>${summary()}`;
+      body = `${friendRow()}<p class="wait">Waiting for ${fr ? fr.name : 'the host'} to start the joust…</p>${presenceLine(false)}${summary()}`;
     } else {      // failed
       head = 'The room could not be opened.';
       body = `<p class="err">${L.err}</p><div class="onrow"><button class="btn primary" data-on="retry">Try again</button></div>`;
@@ -434,17 +443,17 @@ export function initMenus(api) {
     let body = '', hint = '';
     if (armTab === 'horse') {
       hint = tip('Your horse', `Stabling is charged at each circuit tourney.|Caparison: ${(CAPARISONS[p.caparison] || CAPARISONS.livery).name}.`);
-      body = `<div class="grid">${Object.values(HORSES).map(h => `<div class="pick ${p.horse === h.id ? 'sel' : ''}" data-horse="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb + '|Keep: ' + marks(ECON.keep[h.id] ?? 2) + ' a tourney.')}">${pv('horse', h.id)}<b>${h.name}</b>${badge(p.owned.horses.includes(h.id), p.horse, (p.horse === h.id ? 'Riding' : 'Owned') + ' · bond ' + BOND_NAMES[bondLevel((p.bond || {})[h.id])], h.price)}${stat('Speed', (h.top - 7.2) / 2)}${stat('Accel', h.accel / 3.7)}${stat('Shock', (h.mass - 0.7) / 0.6)}${stat('Smooth', h.steady)}${stat('Temper', h.nerve)}${stat('Wind', h.stamina)}</div>`).join('')}</div>
+      body = `<div class="grid">${Object.values(HORSES).map(h => `<div class="pick ${p.horse === h.id ? 'sel' : ''}" data-horse="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb + '|Keep: ' + marks(ECON.keep[h.id] ?? 2) + ' a tourney.')}">${pv('horse', h.id)}<b>${h.name}</b>${badge(p.owned.horses.includes(h.id), p.horse, (p.horse === h.id ? 'Riding' : 'Owned') + ' · bond ' + BOND_NAMES[bondLevel((p.bond || {})[h.id])], h.price)}${stat('Speed', (h.top - 7.2) / 2)}${stat('Accel', h.accel / 3.7)}${stat('Shock', (h.mass - 0.7) / 0.6)}${stat('Smooth', h.steady)}${stat('Temper', h.nerve)}${stat('Wind', h.stamina)}</div>`).join('')}</div>${SAME}
         <p class="aside"><span class="chip" data-go="stable">Visit the stable</span></p>`;
     } else if (armTab === 'helm') {
       hint = tip('Your helm', 'Bought and worn on its own.|It decides what you see.');
-      body = `<div class="grid">${Object.values(HELMS).map(h => `<div class="pick ${p.helm === h.id ? 'sel' : ''}" data-helm="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb)}">${pv('helm', h.id)}<b>${h.name}</b>${badge(p.owned.helms.includes(h.id), p.helm, p.helm === h.id ? 'Worn' : 'Owned', h.price)}${stat('Protect', h.protection)}${stat('Vision', h.vision)}${stat('Light', 1.15 - h.kg / 10)}</div>`).join('')}</div>`;
+      body = `<div class="grid">${Object.values(HELMS).map(h => `<div class="pick ${p.helm === h.id ? 'sel' : ''}" data-helm="${h.id}" data-tip-title="${h.name}" data-tip="${q(h.blurb)}">${pv('helm', h.id)}<b>${h.name}</b>${badge(p.owned.helms.includes(h.id), p.helm, p.helm === h.id ? 'Worn' : 'Owned', h.price)}${stat('Protect', h.protection)}${stat('Vision', h.vision)}${stat('Light', 1.15 - h.kg / 10)}</div>`).join('')}</div>${SAME}`;
     } else if (armTab === 'armour') {
       hint = tip('Your harness', 'Body armour.|The armourer mends it after every joust.');
-      body = `${finishRow}<div class="grid">${Object.values(ARMOURS).map(r => `<div class="pick ${p.armour === r.id ? 'sel' : ''}" data-armour="${r.id}" data-tip-title="${r.name}" data-tip="${q(r.blurb)}">${pv('armour', r.id)}<b>${r.name}</b>${badge(p.owned.armours.includes(r.id), p.armour, p.armour === r.id ? 'Worn' : 'Owned', r.price)}${stat('Protect', r.protection)}${stat('Light', 1.9 - r.weight * 1.2)}</div>`).join('')}</div>`;
+      body = `${finishRow}<div class="grid">${Object.values(ARMOURS).map(r => `<div class="pick ${p.armour === r.id ? 'sel' : ''}" data-armour="${r.id}" data-tip-title="${r.name}" data-tip="${q(r.blurb)}">${pv('armour', r.id)}<b>${r.name}</b>${badge(p.owned.armours.includes(r.id), p.armour, p.armour === r.id ? 'Worn' : 'Owned', r.price)}${stat('Protect', r.protection)}${stat('Light', 1.9 - r.weight * 1.2)}</div>`).join('')}</div>${SAME}`;
     } else if (armTab === 'lance') {
       hint = tip('Your lance', 'You pay for every lance you break.');
-      body = `<div class="grid">${Object.values(LANCES).map(l => `<div class="pick lance ${(p.lance || 'standard') === l.id ? 'sel' : ''}" data-lance="${l.id}" data-tip-title="${l.name}" data-tip="${q(l.blurb)}">${pv('lance', l.id)}<b>${l.name}</b><em>${marks(ECON.lance[l.id])} each</em>${stat('Shock', (l.power - 0.7) / 0.5)}${stat('Steady', 1.55 - l.sway)}${stat('Arm', 1.2 - l.fatigue * 0.55)}</div>`).join('')}</div>`;
+      body = `<div class="grid">${Object.values(LANCES).map(l => `<div class="pick lance ${(p.lance || 'standard') === l.id ? 'sel' : ''}" data-lance="${l.id}" data-tip-title="${l.name}" data-tip="${q(l.blurb)}">${pv('lance', l.id)}<b>${l.name}</b><em>${marks(ECON.lance[l.id])} each</em>${stat('Shock', (l.power - 0.7) / 0.5)}${stat('Steady', 1.55 - l.sway)}${stat('Arm', 1.2 - l.fatigue * 0.55)}</div>`).join('')}</div>${SAME}`;
     } else if (armTab === 'men') {
       hint = tip('Your retinue', 'Hired once.|Each draws his wage at every circuit tourney.');
       body = `<div class="grid">${Object.keys(RETINUE).map(id => manCard(p, id)).join('')}</div>`;
@@ -545,7 +554,7 @@ export function initMenus(api) {
       <div class="stview"><canvas id="stableView"></canvas>
         <div class="stcap"><h5>Caparison</h5><div class="swatches">${capBtns}</div><p>${capAct} ${tip(cap.name, cap.blurb)}</p></div>
         <div class="stinfo"><div class="sthead"><div><h4>${h.name} ${tip(h.name, h.blurb)}</h4>${mine ? `<p class="bondline">Bond with you: <b>${BOND_NAMES[lvl]}</b> of IV</p>` : ''}<p class="bondline">Keep: ${marks(ECON.keep[h.id] ?? 2)} at each circuit tourney.</p></div><div class="stact">${act}${why}</div></div>
-          <div class="stbars">${stat('Top speed', (h.top - 7.2) / 2)}${stat('Acceleration', h.accel / 3.7)}${stat('Shock weight', (h.mass - 0.7) / 0.6)}${stat('Smoothness', h.steady)}${stat('Nerve', h.nerve)}${stat('Stamina', h.stamina)}</div></div></div></div>`);
+          <div class="stbars">${stat('Top speed', (h.top - 7.2) / 2)}${stat('Acceleration', h.accel / 3.7)}${stat('Shock weight', (h.mass - 0.7) / 0.6)}${stat('Smoothness', h.steady)}${stat('Nerve', h.nerve)}${stat('Stamina', h.stamina)}</div>${SAME}</div></div></div>`);
   }
 
   /** The feats: a grid of seals. Earned ones in colour with their date, the rest greyed with what they ask; hidden ones are ??? until earned. */
@@ -666,6 +675,7 @@ export function initMenus(api) {
       if (d.on === 'back') { joinDraft = ''; return O.back(); }
       if (d.on === 'joinmode') { O.lobby.phase = 'joinInput'; O.lobby.err = ''; return show('online'); }
       if (d.on === 'join') return O.join(joinDraft);
+      if (d.on === 'invite') return O.invite();
       if (d.on === 'ranks') { RK.status = 'idle'; RK.view = 'board'; RK.msg = ''; return show('rankings'); }
       if (d.on === 'rkback') return show('online');
       if (d.on === 'rkview') { RK.view = RK.view === 'recover' ? 'board' : 'recover'; RK.msg = ''; if (RK.view === 'recover' && !RK.code) ranks.recoveryCode().then((c) => { RK.code = c || ''; if (root.dataset.name === 'rankings') show('rankings'); }); return show('rankings'); }

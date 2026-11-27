@@ -42,6 +42,8 @@ const STEMS = {
   ui:     { db: -14, cap: 4 },
 };
 const MASTER_DB = -9;
+/** The menu joust's whole effects bus (crowd bed, hooves, cheers, lance impacts) sits this far under a match's level, so the menu music stays on top. */
+const MENU_MIX_DB = -9;
 // Used when a category carries no curve of its own.
 const DEFAULT_ATT = { max: 90, vol: [[0, 0], [2, 0], [5, -4], [10, -9], [20, -15], [40, -22], [70, -30], [90, -42]], lpf: [[0, 0], [8, 6], [25, 24], [60, 44], [90, 58]] };
 // The crowd IS the loud thing in the lists: distance only dulls and widens it, it barely quietens it.
@@ -210,7 +212,7 @@ class MusicBus {
 export class GameAudio {
   constructor() {
     this.music = new MusicBus(this);
-    this.ctx = null; this._ready = false; this.muted = false; this.ts = 1; this.r = 1;
+    this.ctx = null; this._ready = false; this.muted = false; this.ts = 1; this.r = 1; this._menuMix = false;
     this.cat = {}; this.stem = {}; this.voices = {}; this.beds = {}; this.loaded = Promise.resolve(false);
     this._t = { breath: 1, idle: 5, bird: 6 }; this._hold = 0; this._lone = false; this._duck = { db: 0, hold: 0, now: 0 }; this.venue = null; this.manifestUrl = sfxPack() === 'new' ? 'sfx_free/manifest.json' : 'sfx/manifest.json';
   }
@@ -229,13 +231,15 @@ export class GameAudio {
       this.limiter.connect(ctx.destination);
       this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : lin(MASTER_DB); this.master.connect(this.limiter);
       this.slowLP = ctx.createBiquadFilter(); this.slowLP.type = 'lowpass'; this.slowLP.frequency.value = 20000; this.slowLP.Q.value = 0.5; this.slowLP.connect(this.master);
-      for (const k in STEMS) { const g = ctx.createGain(); g.gain.value = lin(STEMS[k].db); g.connect(this.slowLP); this.stem[k] = g; this.voices[k] = []; }
+      // sfxBus: every effect stem and the reverb return pass through it, so the menu joust can sit under the music with one fader (setMenuMix). The music and the UI blips bypass it.
+      this.sfxBus = ctx.createGain(); this.sfxBus.gain.value = this._menuMix ? lin(MENU_MIX_DB) : 1; this.sfxBus.connect(this.slowLP);
+      for (const k in STEMS) { const g = ctx.createGain(); g.gain.value = lin(STEMS[k].db); g.connect(k === 'ui' ? this.slowLP : this.sfxBus); this.stem[k] = g; this.voices[k] = []; }
       // open-air reverb: short, dark, mostly for distance
       this.revIn = ctx.createGain();
       const conv = ctx.createConvolver(); conv.buffer = this._impulse(1.6);
       const revLP = ctx.createBiquadFilter(); revLP.type = 'lowpass'; revLP.frequency.value = 3200;
       const revOut = ctx.createGain(); revOut.gain.value = 0.5;
-      this.revIn.connect(conv); conv.connect(revLP); revLP.connect(revOut); revOut.connect(this.slowLP);
+      this.revIn.connect(conv); conv.connect(revLP); revLP.connect(revOut); revOut.connect(this.sfxBus);
       this._ready = true;
       this.music._attach();
       this.loaded = this._load().then(() => { this._startBeds(); return true; }).catch(() => false);
@@ -344,6 +348,12 @@ export class GameAudio {
       if (this.muted) { this.master.gain.cancelScheduledValues(this.ctx.currentTime); this.master.gain.value = 0; this.ctx.suspend(); }
       else { this.ctx.resume(); this.master.gain.setTargetAtTime(lin(MASTER_DB), this.ctx.currentTime, 0.15); }
     });
+  }
+  /** true while the menu joust (src/attract.js) plays behind the menus: the effects bus drops MENU_MIX_DB under a match's level. Music and UI clicks are not on it. */
+  setMenuMix(on) {
+    on = !!on; if (on === this._menuMix) return; this._menuMix = on;
+    if (!this.ctx || !this.sfxBus) return;
+    this._run(() => this.sfxBus.gain.setTargetAtTime(on ? lin(MENU_MIX_DB) : 1, this.ctx.currentTime, 0.5));
   }
   setTimeScale(s) {
     this.ts = clamp(+s || 1, 0.1, 1); this.r = lerp(0.88, 1, this.ts);   // slow motion muffles; it barely detunes

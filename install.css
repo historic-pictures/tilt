@@ -1,0 +1,32 @@
+/* install.css - the "add to home screen" explainer (src/install.js): a manuscript page on a dark ground. */
+#installGate { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; overflow: auto; -webkit-overflow-scrolling: touch;
+  padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 248, 222, 0) 40%, rgba(110, 70, 25, .5) 100%), var(--skin, #e9d9ae); color: var(--ink, #2b1d12); font-family: var(--body, Georgia, serif); user-select: none; touch-action: pan-y; }
+#installGate.ig-soft { background: rgba(11, 9, 6, .82); }
+#installGate .ig-panel { box-sizing: border-box; width: min(560px, 100%); margin: auto; text-align: center; padding: 14px 14px 12px; border: 30px solid transparent; border-image: url('assets/ui/frame-9slice.webp') 54 / 30px round;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 248, 222, 0) 60%, rgba(120, 78, 30, .26) 100%), var(--skin, #e9d9ae) padding-box; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .5)); }
+#installGate .ig-logo { width: 74px; height: 74px; display: block; margin: 0 auto 4px; }
+#installGate h1 { margin: 0 0 10px; font: 700 34px/1.05 var(--display, 'Grenze Gotisch', Georgia, serif); color: var(--red, #9c2218); }
+#installGate ol { list-style: none; margin: 0 0 8px; padding: 0; text-align: left; }
+#installGate li { display: flex; align-items: center; gap: 10px; margin: 0 0 9px; font-size: 18px; line-height: 1.22; }
+#installGate .ig-n { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--red, #9c2218); color: #fff6e0; font: 700 16px/26px var(--caps, Georgia, serif); text-align: center; }
+#installGate .ig-ic { flex: none; width: 34px; height: 34px; color: var(--lapis, #1f3f8a); }
+#installGate .ig-t b { color: var(--red2, #76150e); font-weight: 600; }
+#installGate .ig-lead { font-size: 19px; margin: 6px 0 12px; }
+#installGate .ig-or { margin: 4px 0 8px; font-style: italic; color: var(--ink2, #5b432b); }
+#installGate .ig-why { margin: 8px 0 0; font-size: 15px; color: var(--ink2, #5b432b); }
+#installGate .ig-btn { display: block; width: 100%; box-sizing: border-box; margin: 6px 0; padding: 14px 18px; border: 0; border-radius: 5px; background: linear-gradient(rgba(255, 255, 255, .14), rgba(0, 0, 0, .22)), var(--red, #9c2218); color: #fff6e0; font: 700 26px/1 var(--display, Georgia, serif); box-shadow: 0 2px 0 rgba(0, 0, 0, .4); }
+#installGate .ig-close { background: linear-gradient(rgba(255, 255, 255, .12), rgba(0, 0, 0, .25)), var(--lapis, #1f3f8a); font-size: 22px; margin-top: 12px; }
+/* landscape phone: little height, so the logo sits beside the text */
+@media (orientation: landscape) and (max-height: 520px) {
+  #installGate .ig-panel { display: flex; align-items: center; gap: 18px; width: min(860px, 100%); padding: 2px 10px; border-width: 22px; border-image-width: 22px; }
+  #installGate .ig-logo { width: 90px; height: 90px; margin: 0; flex: none; }
+  #installGate .ig-main { flex: 1; min-width: 0; } #installGate h1 { font-size: 26px; margin-bottom: 5px; }
+  #installGate li { font-size: 15px; margin-bottom: 4px; } #installGate .ig-ic { width: 26px; height: 26px; } #installGate .ig-why { font-size: 13px; margin-top: 3px; }
+  #installGate .ig-btn { font-size: 20px; padding: 8px 14px; margin: 4px 0; }
+}
+body.ig-open #c { visibility: hidden; }
+/* the touch pause menu's buttons (Ride on / Replays / Install / Leave): ui.css hides every #touchUI button and nothing shows these again, so they are shown here */
+body.touch #touchUI #tPauseMenu button { display: block; }
+body.touch #touchUI #tPauseMenu { flex-wrap: wrap; justify-content: center; width: 94vw; top: 62%; }
+body.touch #touchUI #tPauseMenu button { padding: 11px 18px; font-size: 18px; }
