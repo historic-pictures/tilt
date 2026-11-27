@@ -16,8 +16,8 @@
 // Lengths: charge lines <= 6 words, exclamations <= 4, everything else <= 20 words a turn.
 
 export const BOOTH_CAST = {
-  P: { id: 'pell', label: 'PELL · THE BOOTH', name: 'Master Ambrose Pell, Windsor Herald' },
-  C: { id: 'drewe', label: 'SIR WALTER · THE BOOTH', name: 'Sir Walter Drewe' },
+  P: { id: 'pell', label: 'PELL · WINDSOR HERALD', name: 'Master Ambrose Pell, Windsor Herald' },
+  C: { id: 'drewe', label: 'SIR WALTER DREWE', name: 'Sir Walter Drewe' },
 };
 
 export const BOOTH = {
@@ -607,6 +607,35 @@ export const BOOTH = {
     slap:    [['P', 'He slaps his own helm. He is not pleased with himself.'], ['C', 'Nor is his horse.']],
   },
   // the unhorsed man's outcome (src/aftermath.js events aftermath:down / up / carried, routed by main.js aftermathEvent)
+  // a new knight (his first few matches): a kind word after a poor course, a cheer for his first break; and if he is soundly beaten without ever riding at the quintain, the herald has fun with it
+  newbie: {
+    encourage: [
+      ['P', "First time in the lists, this one. Nobody learns it in a day. Give him a few courses."],
+      ['P', "Missed. No shame in it. Every knight here missed his first dozen."],
+      ['P', "It's hard at first, this. The lance is heavy and the horse has opinions. It gets easier."],
+      ['P', "Let him stay on the course a while longer. It'll come."],
+      ['P', "He's learning. Watch the point, not the horse. That's the whole trick."],
+      ['P', "Not bad for a beginner. Not good either. But not bad."],
+      ['P', "Steady. The first ten courses are the worst. After that it's merely terrible."],
+      ['P', "Lower the point sooner. He'll get there."],
+    ],
+    better: [
+      ['P', "There! That's closer. A few more and he'll be dangerous."],
+    ],
+    firstHit: [
+      ['P', "Good! He's getting it. I said he would."],
+    ],
+    roast: [
+      ['P', "Did he skip the training ground? He skipped the training ground."],
+      ['P', "There's a quintain behind the stables. It doesn't hit back. He might try it."],
+      ['P', "That was painful. For us. Imagine how he feels."],
+      ['P', "Somebody show this man the practice yard. Please."],
+      ['P', "He rode in here with no training. Bold. Wrong, but bold."],
+      ['P', "I've seen sacks of flour sit a horse better."],
+      ['P', "Beaten, and soundly. The training ground is free, my lord. So is shame."],
+      ['P', "Back to the quintain with him. It's very patient."],
+    ],
+  },
   aftermath: {
     down:    [['P', 'He is not getting up. The surgeon is running out.'], ['C', 'Give him air. And give the crowd something else to look at.']],
     up:      [['P', 'He is on his feet. A hand from the squire, and he stands.'], ['C', 'Hard head. They breed them thick in this country.']],

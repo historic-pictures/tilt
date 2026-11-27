@@ -1045,6 +1045,96 @@
 "f": "pell/booth.history.14.mp3",
 "d": 6.56,
 "t": "In the Rennen the shield is built to spring off when it is struck square. The crowd loves the sound."
+},
+"booth.newbie.encourage.0": {
+"f": "pell/booth.newbie.encourage.0.mp3",
+"d": 5.64,
+"t": "First time in the lists, this one. Nobody learns it in a day. Give him a few courses."
+},
+"booth.newbie.encourage.1": {
+"f": "pell/booth.newbie.encourage.1.mp3",
+"d": 4.5,
+"t": "Missed. No shame in it. Every knight here missed his first dozen."
+},
+"booth.newbie.encourage.2": {
+"f": "pell/booth.newbie.encourage.2.mp3",
+"d": 6.21,
+"t": "It's hard at first, this. The lance is heavy and the horse has opinions. It gets easier."
+},
+"booth.newbie.encourage.3": {
+"f": "pell/booth.newbie.encourage.3.mp3",
+"d": 3.09,
+"t": "Let him stay on the course a while longer. It'll come."
+},
+"booth.newbie.encourage.4": {
+"f": "pell/booth.newbie.encourage.4.mp3",
+"d": 4.52,
+"t": "He's learning. Watch the point, not the horse. That's the whole trick."
+},
+"booth.newbie.encourage.5": {
+"f": "pell/booth.newbie.encourage.5.mp3",
+"d": 4.78,
+"t": "Not bad for a beginner. Not good either. But not bad."
+},
+"booth.newbie.encourage.6": {
+"f": "pell/booth.newbie.encourage.6.mp3",
+"d": 6.1,
+"t": "Steady. The first ten courses are the worst. After that it's merely terrible."
+},
+"booth.newbie.encourage.7": {
+"f": "pell/booth.newbie.encourage.7.mp3",
+"d": 2.6,
+"t": "Lower the point sooner. He'll get there."
+},
+"booth.newbie.better.0": {
+"f": "pell/booth.newbie.better.0.mp3",
+"d": 4.59,
+"t": "There! That's closer. A few more and he'll be dangerous."
+},
+"booth.newbie.firstHit.0": {
+"f": "pell/booth.newbie.firstHit.0.mp3",
+"d": 3.38,
+"t": "Good! He's getting it. I said he would."
+},
+"booth.newbie.roast.0": {
+"f": "pell/booth.newbie.roast.0.mp3",
+"d": 4.25,
+"t": "Did he skip the training ground? He skipped the training ground."
+},
+"booth.newbie.roast.1": {
+"f": "pell/booth.newbie.roast.1.mp3",
+"d": 4.95,
+"t": "There's a quintain behind the stables. It doesn't hit back. He might try it."
+},
+"booth.newbie.roast.2": {
+"f": "pell/booth.newbie.roast.2.mp3",
+"d": 4.37,
+"t": "That was painful. For us. Imagine how he feels."
+},
+"booth.newbie.roast.3": {
+"f": "pell/booth.newbie.roast.3.mp3",
+"d": 3.6,
+"t": "Somebody show this man the practice yard. Please."
+},
+"booth.newbie.roast.4": {
+"f": "pell/booth.newbie.roast.4.mp3",
+"d": 4.98,
+"t": "He rode in here with no training. Bold. Wrong, but bold."
+},
+"booth.newbie.roast.5": {
+"f": "pell/booth.newbie.roast.5.mp3",
+"d": 2.98,
+"t": "I've seen sacks of flour sit a horse better."
+},
+"booth.newbie.roast.6": {
+"f": "pell/booth.newbie.roast.6.mp3",
+"d": 5.71,
+"t": "Beaten, and soundly. The training ground is free, my lord. So is shame."
+},
+"booth.newbie.roast.7": {
+"f": "pell/booth.newbie.roast.7.mp3",
+"d": 3.58,
+"t": "Back to the quintain with him. It's very patient."
 }
 },
 "squire": {

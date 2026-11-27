@@ -422,6 +422,22 @@ function rivalJeer(kind, by) {
   const h = field.hisHead && field.hisHead('squire'); if (!h) return; const p = new THREE.Vector3(); h.getWorldPosition(p); p.y += 0.45;
   if (crowdVoices.say(text, `${M.od.short.toUpperCase()}'S SQUIRE`, p, 'rival', 0.8, 1.8)) used.add(text);
 }
+/** A new knight (fewer than NEWBIE_MATCHES matches finished): now and then, after his own poor course, Pell tells him it gets easier; his first lance broken gets a cheer.
+ *  Never online. At most NEWBIE_MAX per match. Returns true when a line was queued. */
+const NEWBIE_MATCHES = 5, NEWBIE_MAX = 3;
+const isNewbie = () => !S.online && !M.practice && ((profile.stats && profile.stats.played) || 0) < NEWBIE_MATCHES;
+function newbieSay(cy, heard) {
+  if (!isNewbie()) return false;
+  const st = profile.stats || (profile.stats = {}), n = M.nbSaid || 0, poor = cy === 'miss' || cy === 'glance', last = M.nbLast;
+  M.nbLast = cy;
+  if (brkCat(cy) && !st.nbHit) { st.nbHit = 1; saveProfile(); booth.say('newbie.firstHit', { delay: 2.0, ttl: 26, prio: 4.6 }); M.nbSaid = n + 1; return true; }
+  if (n >= NEWBIE_MAX) return false;
+  if (cy === 'attaint' && last === 'miss') { booth.say('newbie.better', { delay: 3.5, ttl: 22, prio: 3.7, when: heard }); M.nbSaid = n + 1; return true; }
+  if (poor && Math.random() < 0.6) { booth.say('newbie.encourage', { delay: 3.5, ttl: 22, prio: 3.7, when: heard }); M.nbSaid = n + 1; return true; }
+  return false;
+}
+/** Soundly beaten (lost by 3 or more, or unhorsed) and never been to the training ground: the herald takes the piss. */
+const roastDue = (won) => !won && !S.online && !M.practice && (profile.lesson || 0) < 2 && (/unhorse|yield/.test(M.result || '') || M.score[1] - M.score[0] >= 3);
 /** After the stroke has been seen: the booth's line on what happened, then (later, once Hugh has given the call) the momentum or the cheque. */
 const brkCat = (c) => c === 'breakShield' || c === 'breakBody' || c === 'helm';
 function boothAfter(p, o) {
@@ -431,6 +447,8 @@ function boothAfter(p, o) {
     : cy === 'miss' && ch === 'miss' ? 'bothMiss' : cy === 'glance' ? 'glanceYou' : ch === 'glance' ? 'glanceHim' : cy === 'attaint' || ch === 'attaint' ? 'attaint' : cy === 'miss' ? 'missYou' : 'missHim';
   const Cc = C, t0 = voice.t, heard = () => C !== Cc || Cc.resultSaid || Cc.carded || voice.t - t0 > 9;      // the injury, the momentum and the cheque come after Hugh's call (or if he is silent)
   booth.say('after.' + k, { delay: 0.5, ttl: 22, prio: 4 });      // the booth's word on the stroke: while the judges confer if it fits before Hugh's call, else after it
+  const nb = newbieSay(cy, heard);      // a new knight: the herald's word to him takes the place of the injury and momentum lines this gap
+  if (nb) return;
   if (heavyBlow(C) && Math.random() < 0.5) booth.say('after.injuryYou', { delay: 2, ttl: 22, prio: 3.5, when: heard });
   else if (M.hpO.body < (C.hpO0 ?? 1) - 0.12 && Math.random() < 0.5) booth.say('after.injuryHim', { delay: 2, ttl: 22, prio: 3.5, when: heard });
   if (M.result || M.mode.firstBreak) return;
@@ -2986,6 +3004,7 @@ function showCard() {
   if (!M.practice && (!B || final)) {      // the booth's last word (after Hugh's), and the career note
     booth.say('result.' + (win ? 'win' : res === 'draw' ? 'draw' : 'loss'), { delay: 3.5, ttl: 22, prio: 6 });
     if (win && !((profile.stats && profile.stats.beaten) || []).length) booth.say('result.firstWin', { delay: 6, ttl: 26, prio: 5 });
+    else if (roastDue(win)) booth.say('newbie.roast', { delay: 6, ttl: 26, prio: 5 });
     else if (win && M.tourn && M.tourn.kind === 'final') booth.say('result.champion', { delay: 6, ttl: 26, prio: 5 });
   }
   { // Hugh's call: the rules-only modes word their own (the pools speak of "the cheque"); the rest use the pools
@@ -3009,6 +3028,7 @@ function showCard() {
     if (!onAcct) settle(profile, rk);
     M.reckoning = rk;
     if (!M.tourn && !res.startsWith('win') && res !== 'draw' && !M.bridge && !M.void) { profile.lostTo = profile.lostTo || {}; profile.lostTo[M.od.id] = (profile.lostTo[M.od.id] || 0) + 1; }
+    profile.stats = profile.stats || {}; profile.stats.played = (profile.stats.played || 0) + 1;      // matches finished (the herald's word to a new knight, see newbieSay)
     const won = res.startsWith('win');      // the feats of the match (their renown is paid before the rank is read)
     showFeats(matchFeats(profile, { won, venue: M.V.id, mode: M.mode.id, opp: M.od.id, cleanSheet: M.score[0] > 0 && M.score[1] <= 0, comeback: M.maxDef >= 3, ironSeat: M.stats[1].best < 0.75,
       sightWin: !!M.mode.sightWin && M.result === 'win' && !!M.how }));

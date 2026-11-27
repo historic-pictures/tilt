@@ -70,7 +70,7 @@ export function hideTip() {
 
 export function showTip(el) {
   const { title, lines } = textOf(el); if (!title && !lines.length) return;
-  const st = stripOf(el);
+  const st = el.classList.contains('qseal') ? null : stripOf(el);      // a "?" seal is asked for on purpose: its scroll opens beside it, never down in the help strip
   if (st) { if (strip && strip !== st) fillStrip(strip, strip.dataset.title, safeHtml(strip.dataset.body || '')); strip = st; cur = el; if (box) { box.classList.remove('open'); box.classList.add('hidden'); } fillStrip(st, title, lines.map(safeHtml).join(' ')); return; }
   ensure(); clearTimeout(hideTimer); cur = el;
   box.querySelector('.tt').textContent = title; box.querySelector('.tt').style.display = title ? '' : 'none';
