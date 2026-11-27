@@ -110,11 +110,11 @@ let musicSeen = null, musicMood = null, musicDuck = false, musicHeld = false;
 function musicSync() {
   const m = audio.music; if (!m || !m.play) return;     // audio module still loading
   if (musicSeen !== m) { musicSeen = m; musicMood = null; musicDuck = false; musicHeld = false; if (m.setOff) m.off = musicOffNow; m.setVolume(musicVol() / 100); }
-  // FIFA-style: the music plays in the menus only. A match or training (from the first frame of the intro) fades it out; the in-match ambience and crowd are separate and keep going.
+  // The music plays on through a match (owner 27 Nov: "soundtrack wasn't playing... it should"), ducked under the herald and the crowd; full again in the pause menu and the menus. (It used to fade out FIFA-style; m.hold stays for the API.)
   const inMatch = S.mode !== 'menu';
-  if (m.hold && inMatch !== musicHeld) { musicHeld = inMatch; m.hold(inMatch); if (!inMatch) musicMood = null; }
+  if (m.hold && musicHeld) { musicHeld = false; m.hold(false); }
   if (m.pauseMusic) m.pauseMusic(inMatch && S.paused && !(S.rpl && S.rplFrom === 'card') && !S.muted && !musicOffNow);      // the pause menu plays the game's own music, fading in; resuming fades it out
-  const mood = inMatch ? null : 'menu', duck = false;
+  const mood = 'menu', duck = inMatch && !S.paused;
   if (m.place) m.place(S.mode === 'menu' ? 'menu' : 'match');
   if (duck !== musicDuck) { musicDuck = duck; m.duck(duck); }
   if (mood && mood !== musicMood) { musicMood = mood; m.play(mood); }
