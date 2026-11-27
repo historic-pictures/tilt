@@ -265,7 +265,7 @@ export class GameAudio {
         } catch (err) { /* a bed that will not decode is skipped */ }
       }));
       const m = this.cat.crowd_murmur, bed = this.beds.crowd;      // the recorded idle murmur joins the looping crowd bed as a fourth layer
-      if (m && m.buffers.length && bed) { const src = this.ctx.createBufferSource(); src.buffer = m.buffers[0].buf; src.loop = true; src.playbackRate.value = this.r; src._k = 1; const fg = this.ctx.createGain(); fg.gain.value = lin(-7 + m.buffers[0].db); src.connect(fg); fg.connect(bed.g); src.start(0, rand(0, 4)); bed.srcs.push(src); }
+      if (m && m.buffers.length && bed && false) {      // (off, 28 Nov: the 20 s recorded murmur loop carries a child's laugh that came round every 20 s; the three looping crowd beds stay) const src = this.ctx.createBufferSource(); src.buffer = m.buffers[0].buf; src.loop = true; src.playbackRate.value = this.r; src._k = 1; const fg = this.ctx.createGain(); fg.gain.value = lin(-7 + m.buffers[0].db); src.connect(fg); fg.connect(bed.g); src.start(0, rand(0, 4)); bed.srcs.push(src); }
     } catch (e) { /* no voice beds */ }
   }
   /** Play a decoded voice clip on the voice stem. o: { db, pan -1..1, dist (m: dulls it), onend }. Returns { stop(), dur } or null. */
