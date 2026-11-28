@@ -25,6 +25,8 @@ export function providers() {
   return pvP;
 }
 const anyOn = (v) => !!v && (v.google || v.discord);
+/** The server's answer so far, without asking: undefined = not in yet, null = unreachable, else { google, discord }. */
+export const offered = () => pv;
 
 // ------------------------------------------------------------------ what he was doing before he left for the provider
 const stash = (o) => { try { sessionStorage.setItem(STASH, JSON.stringify({ ...o, at: Date.now() })); } catch (e) { /* ignore */ } };
@@ -97,6 +99,10 @@ const CSS = `
 .si-gate { text-align: center; padding: 8px 0 4px; } .si-why { font-style: italic; font-size: 18px; margin: 6px 0; }
 .si-msg { color: var(--red); min-height: 1.2em; margin: 4px 0; font-size: 15px; }
 .si-note { text-align: center; }
+.doorbox { text-align: center; padding: 4px 0 8px; } .doorbox h5 { text-align: left; } .doorbox .si-btns { max-width: 340px; }
+.door-or { display: flex; align-items: center; gap: 12px; max-width: 340px; margin: 6px auto 10px; font-family: var(--caps); letter-spacing: .12em; color: var(--ink2); }
+.door-or::before, .door-or::after { content: ''; flex: 1; border-top: 1px solid var(--rule); }
+.doorbox .plaque.big { margin: 0 auto 8px; }
 `;
 let styled = false;
 export const style = () => { if (styled) return; styled = true; const s = document.createElement('style'); s.id = 'signinCss'; s.textContent = CSS; document.head.appendChild(s); };

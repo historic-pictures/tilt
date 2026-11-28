@@ -56,6 +56,7 @@ function makeDiscordBtn() {
 const HELP = {
   any: ['', 'Point at a control (or hold a finger on it) to read what it does.'],
   main: ['The lists', 'Point at a button to read what it does. Play Online, a Career, a single Joust or the tiltyard; the shields hold your kit and settings.'],
+  door: ['Sign in or play as a guest', 'Google and Discord sign you up the first time and sign you in after that. A guest can sign in later.'],
   welcome: ['Your name and arms', 'Choose a name and paint your shield. You can change all of this later in the Armoury.'],
   settings: ['Settings', 'Difficulty, view, sound, graphics and your account. Point at a setting to read what it does.'],
   stable: ['The Stable', 'Choose or buy a horse and its caparison. Drag the horse to turn it. Stabling is charged at each circuit tourney.'],
@@ -229,11 +230,39 @@ export function initMenus(api) {
   /** First visit: take your name and your colours before anything else. */
   let wDraft = null;
   const NOFILL = 'autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-form-type="other"';
+  const BANNER = `<div class="mini"><img src="assets/ui/welcome-banner-1600.webp" srcset="assets/ui/welcome-banner-800.webp 800w, assets/ui/welcome-banner-1600.webp 1600w" sizes="(max-width: 600px) 100vw, 420px" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>`;
+  /**
+   * The front door, before the name and arms: sign in (or sign up: the same button) with Google or Discord, or play as a guest.
+   * Shown only while the server has a sign-in switched on and he is signed out; otherwise the welcome page opens straight away, as before.
+   */
+  let wGuest = false;      // he chose "Play as guest" at the door this visit
+  signin.providers();      // ask the server early, so the door is ready when the first page is drawn
+  function door() {
+    signin.style();
+    root.innerHTML = scroll('menu welcome door', `
+      ${BANNER}
+      ${title()}
+      <div class="doorbox" data-si-host>
+        <h5>Sign in or sign up</h5>
+        <p class="si-why">Keep your knight on every device, and joust online.</p>
+        ${signin.buttonsHtml(signin.offered())}
+        <p class="si-msg" data-si-msg role="status"></p>
+        <div class="door-or"><span>or</span></div>
+        <button class="plaque big" data-act="guest">Play as Guest</button>
+        <p class="dimtxt">A guest plays everything offline. You can sign in later from Settings, and your progress comes with you.</p>
+      </div>`);
+    signin.bind(root.querySelector('.doorbox'));
+  }
   function welcome() {
+    if (!wGuest && !(api.account && api.account.signedIn())) {
+      const pv = signin.offered();
+      if (pv === undefined) signin.providers().then(() => { if (root.dataset.name === 'welcome' && signin.offered()) show('welcome'); });
+      else if (pv && (pv.google || pv.discord)) return door();
+    }
     const p = api.profile, a = p.arms; if (wDraft === null) wDraft = '';
     const sw = (key) => `<div class="swatches"><span class="lbl">${{ c1: 'Field', c2: 'Division' }[key]}</span>${TINCTURES.map(t => `<div class="sw ${a[key] === t[1] ? 'sel' : ''}" data-tip="${t[0]}" style="background:${t[1]}" data-col="${key}|${t[1]}"></div>`).join('')}</div>`;
     root.innerHTML = scroll('menu welcome', `
-      <div class="mini"><img src="assets/ui/welcome-banner-1600.webp" srcset="assets/ui/welcome-banner-800.webp 800w, assets/ui/welcome-banner-1600.webp 1600w" sizes="(max-width: 600px) 100vw, 420px" alt="" draggable="false" onerror="if(!this.dataset.r){this.dataset.r=1;this.src=this.src.split('?')[0]+'?r='+Date.now()}else{this.style.visibility='hidden'}"></div>
+      ${BANNER}
       ${title()}
       <h5>Your Name ${tip('Your name and colours', 'The herald cries your name when you ride in.|You can change all of this later in the Armoury.')}</h5><input class="name" id="wName" name="knight-title" maxlength="22" placeholder="Sir Roland of Tyre" value="${wDraft.replace(/"/g, '')}" ${NOFILL}>
       <div class="arms-row"><canvas id="wCrest" width="150" height="178"></canvas><div>
@@ -735,7 +764,7 @@ export function initMenus(api) {
     if (name !== 'circuit') stopTourneyWatch();
     root.classList.add('on'); screens[name](); root.dataset.name = name;
     if (discordBtn) discordBtn.hidden = name !== 'main';
-    { const hs = root.querySelector('.scroll > .helpstrip'); if (hs) { const h = HELP[name === 'armoury' ? 'armoury.' + armTab : name] || HELP[name] || HELP.any; setHelpDefault(hs, h[0], h[1]); } }
+    { const hs = root.querySelector('.scroll > .helpstrip'); if (hs) { const h = HELP[name === 'armoury' ? 'armoury.' + armTab : name === 'welcome' && root.querySelector('.doorbox') ? 'door' : name] || HELP[name] || HELP.any; setHelpDefault(hs, h[0], h[1]); } }
     const pg = root.querySelector('.page'); if (pg) pg.scrollTop = keep;
     if (api.onShow) api.onShow(name);
   }
@@ -807,6 +836,7 @@ export function initMenus(api) {
     if (d.onm) return api.online.setRoom('m', d.onm);
     if (d.onc) return api.online.setRoom('c', +d.onc);
     if (d.body) { const [k, v] = d.body.split('|'); p.body = cleanBody(Object.assign({}, p.body, { [k]: k === 'skin' || k === 'hair' ? +v : v }, k === 'sex' ? { face: -1 } : {})); api.ui('click'); api.setBody(p.body); return show(root.dataset.name === 'welcome' ? 'welcome' : 'armoury'); }
+    if (d.act === 'guest') { wGuest = true; api.ui('click'); return show('welcome'); }
     if (d.act === 'welcome') { p.name = cleanName(wDraft); p.named = true; wDraft = null; api.saveProfile(); api.rebuildPlayer(); return show('main'); }
     if (root.dataset.name === 'welcome' && (d.col || d.pat)) { if (d.col) { const [k, c] = d.col.split('|'); p.arms[k] = c; } else p.arms.pattern = d.pat; api.saveProfile(); api.rebuildPlayer(); return show('welcome'); }
     if (d.act === 'ride') { const t = career.ensureTournament(p), cm = circMode(p), opp = career.myOpponent(t); if (!opp) return; return api.startMatch(t.v, opp, true, false, cm, fixedCourses(cm) || p.courses || 5); }
