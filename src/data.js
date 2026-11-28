@@ -98,6 +98,16 @@ export const KNIGHTS = [
 // The circuit. Each venue re-dresses the lists.
 /** "London, England": the place line of a venue, with its modern country (owner, 27 Nov: jousts should have the country). */
 export const venuePlace = (V) => V.country ? `${V.city}, ${V.country}` : V.city;
+// Lines (the booth's history, the herald's facts) that name one of the game's venues are heard only AT that venue: Pell does not tell the Passo Honroso story in Nuremberg.
+const VENUE_WORDS = {
+  smithfield: /Smithfield|white hart/i,
+  inglevert: /Inglevert|Calais/i,
+  leon: /Passo Honroso|Órbigo|Orbigo|Quiñones|Santiago/i,
+  bruges: /Golden Tree|Bruges|Bastard of Burgundy|Charles the Bold/i,
+  nuremberg: /Gesellenstechen|Nuremberg|German|Bamberg|Rennen|Stechzeug/i,
+};
+/** True if `text` names a venue other than `vid` (so it should not be said here). */
+export function elsewhere(text, vid) { for (const k in VENUE_WORDS) if (k !== vid && VENUE_WORDS[k].test(String(text || ''))) return true; return false; }
 export const VENUES = [
   { id: 'smithfield', sky: 'sunflowers_puresky', zenith: 0x2a66c8, horizon: 0xb4d2f0, sunCol: 0xfff2dc, clouds: 0.55, name: 'Smithfield', city: 'London', country: 'England', year: 1390, host: 'clifford', blurb: 'King Richard\'s great jousts outside the city walls. The stands were built by the King\'s Clerk of Works, one Geoffrey Chaucer.',
     sun: [-0.55, 0.62, -0.45], turbidity: 2.2, rayleigh: 2.2, fog: 0xc4d6e4, grass: '#5b7a36', sand: '#b89a6a', awn: ['#8f1d1d', '#eadfbe'], awn2: ['#1f3f7a', '#eadfbe'], tilt: ['#a3201f', '#efe6cf'], crowd: 1.0, home: -0.15 },

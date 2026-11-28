@@ -11,7 +11,7 @@ import { cachedPiece, lanceBitMat } from './lance_bits.js';
 import { clamp, lerp, damp, smoothstep, wobble, drawCrest, TAU } from './util.js';
 import { loadHeraldry, tinctureName } from './heraldry.js';
 import { EQUAL_GEAR } from './config.js';
-import { purse, HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, modeKit, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
+import { elsewhere, purse, HORSES, ARMOURS, KNIGHTS, VENUES, TRAINING_GROUND, GAIT_SPEED, COURSES_PER_MATCH, CAPARISONS, POINTS, DEFAULT_PROFILE, ovr, bondLevel, bondedHorse, BOND_NAMES, LANCES, DIFFICULTY, ARTS, LESSONS, TINCTURES, PHYS, SKILLS, RANKS, rankOf, HELMS, harness, MODES, modeKit, SLOW_PACE, LANCE_UP, RETINUE, TRAITS, menFx, fixRetinue, REST, restShare, QUINTAIN, DISCOVERY_SECONDS, ACH_RENOWN } from './data.js';
 import { initMenus, purseText, rankBar } from './menus.js';
 import { reckon, settle } from './economy.js';
 import { createPreviews } from './previews.js';
@@ -391,9 +391,9 @@ function mainTalking() {
 /** The booth's placeholders. {score} is the cheque in words, the leader's number first ("three to one", "two all"). */
 function boothVars() {
   if (!M) return {};
-  if (M.spec) { const a = M.score[0], b = M.score[1]; return { venue: M.V.name, city: M.V.city, score: a === b ? `${numW(a)} all` : `${numW(Math.max(a, b))} to ${numW(Math.min(a, b))}` }; }      // a watched bout: nothing that names you
+  if (M.spec) { const a = M.score[0], b = M.score[1]; return { vid: M.V.id, venue: M.V.name, city: M.V.city, score: a === b ? `${numW(a)} all` : `${numW(Math.max(a, b))} to ${numW(Math.min(a, b))}` }; }      // a watched bout: nothing that names you
   const a = M.score[0], b = M.score[1], sc = a === b ? `${numW(a)} all` : `${numW(Math.max(a, b))} to ${numW(Math.min(a, b))}`;
-  return { you: profile.name, him: M.od.short, himFull: hailName(M.od), land: M.od.land, venue: M.V.name, city: M.V.city, score: sc,
+  return { vid: M.V.id, you: profile.name, him: M.od.short, himFull: hailName(M.od), land: M.od.land, venue: M.V.name, city: M.V.city, score: sc,
     horse: HORSES[profile.horse].name.toLowerCase(), hisHorse: (HORSES[M.od.horse] || { name: 'horse' }).name.toLowerCase(),
     arms: `${tinct(profile.arms.c1)} and ${tinct(profile.arms.c2)}`, hisArms: `${tinct(M.od.arms.c1)} and ${tinct(M.od.arms.c2)}` };
 }
@@ -715,7 +715,7 @@ function pickLine(key, pool = HERALD[key]) {
   if (!pool || !pool.length) return null;
   const all = pickHist(), hist = all[key] || (all[key] = []);
   let cand = pool.map((_, i) => i);
-  if (key === 'facts') cand = cand.filter(i => !M.usedFacts.has(i));
+  if (key === 'facts') cand = cand.filter(i => !M.usedFacts.has(i) && !elsewhere(pool[i], M.V.id));      // a fact about another venue is kept for that venue
   let ok = cand.filter(i => !hist.includes(i));
   if (!ok.length) { const last = hist[hist.length - 1]; hist.length = 0; ok = cand.filter(i => i !== last); if (!ok.length) ok = cand; }
   if (!ok.length) return null;

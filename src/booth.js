@@ -8,6 +8,7 @@
 // a budget of turns per course, filler only in a long quiet. Phases: the charge allows only 'away' and 'charge.*', the strike only 'exclaim.*', the replay no filler.
 // Pools never repeat until used up (a session-wide history), so a match never hears the same line twice.
 import { BOOTH, BOOTH_CAST } from './booth_lines.js';
+import { elsewhere } from './data.js';
 import { BOOTH as SW } from './channels.js';
 
 const strip = (s) => String(s).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
@@ -40,8 +41,9 @@ export function createBooth(host) {
   function pickFrom(path, vars, fit = Infinity, recOnly = false) {
     const pool = poolAt(path); if (!pool || !pool.length) return null;
     let u = used.get(path); if (!u) used.set(path, u = []);
-    let cand = pool.map((_, i) => i).filter(i => !u.includes(i));
-    if (!cand.length) { const last = u[u.length - 1]; u.length = 0; cand = pool.map((_, i) => i).filter(i => i !== last); if (!cand.length) cand = [0]; }
+    const here = (i) => !/^(history|filler)/.test(path) || !vars.vid || !(isTurn(pool[i]) ? [pool[i]] : pool[i]).some(([, t]) => elsewhere(t, vars.vid));      // a line naming another venue is kept for that venue
+    let cand = pool.map((_, i) => i).filter(i => !u.includes(i) && here(i));
+    if (!cand.length) { const last = u[u.length - 1]; u.length = 0; cand = pool.map((_, i) => i).filter(i => i !== last && here(i)); if (!cand.length) return null; }
     cand.sort(() => Math.random() - 0.5);
     for (const i of cand) {
       const e = pool[i];
